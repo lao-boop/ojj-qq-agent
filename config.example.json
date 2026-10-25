@@ -1,0 +1,114 @@
+{
+  "bot": { "name": "小鲸鱼" },
+  "onebot": {
+    "wsUrl": "ws://127.0.0.1:3001",
+    "accessToken": "YOUR_ONEBOT_TOKEN",
+    "httpUrl": ""
+  },
+  "llm": {
+    "baseUrl": "https://api.deepseek.com/v1",
+    "apiKey": "YOUR_DEEPSEEK_KEY",
+    "model": "deepseek-v4-pro",
+    "visionModel": "deepseek-flash",
+    "helperModel": "deepseek-flash",
+    "temperature": 1.15,
+    "maxTokens": 900,
+    "timeoutMs": 90000
+  },
+  "chat": {
+    "privateAlwaysReply": true,
+    "group": {
+      "wakeWords": ["小鲸鱼"],
+      "replyOnAt": true,
+      "chanceReply": 0.12,
+      "replyAllWhenFew": true
+    },
+    "rateLimitPerMinute": 12,
+    "storeAllTurns": true,
+    "stream": false
+  },
+  "access": {
+    "mode": "whitelist",
+    "adminQQ": [],
+    "ownerQQ": "",
+    "privateAllow": [],
+    "groupAllow": [],
+    "allowAllWhenEmpty": true,
+    "autoAcceptFriend": true,
+    "autoAcceptGroupInvite": false,
+    "greeting": "嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。"
+  },
+  "image": {
+    "enabled": true,
+    "provider": "replicate",
+    "apiKey": "YOUR_REPLICATE_TOKEN",
+    "model": "black-forest-labs/flux-schnell",
+    "defaultSize": "square",
+    "maxPromptChars": 800,
+    "cooldownMs": 15000,
+    "timeoutMs": 180000
+  },
+  "tts": {
+    "enabled": true,
+    "voice": "zh-CN-XiaoyiNeural",
+    "rate": "+0%",
+    "pitch": "+0Hz",
+    "maxChars": 120,
+    "timeoutMs": 30000,
+    "pythonPath": ""
+  },
+  "music": { "tempo": 92, "noise": 0.4 },
+  "song": {
+    "enabled": true,
+    "provider": "replicate",
+    "token": "YOUR_REPLICATE_TOKEN",
+    "model": "fishaudio/ace-step-1.5",
+    "maxSeconds": 60,
+    "dailyLimit": 5,
+    "sendAsVoice": "auto",
+    "timeoutMs": 600000
+  },
+  "voice": {
+    "enabled": true,
+    "token": "YOUR_REPLICATE_TOKEN",
+    "model": "zsxkib/realistic-voice-cloning",
+    "rvcModel": "CUSTOM",
+    "customModelUrl": "",
+    "pitchChange": "no-change",
+    "outputFormat": "mp3",
+    "timeoutMs": 300000,
+    "dailyLimit": 10,
+    "autoConvert": false,
+    "autoConvertPitch": "no-change",
+    "sendAsVoice": true
+  },
+  "console": { "enabled": true, "port": 3010, "token": "YOUR_CONSOLE_PASSWORD" },
+  "log": { "level": "info", "file": true },
+  "media": { "ffmpegPath": "" },
+  "library": { "enabled": true, "dir": "D:\\Music", "maxSeconds": 0 },
+  "asr": {
+    "enabled": true,
+    "token": "YOUR_REPLICATE_TOKEN",
+    "model": "victor-upmeet/whisperx",
+    "local": { "enabled": true, "url": "http://127.0.0.1:8090", "port": 8090, "model": "small", "pythonPath": "" }
+  },
+  "qzone": {
+    "enabled": false,
+    "autoPost": true,
+    "intervalHours": 6,
+    "dailyLimit": 2,
+    "withImage": true,
+    "replyComments": true,
+    "pollMinutes": 15,
+    "ugcRight": 1
+  },
+  "office": {
+    "pythonPath": "",
+    "theme": "history",
+    "model": "deepseek-flash",
+    "maxImages": 8,
+    "imagesPerDeck": 0,
+    "imageDelayMs": 15000
+  },
+  "relay": { "enabled": true, "allow": [], "dailyLimit": 5, "maxLen": 200 }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "ojj-qq-agent",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "拟人化 QQ Agent：人格对话、长期记忆、语音/唱歌/翻唱、画图、PPT/Word/Excel、QQ空间、汽修配件识别",
+  "main": "src/index.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lao-boop/ojj-qq-agent.git"
+  },
+  "keywords": ["qq-bot", "onebot", "deepseek", "agent", "multimodal", "rvc", "flux"],
+  "scripts": {
+    "start": "node src/index.js",
+    "mock": "node src/mock-onebot.js",
+    "test:e2e": "node scripts/e2e.js",
+    "eval:autorepair": "node scripts/auto_repair_eval.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "opencc-js": "^1.4.2",
+    "ws": "^8.18.0"
+  }
+}

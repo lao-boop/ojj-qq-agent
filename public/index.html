@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小鲸鱼 · QQ 机器人控制台</title>
+    <style>
+      :root {
+        --bg: #f5f8fb;
+        --card: #ffffff;
+        --ink: #0f2233;
+        --sub: #5c7285;
+        --line: #e2eaf2;
+        --blue: #1e7fd6;
+        --blue-soft: #e8f2fd;
+        --green: #16a34a;
+        --red: #dc2626;
+        --amber: #b45309;
+        --radius: 14px;
+        --shadow: 0 6px 24px rgba(15, 34, 51, 0.06);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+        background: radial-gradient(1200px 500px at 10% -10%, #e2f0fc 0%, var(--bg) 55%);
+        color: var(--ink);
+        min-height: 100vh;
+      }
+      header {
+        display: flex; align-items: center; gap: 14px;
+        padding: 18px 26px; border-bottom: 1px solid var(--line);
+        background: rgba(255,255,255,.82); backdrop-filter: blur(10px);
+        position: sticky; top: 0; z-index: 10;
+      }
+      .logo {
+        width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+        background: linear-gradient(140deg, #35a3f1, #1a5fbf); color: #fff; font-size: 21px;
+        box-shadow: 0 4px 14px rgba(30,127,214,.35);
+      }
+      h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: .3px; }
+      .sub { font-size: 12px; color: var(--sub); margin-top: 2px; }
+      .pill {
+        margin-left: auto; font-size: 12.5px; padding: 6px 12px; border-radius: 999px;
+        background: #f1f5f9; color: var(--sub); border: 1px solid var(--line); white-space: nowrap;
+      }
+      .pill.on { background: #ecfdf3; color: var(--green); border-color: #bbf7d0; }
+      .pill.off { background: #fef2f2; color: var(--red); border-color: #fecaca; }
+      .pill.busy { background: #fff7ed; color: var(--amber); border-color: #fed7aa; }
+      nav { display: flex; gap: 6px; padding: 14px 26px 0; flex-wrap: wrap; }
+      nav button {
+        border: 1px solid transparent; background: transparent; color: var(--sub);
+        padding: 8px 14px; border-radius: 10px; cursor: pointer; font-size: 13.5px;
+      }
+      nav button:hover { background: #eef4fa; color: var(--ink); }
+      nav button.active { background: #fff; color: var(--blue); border-color: var(--line); box-shadow: var(--shadow); font-weight: 600; }
+      main { padding: 18px 26px 60px; max-width: 1100px; }
+      .panel { display: none; animation: fade .18s ease; }
+      .panel.active { display: block; }
+      @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+      .card {
+        background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 16px 18px; box-shadow: var(--shadow);
+      }
+      .card h3 { margin: 0 0 10px; font-size: 13px; color: var(--sub); font-weight: 600; letter-spacing: .4px; }
+      .big { font-size: 22px; font-weight: 700; letter-spacing: .3px; }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .muted { color: var(--sub); font-size: 12.5px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; display: inline-block; margin-right: 6px; }
+      .dot.on { background: var(--green); box-shadow: 0 0 0 3px rgba(22,163,74,.12); }
+      .dot.off { background: var(--red); box-shadow: 0 0 0 3px rgba(220,38,38,.1); }
+      label { display: block; font-size: 12.5px; color: var(--sub); margin: 12px 0 5px; font-weight: 600; }
+      input, textarea, select {
+        width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px;
+        font: inherit; font-size: 13.5px; color: var(--ink); background: #fbfdff; outline: none;
+      }
+      input:focus, textarea:focus, select:focus { border-color: #9ecbf5; box-shadow: 0 0 0 3px rgba(30,127,214,.1); background: #fff; }
+      textarea { resize: vertical; line-height: 1.65; }
+      button.primary {
+        background: linear-gradient(135deg, #2b93e8, #1668c4); color: #fff; border: 0;
+        padding: 9px 18px; border-radius: 10px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+        box-shadow: 0 4px 12px rgba(30,127,214,.22);
+      }
+      button.primary:hover { filter: brightness(1.05); }
+      button.ghost {
+        background: #fff; border: 1px solid var(--line); color: var(--ink);
+        padding: 8px 14px; border-radius: 10px; font-size: 13px; cursor: pointer;
+      }
+      button.ghost:hover { border-color: #bcd8f2; background: #f7fbff; }
+      button[disabled] { opacity: .55; cursor: default; }
+      .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } main, nav, header { padding-left: 16px; padding-right: 16px; } }
+      .chatbox { display: flex; flex-direction: column; gap: 10px; min-height: 220px; }
+      .bubble {
+        max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.6;
+        background: var(--blue-soft); color: #0b3358; align-self: flex-start; white-space: pre-wrap;
+      }
+      .bubble.me { align-self: flex-end; background: #eef2f6; color: #22384b; }
+      .bubble img { max-width: 260px; border-radius: 10px; display: block; margin-top: 8px; }
+      .log {
+        background: #0d1b26; color: #cfe3f5; border-radius: 12px; padding: 14px 16px; font-size: 12px;
+        font-family: Consolas, "Cascadia Mono", monospace; height: 460px; overflow: auto; white-space: pre-wrap; line-height: 1.55;
+      }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+      th { color: var(--sub); font-weight: 600; font-size: 12px; }
+      tr:hover td { background: #fafcff; }
+      .tag { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); }
+      .toast {
+        position: fixed; right: 26px; bottom: 26px; background: #0f2233; color: #fff; padding: 10px 16px;
+        border-radius: 10px; font-size: 13px; opacity: 0; transform: translateY(8px); transition: .2s; pointer-events: none; z-index: 99;
+      }
+      .toast.show { opacity: 1; transform: none; }
+      .hint { font-size: 12px; color: var(--amber); margin-top: 6px; }
+      code { background: #eef4fa; padding: 1px 5px; border-radius: 5px; font-size: 12.5px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">🐋</div>
+      <div>
+        <h1>小鲸鱼 · QQ 机器人</h1>
+        <div class="sub" id="subline">正在读取状态…</div>
+      </div>
+      <div class="pill" id="busyPill">空闲</div>
+      <div class="pill" id="connPill"><span class="dot"></span>未连接</div>
+    </header>
+
+    <nav>
+      <button data-tab="overview" class="active">概览</button>
+      <button data-tab="persona">人格</button>
+      <button data-tab="config">配置</button>
+      <button data-tab="test">在线测试</button>
+      <button data-tab="sessions">会话</button>
+      <button data-tab="logs">日志</button>
+    </nav>
+
+    <main>
+      <!-- 概览 -->
+      <section class="panel active" id="panel-overview">
+        <div class="grid">
+          <div class="card">
+            <h3>OneBot 连接</h3>
+            <div class="big"><span class="dot" id="dotConn"></span><span id="connText">—</span></div>
+            <div class="muted" id="connMeta">—</div>
+            <div class="row" style="margin-top: 12px">
+              <button class="ghost" onclick="reconnect()">重新连接</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>模型</h3>
+            <div class="big" id="modelName">—</div>
+            <div class="muted" id="modelMeta">—</div>
+          </div>
+          <div class="card">
+            <h3>今日收发</h3>
+            <div class="big"><span id="statReceived">0</span> <span class="muted" style="font-size:13px">收</span> / <span id="statReplied">0</span> <span class="muted" style="font-size:13px">回</span></div>
+            <div class="muted" id="statMeta">—</div>
+          </div>
+          <div class="card">
+            <h3>运行时长</h3>
+            <div class="big" id="uptime">—</div>
+            <div class="muted" id="stickerMeta">—</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 14px">
+          <h3>最近会话</h3>
+          <table>
+            <thead><tr><th>会话</th><th>条数</th><th>记忆</th><th>更新时间</th></tr></thead>
+            <tbody id="recentSessions"><tr><td colspan="4" class="muted">暂无</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 人格 -->
+      <section class="panel" id="panel-persona">
+        <div class="card">
+          <h3>人格提示词（保存即生效，不用重启）</h3>
+          <textarea id="personaText" rows="24" spellcheck="false"></textarea>
+          <div class="row" style="margin-top: 12px">
+            <button class="primary" onclick="savePersona()">保存人格</button>
+            <button class="ghost" onclick="loadPersona()">重新载入</button>
+            <span class="muted" id="personaCount"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 配置 -->
+      <section class="panel" id="panel-config">
+        <div class="cols">
+          <div class="card">
+            <h3>接入 QQ（OneBot）</h3>
+            <label>WebSocket 地址</label>
+            <input id="cfgWsUrl" placeholder="ws://127.0.0.1:3001" />
+            <label>Access Token（没设就留空）</label>
+            <input id="cfgToken" placeholder="留空即可" />
+            <div class="hint">NapCat / SnowLuma 里开启「WebSocket 服务器」后，把地址和 token 填这里。</div>
+
+            <h3 style="margin-top: 18px">模型</h3>
+            <label>API Base</label>
+            <input id="cfgBaseUrl" />
+            <label>API Key</label>
+            <input id="cfgApiKey" />
+            <label>对话模型</label>
+            <input id="cfgModel" />
+            <label>看图模型</label>
+            <input id="cfgVision" />
+            <div class="cols">
+              <div><label>温度</label><input id="cfgTemp" type="number" step="0.05" /></div>
+              <div><label>最大 tokens</label><input id="cfgMaxTokens" type="number" step="50" /></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>权限（白名单）</h3>
+            <label>管理员 QQ（逗号分隔，可用指令）</label>
+            <input id="cfgAdmin" placeholder="12345678, 87654321" />
+            <label>允许私聊的 QQ（逗号分隔）</label>
+            <input id="cfgPrivate" placeholder="留空 + 允许所有人 = 谁都能聊" />
+            <label>允许的群号（逗号分隔）</label>
+            <input id="cfgGroups" placeholder="123456789" />
+            <label style="display:flex;align-items:center;gap:8px;margin-top:14px">
+              <input id="cfgAllowEmpty" type="checkbox" style="width:auto" /> 白名单为空时允许所有人
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+              <input id="cfgAutoFriend" type="checkbox" style="width:auto" /> 自动通过好友申请
+            </label>
+            <label>通过好友后的欢迎语（留空不发）</label>
+            <input id="cfgGreeting" placeholder="嗨，我是小鲸鱼～" />
+
+            <h3 style="margin-top: 18px">聊天手感</h3>
+            <div class="cols">
+              <div><label>最多分几条</label><input id="cfgMaxBubbles" type="number" min="1" max="6" /></div>
+              <div><label>群聊被 @ 才回</label>
+                <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input id="cfgReplyOnAt" type="checkbox" style="width:auto" /> 开启</label>
+              </div>
+            </div>
+            <label>群聊唤醒词（逗号分隔）</label>
+            <input id="cfgWake" />
+            <label>群聊随机接话概率（0~1）</label>
+            <input id="cfgChance" type="number" step="0.01" min="0" max="1" />
+
+            <h3 style="margin-top: 18px">出图</h3>
+            <label style="display:flex;align-items:center;gap:8px"><input id="cfgImageOn" type="checkbox" style="width:auto" /> 允许机器人画图</label>
+            <label>出图后端</label>
+            <select id="cfgImageProvider">
+              <option value="pollinations">pollinations（免费免注册，45 秒一张，最大 768）</option>
+              <option value="siliconflow">硅基流动 FLUX.1-schnell（要 key，快且好看）</option>
+              <option value="openai">OpenAI 兼容接口（要 key）</option>
+              <option value="mock">mock（测试用，固定图）</option>
+            </select>
+            <label>出图 API Key（pollinations 可留空）</label>
+            <input id="cfgImageKey" placeholder="sk-..." />
+            <label>出图接口地址（pollinations 用默认即可）</label>
+            <input id="cfgImageBase" />
+
+            <h3 style="margin-top: 18px">语音（Edge TTS）</h3>
+            <label style="display:flex;align-items:center;gap:8px"><input id="cfgTtsOn" type="checkbox" style="width:auto" /> 允许机器人发语音</label>
+            <label>音色（可填 zh-CN-XiaoyiNeural 或「晓伊」）</label>
+            <input id="cfgTtsVoice" placeholder="zh-CN-XiaoyiNeural" />
+            <div class="cols">
+              <div><label>语速</label><input id="cfgTtsRate" placeholder="+0%" /></div>
+              <div><label>音调</label><input id="cfgTtsPitch" placeholder="+0Hz" /></div>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top: 16px">
+          <button class="primary" onclick="saveConfig()">保存配置</button>
+          <button class="ghost" onclick="loadConfig()">放弃修改</button>
+          <span class="muted">保存后立即生效；改了 QQ 地址会自动重连。</span>
+        </div>
+      </section>
+
+      <!-- 测试 -->
+      <section class="panel" id="panel-test">
+        <div class="card">
+          <h3>不经过 QQ，直接和机器人说一句（用的是同一套人格和记忆）</h3>
+          <div class="chatbox" id="testBox">
+            <div class="muted">输入一句话试试，比如「在吗」「给我画一只猫」。</div>
+          </div>
+          <div class="row" style="margin-top: 12px">
+            <input id="testInput" placeholder="在吗" style="flex: 1" />
+            <button class="primary" id="testBtn" onclick="sendTest()">发送</button>
+          </div>
+          <div class="muted" id="testMeta" style="margin-top: 8px"></div>
+        </div>
+      </section>
+
+      <!-- 会话 -->
+      <section class="panel" id="panel-sessions">
+        <div class="card">
+          <h3>所有会话</h3>
+          <table>
+            <thead><tr><th>会话</th><th>条数</th><th>记忆条数</th><th>更新时间</th><th></th></tr></thead>
+            <tbody id="sessionRows"><tr><td colspan="5" class="muted">暂无</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card" style="margin-top: 14px" id="sessionDetail" hidden>
+          <h3 id="detailTitle">会话详情</h3>
+          <div id="detailBody" class="muted"></div>
+        </div>
+      </section>
+
+      <!-- 日志 -->
+      <section class="panel" id="panel-logs">
+        <div class="card">
+          <div class="row" style="margin-bottom: 10px">
+            <h3 style="margin:0;flex:1">运行日志</h3>
+            <button class="ghost" onclick="loadLogs()">刷新</button>
+          </div>
+          <div class="log" id="logBox">加载中…</div>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      let CONFIG = null;
+      let token = localStorage.getItem('qqbot-console-token') || '';
+
+      const $ = (id) => document.getElementById(id);
+
+      function toast(msg) {
+        const el = $('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.classList.remove('show'), 2200);
+      }
+
+      async function api(path, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        if (token) headers['x-console-token'] = token;
+        const res = await fetch(path, { ...options, headers });
+        if (res.status === 401) {
+          const t = prompt('控制台需要令牌，请输入 config.json 里的 console.token：');
+          if (t) {
+            token = t;
+            localStorage.setItem('qqbot-console-token', t);
+            return api(path, options);
+          }
+          throw new Error('未授权');
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+      document.querySelectorAll('nav button').forEach((btn) => {
+        btn.onclick = () => {
+          document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b === btn));
+          document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+          $('panel-' + btn.dataset.tab).classList.add('active');
+          if (btn.dataset.tab === 'logs') loadLogs();
+          if (btn.dataset.tab === 'sessions') loadSessions();
+          if (btn.dataset.tab === 'persona') loadPersona();
+        };
+      });
+
+      function fmtDuration(ms) {
+        const m = Math.floor(ms / 60000);
+        if (m < 60) return m + ' 分钟';
+        const h = Math.floor(m / 60);
+        return h + ' 小时 ' + (m % 60) + ' 分';
+      }
+
+      async function loadStatus() {
+        try {
+          const s = await api('/api/status');
+          const on = s.onebot.connected;
+          const jobs = (s.stats && s.stats.jobs) || [];
+          const bp = $('busyPill');
+          if (bp) {
+            if (jobs.length) {
+              bp.className = 'pill busy';
+              bp.textContent =
+                '干活中：' +
+                jobs
+                  .map((j) => j.label + '（' + Math.max(1, Math.round(j.elapsedMs / 1000)) + 's）')
+                  .join(' / ');
+            } else {
+              bp.className = 'pill';
+              bp.textContent = '空闲';
+            }
+          }
+          $('connPill').className = 'pill ' + (on ? 'on' : 'off');
+          $('connPill').innerHTML = '<span class="dot ' + (on ? 'on' : 'off') + '"></span>' + (on ? '已连接' : '未连接');
+          $('dotConn').className = 'dot ' + (on ? 'on' : 'off');
+          $('connText').textContent = on ? '正常' : '断开';
+          $('connMeta').textContent = on
+            ? (s.onebot.nickname || '-') + '（' + (s.onebot.selfId || '-') + '）'
+            : s.onebot.lastError || s.onebot.wsUrl;
+          $('subline').textContent = '模型 ' + s.llm.model + ' · 人格 ' + s.personaChars + ' 字 · ' + (on ? '在线' : '等待 NapCat/SnowLuma');
+          $('modelName').textContent = s.llm.model;
+          $('modelMeta').textContent = (s.llm.hasKey ? '已配置 Key' : '缺少 API Key') + ' · 调用 ' + s.llm.stats.calls + ' 次';
+          $('statReceived').textContent = s.stats.received;
+          $('statReplied').textContent = s.stats.replied;
+          $('statMeta').textContent = '忽略 ' + s.stats.ignored + ' · 出错 ' + s.stats.errors;
+          $('uptime').textContent = fmtDuration(s.stats.uptimeMs);
+          $('stickerMeta').textContent = '表情包分类：' + (s.stickerCats.length ? s.stickerCats.join('、') : '未放素材');
+
+          const rows = (s.sessions || []).slice(0, 6);
+          $('recentSessions').innerHTML = rows.length
+            ? rows.map((r) => '<tr><td>' + esc(r.title) + '</td><td>' + r.turns + '</td><td>' + r.notes + '</td><td>' + new Date(r.updatedAt).toLocaleString('zh-CN') + '</td></tr>').join('')
+            : '<tr><td colspan="4" class="muted">还没有人跟它说话</td></tr>';
+        } catch (err) {
+          $('connPill').className = 'pill off';
+          $('connPill').innerHTML = '<span class="dot off"></span>控制台异常';
+          $('subline').textContent = err.message;
+        }
+      }
+
+      function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      async function reconnect() {
+        try {
+          await api('/api/reconnect', { method: 'POST' });
+          toast('已触发重连');
+          setTimeout(loadStatus, 800);
+        } catch (e) { toast(e.message); }
+      }
+
+      async function loadPersona() {
+        try {
+          const d = await api('/api/persona');
+          $('personaText').value = d.text;
+          $('personaCount').textContent = d.text.length + ' 字';
+        } catch (e) { toast(e.message); }
+      }
+
+      async function savePersona() {
+        try {
+          await api('/api/persona', { method: 'POST', body: JSON.stringify({ text: $('personaText').value }) });
+          toast('人格已保存');
+        } catch (e) { toast(e.message); }
+      }
+
+      function joinList(arr) { return Array.isArray(arr) ? arr.join(', ') : ''; }
+      function splitList(v) { return String(v || '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean); }
+
+      async function loadConfig() {
+        try {
+          const d = await api('/api/config');
+          CONFIG = d.config;
+          const c = d.config;
+          $('cfgWsUrl').value = c.onebot.wsUrl || '';
+          $('cfgToken').value = c.onebot.accessToken || '';
+          $('cfgBaseUrl').value = c.llm.baseUrl || '';
+          $('cfgApiKey').value = c.llm.apiKey || '';
+          $('cfgModel').value = c.llm.model || '';
+          $('cfgVision').value = c.llm.visionModel || '';
+          $('cfgTemp').value = c.llm.temperature;
+          $('cfgMaxTokens').value = c.llm.maxTokens;
+          $('cfgAdmin').value = joinList(c.access.adminQQ);
+          $('cfgPrivate').value = joinList(c.access.privateAllow);
+          $('cfgGroups').value = joinList(c.access.groupAllow);
+          $('cfgAllowEmpty').checked = !!c.access.allowAllWhenEmpty;
+          $('cfgAutoFriend').checked = !!c.access.autoAcceptFriend;
+          $('cfgGreeting').value = c.access.greeting || '';
+          $('cfgMaxBubbles').value = c.chat.maxBubbles;
+          $('cfgReplyOnAt').checked = !!c.chat.group.replyOnAt;
+          $('cfgWake').value = joinList(c.chat.group.wakeWords);
+          $('cfgChance').value = c.chat.group.chanceReply;
+          $('cfgImageOn').checked = !!c.image.enabled;
+          $('cfgImageProvider').value = c.image.provider || 'pollinations';
+          $('cfgImageKey').value = c.image.apiKey || '';
+          $('cfgImageBase').value = c.image.baseUrl || '';
+          $('cfgTtsOn').checked = !!c.tts.enabled;
+          $('cfgTtsVoice').value = c.tts.voice || '';
+          $('cfgTtsRate').value = c.tts.rate || '+0%';
+          $('cfgTtsPitch').value = c.tts.pitch || '+0Hz';
+        } catch (e) { toast(e.message); }
+      }
+
+      async function saveConfig() {
+        const num = (v) => Number(v);
+        const patch = {
+          onebot: { wsUrl: $('cfgWsUrl').value.trim(), accessToken: $('cfgToken').value.trim() },
+          llm: {
+            baseUrl: $('cfgBaseUrl').value.trim(),
+            apiKey: $('cfgApiKey').value.trim(),
+            model: $('cfgModel').value.trim(),
+            visionModel: $('cfgVision').value.trim(),
+            temperature: num($('cfgTemp').value),
+            maxTokens: num($('cfgMaxTokens').value),
+          },
+          access: {
+            adminQQ: splitList($('cfgAdmin').value),
+            privateAllow: splitList($('cfgPrivate').value),
+            groupAllow: splitList($('cfgGroups').value),
+            allowAllWhenEmpty: $('cfgAllowEmpty').checked,
+            autoAcceptFriend: $('cfgAutoFriend').checked,
+            greeting: $('cfgGreeting').value.trim(),
+          },
+          chat: {
+            maxBubbles: num($('cfgMaxBubbles').value),
+            group: {
+              replyOnAt: $('cfgReplyOnAt').checked,
+              wakeWords: splitList($('cfgWake').value),
+              chanceReply: num($('cfgChance').value),
+            },
+          },
+          image: {
+            enabled: $('cfgImageOn').checked,
+            provider: $('cfgImageProvider').value,
+            apiKey: $('cfgImageKey').value.trim(),
+            baseUrl: $('cfgImageBase').value.trim(),
+          },
+          tts: {
+            enabled: $('cfgTtsOn').checked,
+            voice: $('cfgTtsVoice').value.trim(),
+            rate: $('cfgTtsRate').value.trim(),
+            pitch: $('cfgTtsPitch').value.trim(),
+          },
+        };
+        try {
+          await api('/api/config', { method: 'POST', body: JSON.stringify({ patch }) });
+          toast('配置已保存');
+          loadStatus();
+        } catch (e) { toast(e.message); }
+      }
+
+      async function sendTest() {
+        const text = $('testInput').value.trim();
+        if (!text) return;
+        const box = $('testBox');
+        box.insertAdjacentHTML('beforeend', '<div class="bubble me">' + esc(text) + '</div>');
+        $('testInput').value = '';
+        $('testBtn').disabled = true;
+        $('testMeta').textContent = '小鲸鱼正在想…';
+        const started = Date.now();
+        try {
+          const d = await api('/api/test', { method: 'POST', body: JSON.stringify({ text }) });
+          for (const b of d.bubbles) {
+            box.insertAdjacentHTML('beforeend', '<div class="bubble">' + esc(b) + '</div>');
+          }
+          for (const img of d.images) {
+            box.insertAdjacentHTML('beforeend', '<div class="bubble"><img src="' + img.dataUrl + '" alt=""></div>');
+          }
+          $('testMeta').textContent = '用时 ' + (Date.now() - started) + ' ms · 工具调用 ' + d.toolCalls + ' 次';
+        } catch (e) {
+          box.insertAdjacentHTML('beforeend', '<div class="bubble">出错了：' + esc(e.message) + '</div>');
+          $('testMeta').textContent = '';
+        } finally {
+          $('testBtn').disabled = false;
+          box.scrollTop = box.scrollHeight;
+        }
+      }
+      $('testInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTest(); });
+
+      async function loadSessions() {
+        try {
+          const d = await api('/api/sessions');
+          $('sessionRows').innerHTML = d.sessions.length
+            ? d.sessions.map((s) =>
+                '<tr><td>' + esc(s.title) + '<div class="muted">' + esc(s.key) + '</div></td><td>' + s.turns + '</td><td>' + s.notes + '</td><td>' + new Date(s.updatedAt).toLocaleString('zh-CN') + '</td>' +
+                '<td><button class="ghost" onclick="viewSession(\'' + encodeURIComponent(s.key) + '\')">查看</button> ' +
+                '<button class="ghost" onclick="delSession(\'' + encodeURIComponent(s.key) + '\')">清空</button></td></tr>'
+              ).join('')
+            : '<tr><td colspan="5" class="muted">暂无会话</td></tr>';
+        } catch (e) { toast(e.message); }
+      }
+
+      async function viewSession(keyEnc) {
+        try {
+          const key = decodeURIComponent(keyEnc);
+          const d = await api('/api/session?key=' + encodeURIComponent(key));
+          const s = d.session;
+          $('sessionDetail').hidden = false;
+          $('detailTitle').textContent = s.title + '（' + s.turns.length + ' 条）';
+          $('detailBody').innerHTML =
+            (s.summary ? '<div class="muted">摘要：' + esc(s.summary) + '</div><br>' : '') +
+            (s.notes?.length ? '<div class="muted">记得：' + s.notes.map((n) => esc(n.text)).join('；') + '</div><br>' : '') +
+            s.turns.map((t) => '<div class="bubble ' + (t.role === 'user' ? 'me' : '') + '">' + esc(t.content) + '</div>').join('');
+        } catch (e) { toast(e.message); }
+      }
+
+      async function delSession(keyEnc) {
+        if (!confirm('清空这个会话的记忆？')) return;
+        try {
+          await api('/api/session?key=' + encodeURIComponent(decodeURIComponent(keyEnc)), { method: 'DELETE' });
+          toast('已清空');
+          loadSessions();
+        } catch (e) { toast(e.message); }
+      }
+
+      async function loadLogs() {
+        try {
+          const d = await api('/api/logs?limit=300');
+          $('logBox').textContent = d.lines.join('\n') || '暂无日志';
+          $('logBox').scrollTop = $('logBox').scrollHeight;
+        } catch (e) { $('logBox').textContent = e.message; }
+      }
+
+      loadStatus();
+      setInterval(() => {
+        if (document.visibilityState === 'visible') loadStatus();
+      }, 5000);
+    </script>
+  </body>
+</html>

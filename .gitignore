@@ -1,0 +1,22 @@
+# 依赖与产物
+node_modules/
+
+# 运行时数据（保留配件库）
+data/*
+!data/knowledge/
+!data/knowledge/**
+
+# 配置与密钥
+config.json
+.env
+*.local
+
+# 日志与临时文件
+*.log
+logs/
+tmp/
+temp/
+
+# 系统
+.DS_Store
+Thumbs.db
