@@ -584,7 +584,7 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, r
           if (!content) return '说说内容为空，先想一句话。';
           const imagePrompt = String(args.image || '').trim() || content;
           const imagePath = args.withImage === false ? '' : await qzone.makeImage(imagePrompt);
-          await qzone.post({ content, imagePath });
+          await qzone.post({ content, imagePath, source: 'tool', chatKey: ctx.chatKey });
           return `说说发出去了${imagePath ? '，配图也一起传了' : '（这次没配图）'}。回复里自然提一句就行，不要报 tid、路径或链接。`;
         }
         case 'sing': {

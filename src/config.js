@@ -24,6 +24,7 @@ export const DEFAULTS = {
     timeoutMs: 90000,
   },
   chat: {
+    agents: { enabled: false, maxSteps: 4, maxToolCalls: 8, maxRounds: 3, timeoutMs: 120000 },
     privateAlwaysReply: true,
     maxBubbles: 3,
     splitDelayMs: [500, 1600],

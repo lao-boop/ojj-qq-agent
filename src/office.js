@@ -253,7 +253,7 @@ export class Office {
   }
 
   /** 生成 Excel 表格，返回 { file, name, title, rows }。 */
-  async makeExcel({ topic, rows = 10, columns = 5 } = {}) {
+  async makeExcel({ topic, rows = 10, columns = 5, dataPolicy = 'example' } = {}) {
     const started = Date.now();
     const res = await this.llm.chat({
       messages: [
@@ -262,7 +262,8 @@ export class Office {
           content:
             '你是数据整理助手。根据主题生成一张表格的 JSON：' +
             '{"title":"表格标题","sheets":[{"name":"工作表名","columns":["列1","列2"],"rows":[["值1","值2"]]}]}。' +
-            `要求：1 个工作表，${columns} 列左右、${rows} 行左右；列名简洁；数据要合理（可以是示意数据，别写不确定的真实统计）；` +
+            `要求：1 个工作表，${columns} 列左右、${rows} 行左右；列名简洁；` +
+            (dataPolicy === 'provided' ? '仅整理提供的原始数据，不填造数值、不生成示例数据；缺失值留空，不因行数要求补造记录。' : '允许示例数据，标题必须注明“示例”，不能冒充真实统计。') +
             '数字用数字类型，日期写成 2026-10-24 这种字符串；语言简体中文；不要 Markdown；不要输出 JSON 以外的任何文字。',
         },
         { role: 'user', content: `主题：${topic}` },

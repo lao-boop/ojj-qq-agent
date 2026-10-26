@@ -108,6 +108,7 @@ export class MusicLibrary {
       else if (q.includes(t.normTitle) && t.normTitle.length >= 2) score = 70;
       else if (t.normArtist.includes(q)) score = 72;
       else if (t.normFile.includes(q)) score = 55;
+      if (score <= 0) continue;
       if (a) {
         const artistHit =
           t.normArtist.includes(a) || t.normTitle.includes(a) || t.normFile.includes(a);
@@ -219,4 +220,16 @@ export function parseCoverRequest(text) {
 /** 是不是在纠正“不是这首”。 */
 export function isCorrection(text) {
   return /不是这(一)?首|不是这个|不是他|不是她|不对|错了|换一首|换一个|重新找/.test(String(text || ''));
+}
+
+/** Execution boundary: artist-only matches never authorize a particular song. */
+export function resolveCoverTrack(library, slots, exclude = []) {
+  if (!library.enabled) return { reply: '本地曲库未启用，暂时无法核验并翻唱这首歌。' };
+  library.ensureScanned();
+  const title = normalize(slots.title), artist = normalize(slots.artist);
+  const hits = library.tracks.filter(t => normalize(t.title) === title &&
+    (!artist || normalize(t.artist) === artist) && !exclude.some(x => normalize(x) === normalize(t.title)));
+  if (!hits.length) return { reply: `没有找到${slots.artist ? slots.artist + '的' : ''}《${slots.title}》的准确匹配；不会用同歌手的其他歌曲替代。` };
+  if (hits.length !== 1) return { reply: `《${slots.title}》有多个版本，请补充歌手或版本信息，暂时不会自动选择。` };
+  return { value: hits[0] };
 }
