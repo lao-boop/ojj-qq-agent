@@ -222,7 +222,7 @@ export class Brain {
     const managed = Boolean(this.cfg.agents?.enabled);
     const first = managed
       ? await new AgentManager({ llm: this.llm, tools: this.tools, logger: this.logger, config: this.cfg.agents, understanding: coverValidator ? new UnderstandingPipeline({ llm: this.llm, state: this.understanding.state, validators: { ...this.understanding.validators, cover: coverValidator } }) : this.understanding, coverExecutor }).run({
-          input: normalizeInput({ userText, requestText, images, attachments, caption, selfState: this.selfState(chatKey) }),
+          input: normalizeInput({ userText, requestText, images, attachments, caption, selfState: this.selfState(chatKey), actorId: meta?.actorId || chatKey }),
           messages, toolCtx, onProgress,
         })
       : await this.#runLoop(messages, toolCtx, onProgress, () => toolCalls++);

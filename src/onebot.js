@@ -164,11 +164,11 @@ export class OneBot extends EventEmitter {
   }
 
   sendPrivate(userId, message) {
-    return this.call('send_private_msg', { user_id: Number(userId), message });
+    return this.call('send_private_msg', { user_id: Number(userId), message }, Array.isArray(message) && message.some(s => s.type === 'record') ? 120000 : API_TIMEOUT);
   }
 
   sendGroup(groupId, message) {
-    return this.call('send_group_msg', { group_id: Number(groupId), message });
+    return this.call('send_group_msg', { group_id: Number(groupId), message }, Array.isArray(message) && message.some(s => s.type === 'record') ? 120000 : API_TIMEOUT);
   }
 
   getLoginInfo() {

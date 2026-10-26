@@ -16,6 +16,7 @@ import { TTS, findPython } from './tts.js';
 import { FileReader } from './files.js';
 import { renderHum } from './music.js';
 import { SongGen } from './song.js';
+import { coverCapabilityReply } from './cover-config.js';
 import { VoiceConvert } from './cover.js';
 import { extractAudio, extractFrame, trimAudio, cutAudioFrom, probeDuration, toMp3, silkToWav } from './media.js';
 import { MusicLibrary, resolveCoverTrack, extractSongQuery, parseCoverRequest, isCorrection, parseDuration } from './library.js';
@@ -63,7 +64,7 @@ const brain = new Brain({
   tools,
   logger: logger.child('brain'),
   validators: { cover: (intent) => {
-    if (!voiceConvert.enabled) return { reply: '翻唱服务当前未启用或缺少配置，暂时不能执行。' };
+    if (!voiceConvert.enabled) return { reply: voiceConvert.configurationIssue };
     if (intent.slots.startPhrase) return { reply: '指定歌词起点的翻唱还需要可靠定位核验，当前不会自动改为从头唱。' };
     return resolveCoverTrack(library, intent.slots, intent.exclude);
   } },
@@ -582,6 +583,7 @@ function wantsCover(text) {
 
 /** 后台变声，完成后以文件发回。 */
 async function runCoverJob(chat, audioPath, opts = {}) {
+  if (!voiceConvert.enabled) { await sender.send(chat, { bubbles: [voiceConvert.configurationIssue] }); return { ok: false }; }
   const limit = cfg.voice.dailyLimit ?? 10;
   const dayKey = `${chat.key}:${new Date().toISOString().slice(0, 10)}`;
   const used = coverUsage.get(dayKey) ?? 0;
@@ -598,14 +600,8 @@ async function runCoverJob(chat, audioPath, opts = {}) {
     }
     // RVC 只认常规音频：QQ 语音是 SILK，先转 wav 再统一转 mp3
     let sourcePath = audioPath;
-    if (/\.silk$/i.test(sourcePath)) {
-      try {
-        sourcePath = await silkToWav(sourcePath, { python: cfg.office?.pythonPath, tag: 'cover' });
-      } catch (err) {
-        logger.warn(`翻唱前 SILK 解码失败：${err.message}`);
-      }
-    }
-    sourcePath = await toMp3(sourcePath, { ffmpeg: cfg.media?.ffmpegPath, tag: 'cover' }).catch(() => sourcePath);
+    if (/\.silk$/i.test(sourcePath)) sourcePath = await silkToWav(sourcePath, { python: cfg.office?.pythonPath, tag: 'cover' });
+    sourcePath = await toMp3(sourcePath, { ffmpeg: cfg.media?.ffmpegPath, tag: 'cover' });
     const r = await voiceConvert.convert({
       audioPath: sourcePath,
       customModelUrl: cfg.voice.customModelUrl || undefined,
@@ -628,7 +624,8 @@ async function runCoverJob(chat, audioPath, opts = {}) {
     return { ok: true };
   } catch (err) {
     logger.warn(`变声失败：${err.message}`);
-    await sender.send(chat, { bubbles: [pick(['哎呀，这次没唱成，等会儿再让我试试？', '嗓子卡住了，没唱出来，要不再来一次？'])] }).catch(() => {});
+    await sender.send(chat, { bubbles: [`翻唱未完成：${String(err.message).slice(0, 350)}`] }).catch(() => {});
+    return { ok: false };
   } finally {
     endJob(jid);
   }
@@ -1306,6 +1303,7 @@ async function onMessage(event) {
   const senderInfo = event.sender ?? {};
   const peerName = String(senderInfo.card || senderInfo.nickname || event.user_id);
   const meta = {
+    actorId: String(event.user_id),
     scene: isPrivate ? '私聊' : '群聊',
     peerName: isPrivate ? peerName : `${peerName}（群友）`,
     groupName: isPrivate ? '' : await groupName(event.group_id),
@@ -1321,6 +1319,8 @@ async function onMessage(event) {
   const dispatch = cfg.chat.agents?.enabled ? (_key, fn) => fn() : runSerial;
   await dispatch(chat.key, async () => {
     try {
+      const capabilityReply = coverCapabilityReply(userSay || recognizedSpeech, { ...cfg.voice, token: cfg.voice.token || cfg.song.token }, songGen.enabled);
+      if (capabilityReply) { await sender.send(chat, { bubbles: [capabilityReply] }); return; }
       logger.info(`收到 ${chat.key}：${body.slice(0, 60)}${effectiveImages.length ? ` [图片x${effectiveImages.length}]` : ''}`);
       const mediaDigest = formatMediaDigest(chat.key);
       if (mediaDigest) body += `\n\n${mediaDigest}`;
@@ -1331,8 +1331,10 @@ async function onMessage(event) {
         requestText: userSay || recognizedSpeech,
         attachments: { files, audios, videos },
         coverValidator: (intent, input) => {
+          if (!voiceConvert.enabled) return { reply: voiceConvert.configurationIssue };
+          if (intent.slots.source === 'next_audio') return { reply: '已记下，等你下一条要翻唱的音频；这条准备指令不会拿去翻唱。要取消可以说“取消翻唱”。' };
           if (['attachment','recent_audio'].includes(intent.slots.source)) {
-            if (!voiceConvert.enabled) return { reply: '翻唱服务当前未启用或缺少配置。' };
+            if (intent.slots.source === 'attachment' && audios.length !== 1) return { reply: '请一次发送一条明确要翻唱的音频。' };
             if (intent.slots.seconds || intent.slots.startPhrase) return { reply: '音频附件的指定片段还需要单独核验，当前不会自动截取或改唱全段。' };
             const recent = lastAudio.get(chat.key);
             const source = intent.slots.source === 'attachment' ? downloadedAudio :

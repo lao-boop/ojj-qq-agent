@@ -8,9 +8,10 @@ export function parseObject(content) {
 }
 
 /** Prepared media comes from existing file/ASR/vision adapters, never from guessed content. */
-export function normalizeInput({ userText = '', requestText, images = [], attachments = {}, caption = '', selfState = '' }) {
+export function normalizeInput({ userText = '', requestText, images = [], attachments = {}, caption = '', selfState = '', actorId = '' }) {
   return {
     selfState: String(selfState),
+    actorId: String(actorId),
     instruction: String(requestText ?? userText).slice(0, 12000),
     evidence: String(userText).slice(0, 24000),
     caption: String(caption).slice(0, 6000),
@@ -23,9 +24,11 @@ export function normalizeInput({ userText = '', requestText, images = [], attach
 
 export const INTENT_SCHEMA = `返回 JSON：
 {"act":"create|update|reject|cancel|status|chat","targetId":"已有任务ID或空串","goal":"目标",
-"agents":["角色"],"operations":["明确要求执行的操作"],"forbiddenOperations":["禁止的操作"],"kind":"general|cover","slots":{"source":"library|attachment|recent_audio","title":"歌名","artist":"歌手","topic":"主题","format":"ppt|docx|excel","startPhrase":"起始歌词","seconds":30,"prompt":"画面内容","text":"朗读或记忆原文","query":"查询词","pages":8,"rows":10,"columns":4,"sections":5,"audience":"读者","style":"风格","size":"square|portrait|landscape|wide|tall","inputRef":"none|image|file|history","fileName":"附件原文件名","dataPolicy":"provided|example","dataText":"用户给的真实数据"},
+"agents":["角色"],"operations":["明确要求执行的操作"],"forbiddenOperations":["禁止的操作"],"kind":"general|cover","slots":{"source":"library|attachment|recent_audio|next_audio","title":"歌名","artist":"歌手","topic":"主题","format":"ppt|docx|excel","startPhrase":"起始歌词","seconds":30,"prompt":"画面内容","text":"朗读或记忆原文","query":"查询词","pages":8,"rows":10,"columns":4,"sections":5,"audience":"读者","style":"风格","size":"square|portrait|landscape|wide|tall","inputRef":"none|image|file|history","fileName":"附件原文件名","dataPolicy":"provided|example","dataText":"用户给的真实数据"},
 "exclude":["明确排除的歌曲或对象"],"missing":["缺失字段"],"clarification":"必要追问或空串"}。
 翻唱当前附件用 source=attachment，明确要求翻唱最近音频用 source=recent_audio；翻唱曲库歌曲用 library，不能擅自互换来源。
+“翻唱我下一条/下面一条语音”“做好准备，我接下来发音频”使用 source=next_audio；即使本轮有语音附件，那也是准备指令，不能当作要翻唱的素材。
+当 tasks 中有等待 next_audio 的任务，之后收到目标音频时使用 update、对应 targetId 和 source=attachment；仍需遵守用户取消或其他用途的指令。没有收到目标音频时不能切换 source；不能把当前准备指令或最近一条旧音频代替目标素材。
 slots 只填本轮明确给出的字段；修改任务时不重置未提到的参数。不要猜测歌名、歌手或文件。
 “没让你唱光阴的故事”是 reject，排除光阴的故事，不是创建；“我让你唱的是乡愁四韵”是 update，title=乡愁四韵。
 “唱罗大佑的乡愁四韵”是 create/cover，artist=罗大佑，title=乡愁四韵。
@@ -54,7 +57,7 @@ export function validateIntent(v) {
     if (!keys.has(k) || (numeric[k] ? !Number.isInteger(value) || value < numeric[k][0] || value > numeric[k][1] : typeof value !== 'string' || value.length > 4000)) throw new Error('Invalid intent slot');
   }
   for (const [key, values] of Object.entries({ inputRef:['none','image','file','history'], dataPolicy:['provided','example'], size:['square','portrait','landscape','wide','tall'] })) if (v.slots[key] && !values.includes(v.slots[key])) throw new Error('Invalid slot enum');
-  if (v.slots.source && !['library','attachment','recent_audio'].includes(v.slots.source)) throw new Error('Invalid cover source');
+  if (v.slots.source && !['library','attachment','recent_audio','next_audio'].includes(v.slots.source)) throw new Error('Invalid cover source');
   if ([...v.exclude,...v.missing].some(x => typeof x !== 'string' || x.length > 300) || v.exclude.length > 20 || v.missing.length > 10) throw new Error('Invalid intent constraints');
   return { operations:[...new Set(v.operations)], forbiddenOperations:[...new Set(v.forbiddenOperations)], act: v.act, targetId: v.targetId, kind: v.kind, goal: v.goal, agents: [...new Set(v.agents)], slots: { ...v.slots }, exclude: [...v.exclude], missing: [...v.missing], clarification: v.clarification };
 }

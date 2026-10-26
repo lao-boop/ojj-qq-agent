@@ -45,6 +45,8 @@ export class UnderstandingPipeline {
       if (candidates.length === 1) target = candidates[0];
       else return { reply: candidates.length ? '你指的是哪项任务？请说一下任务内容。' : '目前没有可对应的任务，请说明完整需求。' };
     }
+    if (target?.slots?.source === 'next_audio' && target.requester && target.requester !== input.actorId) return { reply: '这项待翻唱任务属于另一位用户，请单独提出自己的翻唱请求。' };
+    if (target?.slots?.source === 'next_audio' && Date.now() - target.updatedAt > 10 * 60 * 1000 && intent.act !== 'cancel') { this.state.finish(target, 'cancelled'); return { reply: '等待下一条音频的任务已过期，请重新确认要翻唱的音频。' }; }
     if (intent.act === 'status') return { reply: `这项任务的状态是：${({draft:'等待补充或确认',running:'正在执行',queued:'已排队，尚未确认交付',completed:'处理结束',failed:'执行失败',cancelled:'已取消'})[target.status]}。` };
     if (editing && ['running','queued'].includes(target.status)) return { reply: '这项任务已经开始执行或排队，目前无法可靠中止或替换；这次没有修改原任务，也不会另外启动一份。' };
     if (intent.act === 'cancel' && ['completed','failed'].includes(target.status)) return { reply: '这项任务已经结束，没有等待取消的执行；已交付内容无法撤回。' };
@@ -66,9 +68,12 @@ export class UnderstandingPipeline {
     }
     if (merged.kind === 'cover' && merged.agents.some(a => a !== 'audio')) return { reply: '这次同时包含翻唱和其他任务，请分开提出；当前不会只执行其中一部分。' };
     if (merged.kind === 'cover' && merged.exclude.includes(merged.slots.title)) return { reply: '你指定的歌名同时被排除了，请确认要唱哪一首。' };
+    if (merged.kind === 'cover' && merged.slots.source === 'next_audio') {
+      delete merged.slots.title; delete merged.slots.artist;
+    }
     if (merged.operations.length) merged.agents = [...new Set(merged.operations.map(op => CAPABILITIES[op].agent))];
     // Reserve updates synchronously before awaiting read-only validators.
-    const task = target || this.state.add(chatKey, merged);
+    const task = target || this.state.add(chatKey, { ...merged, requester: input.actorId || "" });
     Object.assign(task, merged);
     this.state.finish(task, 'running');
     const clarify = intent.clarification || (intent.missing.length ? `还需要补充：${intent.missing.join('、')}。` : '');
@@ -76,13 +81,14 @@ export class UnderstandingPipeline {
     const capabilityIssue = validateCapabilities(merged, input);
     if (capabilityIssue) { this.state.finish(task, 'draft'); return { reply: capabilityIssue, task }; }
     if (!merged.operations.length || !merged.agents.length) { this.state.finish(task, 'draft'); return { reply: '请说明需要完成的具体任务。', task }; }
-    if (merged.kind === 'cover' && !['attachment','recent_audio'].includes(merged.slots.source) && !merged.slots.title) { this.state.finish(task, 'draft'); return { reply: '要翻唱哪首歌？请告诉我歌名，最好也带上歌手。', task }; }
+    if (merged.kind === 'cover' && !['attachment','recent_audio','next_audio'].includes(merged.slots.source) && !merged.slots.title) { this.state.finish(task, 'draft'); return { reply: '要翻唱哪首歌？请告诉我歌名，最好也带上歌手。', task }; }
     if (merged.slots.format && !['ppt','docx','excel'].includes(merged.slots.format)) { this.state.finish(task, 'draft'); return { reply: '文档格式请选择 PPT、Word 或 Excel。', task }; }
     try {
       const validator = this.validators[merged.kind];
       if (merged.kind === 'cover' && !validator) { this.state.finish(task, 'draft'); return { reply: '当前入口没有接入曲库核验，不能直接开始翻唱。', task }; }
       const checked = validator ? await validator(merged, input) : {};
       if (checked.reply) { this.state.finish(task, 'draft'); return { reply: checked.reply, task }; }
+      if (merged.kind === 'cover' && merged.slots.source === 'next_audio') { this.state.finish(task, 'draft'); return { reply: '已记下，等待下一条要翻唱的音频；这条准备指令不会执行。', task }; }
       return { intent: { ...merged, goal: JSON.stringify({ goal: merged.goal, slots: merged.slots, exclude: merged.exclude }), validated: checked.value }, task };
     } catch {
       this.state.finish(task, 'draft'); return { reply: '执行前核验没有完成，暂时不会执行，请稍后再试。', task };
