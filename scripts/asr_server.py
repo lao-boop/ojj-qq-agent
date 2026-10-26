@@ -8,24 +8,25 @@
 import json
 import os
 import subprocess
+import shutil
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 
-os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+os.environ.setdefault("HF_ENDPOINT", "https://huggingface.co")
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 from faster_whisper import WhisperModel  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_DIR = os.path.join(ROOT, "data", "models", "whisper")
+MODEL_DIR = os.path.join(os.environ.get("QQBOT_DATA", os.path.join(ROOT, "data")), "models", "whisper")
 MODEL_SIZE = os.environ.get("ASR_MODEL_SIZE", "small")
 FFMPEG = os.environ.get(
     "FFMPEG_PATH",
-    os.path.join(os.environ.get("LOCALAPPDATA", ""), "AstrBot", "backend", "python", "ffmpeg.exe"),
+    shutil.which("ffmpeg") or "ffmpeg",
 )
 
 
@@ -80,8 +81,7 @@ class Handler(BaseHTTPRequestHandler):
                 beam_size=3,
                 temperature=0.0,
                 condition_on_previous_text=False,
-                initial_prompt="以下是普通话或粤语对话，可能提到小鲸鱼、汽修配件、刹车片、空气滤芯、火花塞、车型、报价。",
-                hotwords="小鲸鱼 刹车片 空气滤芯 火花塞 车型 报价",
+                initial_prompt="以下是中文对话。请忠实转写人名、项目名称、日期、数字和任务要求。",
             )
             text = "".join(seg.text for seg in segments).replace(" ", "").strip()
             return self._send(200, {"text": text, "lang": lang, "ms": int((time.time() - started) * 1000)})

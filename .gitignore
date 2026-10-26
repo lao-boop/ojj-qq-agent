@@ -1,5 +1,8 @@
 # 依赖与产物
 node_modules/
+__pycache__/
+*.py[cod]
+.venv/
 
 # 运行时数据（保留配件库）
 data/*

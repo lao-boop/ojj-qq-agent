@@ -62,7 +62,9 @@ export function selfContext({ chatKey, cfg, journal, runtime = {} }) {
     capabilities: {
       qzone: { configured: Boolean(cfg.qzone?.enabled), initialized: Boolean(runtime.qzoneInitialized), automaticPosting: Boolean(cfg.qzone?.enabled && cfg.qzone?.autoPost), connected: Boolean(runtime.connected), note: '连接正常不代表空间扩展接口一定可用；以执行回执为准' },
       manager: Boolean(cfg.chat?.agents?.enabled), imageConfigured: Boolean(cfg.image?.enabled),
-      voiceConfigured: Boolean(cfg.tts?.enabled), llmCredentialPresent: Boolean(cfg.llm?.apiKey),
+      visionConfigured: cfg.vision?.enabled == null ? Boolean(cfg.llm?.visionModel) : Boolean(cfg.vision?.enabled && cfg.vision?.apiKey && cfg.vision?.model),
+      speechRecognitionConfigured: Boolean(cfg.asr?.enabled && (cfg.asr?.local?.enabled || cfg.asr?.token)),
+      voiceConfigured: Boolean(cfg.tts?.enabled && (cfg.tts?.provider !== 'minimax' || cfg.tts?.minimax?.apiKey)), llmCredentialPresent: Boolean(cfg.llm?.apiKey),
     },
     actions: journal.visible(chatKey, cfg),
   };

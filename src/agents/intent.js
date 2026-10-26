@@ -17,7 +17,7 @@ export function normalizeInput({ userText = '', requestText, images = [], attach
     modalities: ['text', ...(images.length ? ['image'] : []), ...['files', 'audios', 'videos'].filter(k => attachments[k]?.length)],
     attachments: Object.fromEntries(['files', 'audios', 'videos'].map(k => [k, (attachments[k] || []).slice(0, 4).map(x => ({ name: String(x.name || '').slice(0, 200) }))])),
     imageCount: images.length,
-    imageReadFailed: images.length > 0 && !caption,
+    imageReadFailed: images.length > 0 && (!caption || caption.includes('识别未成功')),
   };
 }
 

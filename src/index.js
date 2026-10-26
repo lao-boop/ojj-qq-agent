@@ -11,7 +11,8 @@ import { logMedia, formatMediaDigest } from './media-log.js';
 import { Memory } from './memory.js';
 import { createTools } from './tools.js';
 import { Brain } from './brain.js';
-import { TTS } from './tts.js';
+import { VisionClient } from './vision.js';
+import { TTS, findPython } from './tts.js';
 import { FileReader } from './files.js';
 import { renderHum } from './music.js';
 import { SongGen } from './song.js';
@@ -38,10 +39,11 @@ if (!cfg.llm.apiKey) {
 const logger = new Logger({ level: cfg.log.level, file: cfg.log.file, name: 'bot' });
 
 const llm = new LLM(cfg.llm, logger.child('llm'));
+const vision = new VisionClient(cfg.vision, cfg.llm, logger.child('vision'));
 const imageGen = new ImageGen(cfg.image, logger.child('image'));
 const office = new Office({ cfg: cfg.office, llm, imageGen, logger: logger.child('office') });
 const tts = new TTS(cfg.tts, logger.child('tts'));
-const fileReader = new FileReader({ cfg: { pythonPath: cfg.tts.pythonPath }, logger: logger.child('files') });
+const fileReader = new FileReader({ cfg: { ...cfg.files, pythonPath: cfg.files?.pythonPath || cfg.office.pythonPath || cfg.tts.pythonPath }, logger: logger.child('files') });
 const songGen = new SongGen(cfg.song, logger.child('song'));
 const voiceConvert = new VoiceConvert(
   { ...cfg.voice, token: cfg.voice.token || cfg.song.token },
@@ -66,6 +68,8 @@ const brain = new Brain({
     return resolveCoverTrack(library, intent.slots, intent.exclude);
   } },
   visionModel: cfg.llm.visionModel,
+  vision,
+  resolveFile: value => fileReader.resolveLocal(value),
   selfState: (chatKey) => selfContext({ chatKey, cfg, journal: actionJournal, runtime: { qzoneInitialized: Boolean(qzone), connected: onebot.status().connected } }),
 });
 const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
@@ -766,18 +770,9 @@ async function notifyFriend(uin, text) {
 /** 确保本地 faster-whisper 服务在跑（不在就拉起来）。 */
 async function ensureLocalAsr() {
   const local = cfg.asr?.local;
-  if (!local?.enabled) return false;
+  if (!cfg.asr?.enabled || !local?.enabled) return false;
   if (await localAsrHealthy(local.url)) return true;
-  const bin =
-    local.pythonPath ||
-    cfg.office?.pythonPath ||
-    cfg.tts?.pythonPath ||
-    process.env.PYTHON_PATH ||
-    path.join(process.env.LOCALAPPDATA || '', 'AstrBot', 'backend', 'python', 'python.exe');
-  if (!fs.existsSync(bin)) {
-    logger.warn(`本地 ASR：找不到 python（${bin}）`);
-    return false;
-  }
+  const bin = findPython(local.pythonPath || cfg.office?.pythonPath || cfg.tts?.pythonPath || process.env.PYTHON_PATH);
   try {
     const child = spawn(bin, [path.join(ROOT, 'scripts', 'asr_server.py'), String(local.port || 8090)], {
       cwd: ROOT,
@@ -785,11 +780,13 @@ async function ensureLocalAsr() {
       stdio: 'ignore',
       env: {
         ...process.env,
-        HF_ENDPOINT: 'https://hf-mirror.com',
+        HF_ENDPOINT: process.env.HF_ENDPOINT || 'https://huggingface.co',
         HF_HUB_DISABLE_XET: '1',
         ASR_MODEL_SIZE: local.model || 'small',
+        FFMPEG_PATH: cfg.media?.ffmpegPath || process.env.FFMPEG_PATH || 'ffmpeg',
       },
     });
+    child.on('error', err => logger.warn(`本地 ASR 进程启动失败：${err.message}`));
     child.unref();
     logger.info('本地 ASR 服务启动中…');
     for (let i = 0; i < 50; i++) {
@@ -921,15 +918,17 @@ async function onMessage(event) {
         const r = await fileReader.read(onebot, f);
         if (r.ok && r.text) {
           chunks.push(`【对方发来的文件：${name}】\n${r.text.slice(0, 6000)}`);
+        } else if (r.ok && /\.pdf$/i.test(name)) {
+          chunks.push(`【对方发来的文件：${name}】（PDF 没有可提取文字层，需依据后附页面图的识别结果；不能假定已读取全文）`);
         } else {
           chunks.push(`【对方发来的文件：${name}】（我读不出里面的文字：${r.error || '格式不支持'}）`);
         }
         // Word/PPT/Excel 里的图片也抽出来一起看
-        if (/\.(docx|pptx|xlsx)$/i.test(name)) {
+        if (/\.(docx|pptx|xlsx)$/i.test(name) || (/\.pdf$/i.test(name) && !String(r.text || '').trim())) {
           const pics = await fileReader.extractImages(r);
           if (pics.length) {
             effectiveImages = [...effectiveImages, ...pics.map((p) => ({ file: p }))];
-            chunks.push(`（文件里还有 ${pics.length} 张图，已经一起看了）`);
+            chunks.push(/\.pdf$/i.test(name) ? `（扫描 PDF 仅渲染前 ${pics.length} 页，其他页未读取；视觉识别结果另附）` : `（文件里还有 ${pics.length} 张图，已提取，识别结果另附）`);
             logger.info(`从 ${name} 抽出 ${pics.length} 张图`);
           }
           logMedia({ chatKey: chat.key, direction: 'in', kind: 'doc', name, detail: `${r.chars || 0} 字 · ${pics.length} 图`, path: r.path, snippet: String(r.text || '').slice(0, 200) });
@@ -964,8 +963,10 @@ async function onMessage(event) {
         detail: `${Math.round(audioSeconds)} 秒`,
         path: a.path,
       });
-      if (audioSeconds > 30) {
-        // 长音频多半是歌/音乐，不是说话，别硬转写（会转成乱码）
+      if (!cfg.asr?.enabled) {
+        audioNote = '[对方发来音频；语音识别当前关闭，不能确认音频内容]';
+      } else if (audioSeconds > (cfg.asr.maxSeconds || 300)) {
+        // 显式的处理时长上限，不能把超过 30 秒的工作语音直接当成歌曲
         audioNote = `[对方发来一段约 ${Math.round(audioSeconds)} 秒的音频/歌曲，没有转写]`;
       } else if (wantsCover(userSay)) {
         audioNote = '[对方发来一段音频/语音]';
@@ -1003,7 +1004,7 @@ async function onMessage(event) {
           } catch (err) {
             logger.warn(`本地转写失败：${err.message}`);
           }
-          if (!transcript) {
+          if (!transcript && aligner.enabled) {
             try {
               transcript = await aligner.transcribeFast(asrPath);
             } catch (err) {
@@ -1025,7 +1026,7 @@ async function onMessage(event) {
             audioNote = `[对方语音转写] ${transcript}`;
             logger.info(`语音转写：${transcript.slice(0, 60)}`);
           } else {
-            audioNote = '[对方发来一段语音，但没识别出内容]';
+            audioNote = '[对方发来一段语音，未得到有效转写；本地服务可能未就绪或音频不清晰，不能猜测内容]';
           }
         } catch (err) {
           audioNote = '[对方发来一段语音，转写失败，可以请他再说一遍]';
@@ -1051,7 +1052,8 @@ async function onMessage(event) {
       logMedia({ chatKey: chat.key, direction: 'in', kind: 'video', name: v.name, path: v.path });
       try {
         const frame = await extractFrame(v.path, { ffmpeg: cfg.media?.ffmpegPath, tag: 'frame' });
-        const caption = await brain.describeImages([{ file: frame }]);
+        const caption = await brain.describeImages([{ file: frame }], userSay);
+        videoNote += '（仅抽取前 30 秒的一张代表画面；未完整观看或转写视频音轨）';
         if (caption) {
           videoNote += ` 画面：${caption.replace('[对方发来的图片]', '').trim()}`;
           logger.info('视频画面已识别');
@@ -1561,6 +1563,10 @@ async function applyConfig(rawPatch) {
   if (patch?.console?.token && patch.console.token.includes('••••')) delete patch.console.token;
   if (patch?.image?.apiKey && patch.image.apiKey.includes('••••')) delete patch.image.apiKey;
   if (patch?.song?.token && patch.song.token.includes('••••')) delete patch.song.token;
+  if (patch?.vision?.apiKey?.includes('••••')) delete patch.vision.apiKey;
+  if (patch?.tts?.minimax?.apiKey?.includes('••••')) delete patch.tts.minimax.apiKey;
+  if (patch?.asr?.token?.includes('••••')) delete patch.asr.token;
+  if (patch?.voice?.token?.includes('••••')) delete patch.voice.token;
 
   const next = deepMerge(cfg, patch);
   const oldWs = cfg.onebot.wsUrl;
@@ -1571,6 +1577,8 @@ async function applyConfig(rawPatch) {
   saveConfig(cfg);
   llm.updateConfig(cfg.llm);
   brain.visionModel = cfg.llm.visionModel;
+  vision.updateConfig(cfg.vision, cfg.llm);
+  office.updateConfig(cfg.office);
   imageGen.updateConfig(cfg.image);
   tts.updateConfig(cfg.tts);
   songGen.updateConfig(cfg.song);
@@ -1578,7 +1586,7 @@ async function applyConfig(rawPatch) {
   library.updateConfig(cfg.library);
   aligner.updateConfig({ ...cfg.asr, token: cfg.asr.token || cfg.song.token });
   qzone?.updateConfig(cfg.qzone);
-  fileReader.updateConfig({ pythonPath: cfg.tts.pythonPath });
+  fileReader.updateConfig({ ...cfg.files, pythonPath: cfg.files?.pythonPath || cfg.office.pythonPath || cfg.tts.pythonPath });
   brain.updateConfig(cfg.chat);
   memory.updateConfig(cfg.chat);
   sender.updateConfig(cfg.chat);

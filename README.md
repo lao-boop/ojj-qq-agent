@@ -112,6 +112,10 @@ npm start
 
 ---
 
+## Mac 多模态接入
+
+支持独立视觉接口、MiniMax 国内/国际语音输出、本地语音识别、扫描 PDF 前 3 页渲染，以及 Mac 与 NapCat Docker 共享附件路径映射。使用本地配置向导，保留现有 QQ 和 DeepSeek 配置：[安装与验证步骤](docs/MAC-MULTIMODAL.md)。
+
 ## 多 Agent 与意图理解
 
 可选的两层流程：多模态语义理解 → 会话任务更新与执行前校验 → Manager 调度专业 Agent。

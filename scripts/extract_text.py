@@ -61,7 +61,9 @@ def main():
             reader = PdfReader(p)
             chunks = []
             for i, page in enumerate(reader.pages, 1):
-                chunks.append("第%d页: %s" % (i, page.extract_text() or ""))
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    chunks.append("第%d页: %s" % (i, page_text))
             text = "\n".join(chunks)
         elif ext in (".txt", ".md", ".csv", ".json", ".log", ".py", ".js", ".ts", ".html", ".xml", ".yml", ".yaml"):
             raw = open(p, "rb").read()

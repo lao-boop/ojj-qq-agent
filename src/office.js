@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DATA_DIR, ROOT } from './config.js';
+import { findPython } from './tts.js';
 import { ffmpegBin } from './media.js';
 
 const execFileAsync = promisify(execFile);
@@ -51,7 +52,7 @@ export class Office {
     for (const p of candidates) {
       if (fs.existsSync(p)) return p;
     }
-    return 'python';
+    return findPython();
   }
 
   /** 让模型分两批写大纲，避免一次输出太长被截断。 */
