@@ -24,6 +24,7 @@ export class LLM {
     maxTokens = this.cfg.maxTokens,
     timeoutMs = this.cfg.timeoutMs,
     toolChoice,
+    responseFormat,
   }) {
     const body = {
       model,
@@ -32,6 +33,7 @@ export class LLM {
       max_tokens: maxTokens,
       stream: false,
     };
+    if (responseFormat && this.cfg.jsonMode !== false) body.response_format = responseFormat;
     if (tools?.length) {
       body.tools = tools;
       body.tool_choice = toolChoice ?? 'auto';
@@ -72,12 +74,14 @@ export class LLM {
           message,
           usage,
           model,
+          finishReason: json.choices?.[0]?.finish_reason,
         };
       } catch (err) {
         lastErr = err;
         this.stats.failures++;
         const retryable = !err.status || RETRYABLE.has(err.status) || err.name === 'TimeoutError';
-        this.logger.warn(`LLM 请求失败（第 ${attempt + 1} 次）：${err.message}`);
+        const category = Number.isInteger(err.status) ? `HTTP=${err.status}` : ['TimeoutError', 'AbortError'].includes(err.name) ? 'timeout' : 'connection_or_response';
+        this.logger.warn(`LLM 请求失败（第 ${attempt + 1} 次）：${category}`);
         if (!retryable || attempt === 2) break;
         await sleep(1200 * (attempt + 1));
       }

@@ -1,5 +1,6 @@
 import { CAPABILITIES, validateCapabilities } from './capabilities.js';
 import { randomUUID } from 'node:crypto';
+import { intentFailure } from './intent-errors.js';
 import { IntentRecognizer } from './intent.js';
 
 /** Task state is scoped by conversation, bounded, and deliberately not execution history. */
@@ -23,16 +24,16 @@ export class TaskState {
 }
 
 export class UnderstandingPipeline {
-  constructor({ llm, state = new TaskState(), validators = {} }) { Object.assign(this, { llm, state, validators }); }
+  constructor({ llm, state = new TaskState(), validators = {}, logger }) { Object.assign(this, { llm, state, validators, logger }); }
   async prepare(chatKey, input) {
     const snapshot = this.state.list(chatKey).map(t => ({ id:t.id, goal:t.goal, kind:t.kind, slots:t.slots, operations:t.operations, forbiddenOperations:t.forbiddenOperations, exclude:t.exclude, status:t.status }));
     let intent;
-    try { intent = await new IntentRecognizer(this.llm).recognize({ ...input, tasks: snapshot }); }
-    catch { return { failed: true, reply: '意图理解服务未返回有效结果，这次没有启动任务，请稍后再试。' }; }
+    try { intent = await new IntentRecognizer(this.llm, this.logger).recognize({ ...input, tasks: snapshot }); }
+    catch (error) { return intentFailure(error, this.logger); }
     const contradiction = needsNegationReview(intent, input.instruction);
     if (contradiction) {
-      try { intent = await new IntentRecognizer(this.llm).recognize({ ...input, tasks: snapshot, review: '上次判为新建，但用户有否定。重新检查否定范围与纠正对象；不明确则 clarification，禁止照旧执行。' }); }
-      catch { return { reply: '这句话里有否定或修改要求，请明确保留什么、不要什么。' }; }
+      try { intent = await new IntentRecognizer(this.llm, this.logger).recognize({ ...input, tasks: snapshot, review: '上次判为新建，但用户有否定。重新检查否定范围与纠正对象；不明确则 clarification，禁止照旧执行。' }); }
+      catch (error) { return intentFailure(error, this.logger); }
       if (needsNegationReview(intent, input.instruction) && !intent.clarification) return { reply: '为避免做反，请明确这次要执行的内容和不要执行的内容。' };
     }
     // Fresh state after model latency: never replace an operation that has started in the meantime.
@@ -75,6 +76,7 @@ export class UnderstandingPipeline {
     // Reserve updates synchronously before awaiting read-only validators.
     const task = target || this.state.add(chatKey, { ...merged, requester: input.actorId || "" });
     Object.assign(task, merged);
+    if (merged.slots.delivery !== 'other_chat') delete task.deliveryAuthorization;
     this.state.finish(task, 'running');
     const clarify = intent.clarification || (intent.missing.length ? `还需要补充：${intent.missing.join('、')}。` : '');
     if (clarify) { this.state.finish(task, 'draft'); return { reply: clarify, task }; }
@@ -86,7 +88,8 @@ export class UnderstandingPipeline {
     try {
       const validator = this.validators[merged.kind];
       if (merged.kind === 'cover' && !validator) { this.state.finish(task, 'draft'); return { reply: '当前入口没有接入曲库核验，不能直接开始翻唱。', task }; }
-      const checked = validator ? await validator(merged, input) : {};
+      const checked = validator ? await validator(merged, input, { task }) : {};
+      if (Object.hasOwn(checked, 'authorization')) task.deliveryAuthorization = checked.authorization;
       if (checked.reply) { this.state.finish(task, 'draft'); return { reply: checked.reply, task }; }
       if (merged.kind === 'cover' && merged.slots.source === 'next_audio') { this.state.finish(task, 'draft'); return { reply: '已记下，等待下一条要翻唱的音频；这条准备指令不会执行。', task }; }
       return { intent: { ...merged, goal: JSON.stringify({ goal: merged.goal, slots: merged.slots, exclude: merged.exclude }), validated: checked.value }, task };

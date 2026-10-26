@@ -13,7 +13,7 @@ export class Brain {
   constructor({ cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash', vision = null, resolveFile = value => value, selfState = () => '', validators = {} }) {
     this.cfg = cfg;
     this.selfState = selfState;
-    this.understanding = new UnderstandingPipeline({ llm, validators });
+    this.understanding = new UnderstandingPipeline({ llm, validators, logger });
     this.llm = llm;
     this.memory = memory;
     this.tools = tools;
@@ -221,7 +221,7 @@ export class Brain {
 
     const managed = Boolean(this.cfg.agents?.enabled);
     const first = managed
-      ? await new AgentManager({ llm: this.llm, tools: this.tools, logger: this.logger, config: this.cfg.agents, understanding: coverValidator ? new UnderstandingPipeline({ llm: this.llm, state: this.understanding.state, validators: { ...this.understanding.validators, cover: coverValidator } }) : this.understanding, coverExecutor }).run({
+      ? await new AgentManager({ llm: this.llm, tools: this.tools, logger: this.logger, config: this.cfg.agents, understanding: coverValidator ? new UnderstandingPipeline({ llm: this.llm, logger: this.logger, state: this.understanding.state, validators: { ...this.understanding.validators, cover: coverValidator } }) : this.understanding, coverExecutor }).run({
           input: normalizeInput({ userText, requestText, images, attachments, caption, selfState: this.selfState(chatKey), actorId: meta?.actorId || chatKey }),
           messages, toolCtx, onProgress,
         })

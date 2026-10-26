@@ -9,7 +9,7 @@ import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
 
 // Exercise actual index -> Brain -> intent -> Manager -> tools -> ReplySender, using local model/QQ servers.
-for (const {enabled, cover} of [{enabled:true,cover:false},{enabled:false,cover:false},{enabled:true,cover:true}]) test(`real bot validates input and delivery (Manager=${enabled}, cover=${cover})`, { timeout: 20000 }, async () => {
+for (const {enabled, cover, recipient} of [{enabled:true,cover:false},{enabled:false,cover:false},{enabled:true,cover:true},{enabled:true,cover:false,recipient:true}]) test(`real bot validates input and delivery (Manager=${enabled}, cover=${cover}, recipient=${Boolean(recipient)})`, { timeout: 20000 }, async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-integration-'));
   const requests = [], delivered = [];
   let stage = 0, bot, logs = '';
@@ -19,7 +19,8 @@ for (const {enabled, cover} of [{enabled:true,cover:false},{enabled:false,cover:
     const system = data.messages[0]?.content || '';
     let message = { role: 'assistant', content: '' };
     if (typeof system === 'string' && system.includes('第一层多模态')) {
-      message.content = JSON.stringify(cover ? {act:'create',targetId:'',kind:'cover',operations:['cover.perform'],forbiddenOperations:[],slots:{title:'乡愁四韵',artist:'罗大佑'},exclude:[],missing:[],goal:'翻唱乡愁四韵',agents:['audio'],clarification:''} : { act:'create', targetId:'', kind:'general', operations:['image.generate'],forbiddenOperations:[], slots:{prompt:'a cute cat'}, exclude:[], missing:[], goal: '画一只猫', agents: ['image'], clarification: '' });
+      if (recipient) message.content = JSON.stringify({ act:'create', targetId:'', kind:'cover', goal:'翻唱30岁的女人', agents:['audio'], operations:['cover.perform'], forbiddenOperations:[], exclude:[], missing:[], clarification:'', slots: stage++ === 0 ? {title:'30岁的女人',recipientName:'纵蔚'} : {title:'30岁的女人',recipient:'纵蔚',delivery:'unclear'} });
+      else message.content = JSON.stringify(cover ? {act:'create',targetId:'',kind:'cover',operations:['cover.perform'],forbiddenOperations:[],slots:{title:'乡愁四韵',artist:'罗大佑'},exclude:[],missing:[],goal:'翻唱乡愁四韵',agents:['audio'],clarification:''} : { act:'create', targetId:'', kind:'general', operations:['image.generate'],forbiddenOperations:[], slots:{prompt:'a cute cat'}, exclude:[], missing:[], goal: '画一只猫', agents: ['image'], clarification: '' });
     } else if ((typeof system === 'string' && system.includes('内部 image Agent')) || (!enabled && data.tools?.length)) {
       if (stage++ === 0) message.tool_calls = [{ id: 'draw-1', type: 'function', function: { name: 'draw_image', arguments: JSON.stringify({ prompt: 'a cute cat' }) } }];
       else message.content = '图片已生成';
@@ -37,7 +38,7 @@ for (const {enabled, cover} of [{enabled:true,cover:false},{enabled:false,cover:
       const data = r.action === 'get_login_info' ? { user_id: 30001, nickname: 'mock' } : { message_id: 123 };
       if (r.action === 'send_private_msg') delivered.push(r.params);
       ws.send(JSON.stringify({ status: 'ok', retcode: 0, echo: r.echo, data }));
-      if (r.action === 'get_login_info') setTimeout(() => ws.send(JSON.stringify({ post_type: 'message', message_type: 'private', user_id: 10001, self_id: 30001, message_id: 99, sender: { nickname: 'tester' }, message: [{ type: 'text', data: { text: cover ? '唱罗大佑的乡愁四韵。' : '参考这张图画一只猫。' } }, { type: 'image', data: { file: path.resolve('assets/sample-image.jpg') } }] })), 50);
+      if (r.action === 'get_login_info') setTimeout(() => ws.send(JSON.stringify({ post_type: 'message', message_type: 'private', user_id: 10001, self_id: 30001, message_id: 99, sender: { nickname: 'tester' }, message: [{ type: 'text', data: { text: recipient ? '唱30岁的女人，唱给纵蔚' : cover ? '唱罗大佑的乡愁四韵。' : '参考这张图画一只猫。' } }, ...(recipient ? [] : [{ type: 'image', data: { file: path.resolve('assets/sample-image.jpg') } }])] })), 50);
     });
   });
   const musicDir = path.join(tmp,'music'); fs.mkdirSync(musicDir);
@@ -54,7 +55,16 @@ for (const {enabled, cover} of [{enabled:true,cover:false},{enabled:false,cover:
     bot = spawn(process.execPath, ['src/index.js'], { cwd: process.cwd(), env: { ...process.env, QQBOT_CONFIG: path.join(tmp, 'config.json'), QQBOT_DATA: path.join(tmp, 'data') }, stdio: ['ignore', 'pipe', 'pipe'] });
     bot.stdout.on('data', b => logs += b); bot.stderr.on('data', b => logs += b);
     const end = Date.now() + 14000;
-    while (Date.now() < end && !delivered.some(m => m.message.some(s => cover ? String(s.data?.text).includes('准确匹配') : s.type === 'image'))) await new Promise(r => setTimeout(r, 50));
+    while (Date.now() < end && !delivered.some(m => m.message.some(s => recipient ? String(s.data?.text).includes('歌手/版本') : cover ? String(s.data?.text).includes('准确匹配') : s.type === 'image'))) await new Promise(r => setTimeout(r, 50));
+    if (recipient) {
+      assert.ok(delivered.some(m => m.message.some(s => String(s.data?.text).includes('歌手/版本'))), logs);
+      assert.equal(delivered.flatMap(m => m.message).filter(s => s.type !== 'text' && s.type !== 'reply').length, 0);
+      const recognition = requests.filter(r => String(r.messages[0].content).includes('第一层多模态'));
+      assert.equal(recognition.length, 2);
+      assert.ok(recognition.every(r => r.response_format?.type === 'json_object'));
+      assert.match(logs, /code=output_schema/);
+      return;
+    }
     if (cover) {
       assert.ok(delivered.some(m => m.message.some(s => String(s.data?.text).includes('准确匹配'))), logs);
       assert.equal(delivered.flatMap(m => m.message).filter(s => ['record','image'].includes(s.type)).length,0);

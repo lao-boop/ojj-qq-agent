@@ -105,7 +105,8 @@
     "dailyLimit": 10,
     "autoConvert": false,
     "autoConvertPitch": "no-change",
-    "sendAsVoice": true
+    "sendAsVoice": true,
+    "recipients": []
   },
   "console": {
     "enabled": true,

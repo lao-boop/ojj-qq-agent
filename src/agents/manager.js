@@ -34,7 +34,7 @@ export class AgentManager {
     const check = () => { if (Date.now() >= deadline) throw new Error('Task deadline exceeded'); };
     const model = { chat: async args => { check(); return this.llm.chat({ ...args, timeoutMs: Math.min(deadline - Date.now(), 60000) }); } };
     const executed = new Map();
-    const pipeline = this.understanding || new UnderstandingPipeline({ llm: model });
+    const pipeline = this.understanding || new UnderstandingPipeline({ llm: model, logger: this.logger });
     let task;
     try {
       const prepared = await pipeline.prepare(toolCtx.chatKey || 'test', input);
@@ -50,7 +50,7 @@ export class AgentManager {
         const outcome = await this.coverExecutor(intent.validated, intent.slots);
         trace.status = outcome?.ok ? 'completed' : 'failed';
         pipeline.state.finish(task, trace.status);
-        return { reply: outcome?.ok ? `${intent.slots.title ? '《' + intent.slots.title + '》' : '这段音频'}的翻唱已交付。` : '这次翻唱未完成，请查看前面的执行提示。', trace };
+        return { reply: outcome?.reply || (outcome?.ok ? `${intent.slots.title ? '《' + intent.slots.title + '》' : '这段音频'}的翻唱已交付。` : '这次翻唱未完成，请查看前面的执行提示。'), trace };
       }
       let steps;
       if (intent.agents.length === 1) steps = [{ id: 'task', agent: intent.agents[0], task: intent.goal, dependsOn: [] }];

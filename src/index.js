@@ -16,6 +16,8 @@ import { TTS, findPython } from './tts.js';
 import { FileReader } from './files.js';
 import { renderHum } from './music.js';
 import { SongGen } from './song.js';
+import { CoverDelivery } from './cover-delivery.js';
+import { isOwner } from './global.js';
 import { coverCapabilityReply } from './cover-config.js';
 import { VoiceConvert } from './cover.js';
 import { extractAudio, extractFrame, trimAudio, cutAudioFrom, probeDuration, toMp3, silkToWav } from './media.js';
@@ -71,10 +73,11 @@ const brain = new Brain({
   visionModel: cfg.llm.visionModel,
   vision,
   resolveFile: value => fileReader.resolveLocal(value),
-  selfState: (chatKey) => selfContext({ chatKey, cfg, journal: actionJournal, runtime: { qzoneInitialized: Boolean(qzone), connected: onebot.status().connected } }),
+  selfState: (chatKey) => selfContext({ chatKey, cfg, journal: actionJournal, deliveryJournal: coverDelivery, runtime: { qzoneInitialized: Boolean(qzone), connected: onebot.status().connected } }),
 });
 const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
 const sender = new ReplySender({ onebot, cfg: cfg.chat, logger: logger.child('reply') });
+const coverDelivery = new CoverDelivery({ cfg, onebot, logger: logger.child('cover-delivery') });
 
 const stats = { received: 0, replied: 0, ignored: 0, errors: 0, startedAt: Date.now() };
 const activeJobs = new Map();
@@ -376,6 +379,7 @@ const HELP = [
   '/say 你好呀  — 发一条语音',
   '/sing  — 哼一段旋律（唱歌功能）',
   '/song 歌名  — 生成一首完整的歌（Replicate）',
+  '/收歌人 QQ号 昵称 — 登记可接收翻唱的好友；不带参数查看名单',
   '/cover  — 把刚发的语音变声（Replicate RVC）',
   '/点歌 小美满  — 从本地曲库找歌并自动翻唱',
   '/翻唱 江南 从「某句歌词」开始  — 指定从哪句开始唱',
@@ -393,6 +397,22 @@ async function handleCommand(chat, text) {
   switch (cmd.toLowerCase()) {
     case '/help':
       return HELP;
+    case '/收歌人': {
+      if (chat.type !== 'private' || !isOwner(chat.userId, cfg)) return '只有主人可以在私聊中登记收歌人。';
+      const list = cfg.voice.recipients || [];
+      if (!arg) return list.length ? list.map(r => `${r.name}：${r.qq}`).join('\n') : '尚未登记收歌人。用法：/收歌人 QQ号 昵称；删除：/收歌人 删除 QQ号';
+      const remove = /^删除\s+(\d{5,12})$/.exec(arg);
+      if (remove) { const next = list.filter(r => String(r.qq) !== remove[1]); saveConfig({ ...cfg, voice: { ...cfg.voice, recipients: next } }); cfg.voice.recipients = next; return '已移除该收歌人。'; }
+      const match = /^(\d{5,12})\s+(.{1,40})$/.exec(arg);
+      if (!match) return '用法：/收歌人 QQ号 昵称';
+      try {
+        const friends = await onebot.call('get_friend_list');
+        if (!Array.isArray(friends) || !friends.some(f => String(f.user_id) === match[1])) return '对方还不在机器人好友列表中，请先添加好友，再登记。';
+        const next = [...list.filter(r => String(r.qq) !== match[1]), { qq: match[1], name: match[2].trim() }];
+        saveConfig({ ...cfg, voice: { ...cfg.voice, recipients: next } }); cfg.voice.recipients = next;
+        return `已登记收歌人 ${match[2].trim()}（${match[1]}）。明确说“翻唱后私发给${match[2].trim()}”才会向对方投递。`;
+      } catch { return '未能核验好友或保存收歌人，请查看 QQ 连接和本地配置权限后重试。'; }
+    }
     case '/status': {
       const s = onebot.status();
       return [
@@ -595,6 +615,7 @@ async function runCoverJob(chat, audioPath, opts = {}) {
   lastCover.set(chat.key, { kind: 'audio', path: audioPath, seconds: opts.seconds || 0 });
   const jid = beginJob('cover', `翻唱：${opts.title || '一段音频'}`);
   try {
+    if (opts.delivery) coverDelivery.assertAllowed(opts.delivery);
     if (!opts.quietAck) {
       await sender.send(chat, { bubbles: [pick(['开嗓中，稍等我一下下～', '正在酝酿情绪，马上开唱～', '清一清嗓子，很快～'])] }).catch(() => {});
     }
@@ -617,6 +638,14 @@ async function runCoverJob(chat, audioPath, opts = {}) {
     const coverName = String((generic ? '小鲸鱼翻唱' : opts.title) || '小鲸鱼翻唱')
       .replace(/[\\/:*?"<>|]/g, '')
       .slice(0, 40);
+    if (opts.delivery) {
+      const sent = await coverDelivery.send({ authorization: opts.delivery, file: r.file, name: `${coverName}.mp3`, asVoice: cfg.voice.sendAsVoice !== false, seconds });
+      try {
+        memory.append(chat.key, 'assistant', `[翻唱《${coverName}》已发给${opts.delivery.name}，QQ 已确认发送，未确认对方听取]`, chat.title);
+        logMedia({ chatKey: chat.key, direction: 'out', kind: 'audio', name: `${coverName}.mp3`, title: coverName, detail: `发送至指定收歌人 ${opts.delivery.name}`, path: r.file });
+      } catch { logger.warn('翻唱已获 QQ 发送回执，但聊天记录保存失败；不要重复发送'); }
+      return sent;
+    }
     await sender.sendAudio(chat, r.file, `${coverName}.mp3`, text, cfg.voice.sendAsVoice ?? true, seconds);
     memory.append(chat.key, 'assistant', `[我刚翻唱并发送了《${coverName}》的音频文件]`, chat.title);
     lastSent.set(chat.key, { kind: 'cover', title: coverName });
@@ -683,7 +712,7 @@ async function runSongJob(chat, job) {
 }
 
 /** 从本地曲库唱一首（点歌名 → 定位 → 截取 → 变声）。 */
-async function startLibraryCover(chat, hit, { startPhrase = '', requestedSeconds = 0, managed = false } = {}) {
+async function startLibraryCover(chat, hit, { startPhrase = '', requestedSeconds = 0, managed = false, delivery } = {}) {
   lastCover.set(chat.key, { kind: 'library', title: hit.title, startPhrase, seconds: requestedSeconds });
 
   let startSec = 0;
@@ -721,10 +750,10 @@ async function startLibraryCover(chat, hit, { startPhrase = '', requestedSeconds
   if (startSec) opening += `就从「${matchedText}」那句开始`;
   else if (startPhrase) opening += '没对上那句，从头唱啦';
   opening += pick(['，激情献唱中', '，那我开唱啦', '，马上安排']);
-  if (seconds > 55) opening += '（这段有点长，发文件给你）';
+  if (seconds > 55) opening += delivery ? `（这段有点长，将发文件给${delivery.name}）` : '（这段有点长，发文件给你）';
 
   await sender.send(chat, { bubbles: [opening] }).catch(() => {});
-  if (managed) return await runCoverJob(chat, src, { title: hit.title, seconds, quietAck: true });
+  if (managed) return await runCoverJob(chat, src, { title: hit.title, seconds, quietAck: true, delivery });
   runCoverJob(chat, src, { title: hit.title, seconds, quietAck: true }).catch((err) => logger.warn(`点歌任务异常：${err.message}`));
 }
 
@@ -1310,7 +1339,7 @@ async function onMessage(event) {
   };
 
   const noAdminConfigured = (cfg.access.adminQQ ?? []).length === 0;
-  if (isPrivate && body.startsWith('/') && (isAdmin(event.user_id) || noAdminConfigured)) {
+  if (isPrivate && body.startsWith('/') && (isAdmin(event.user_id) || isOwner(event.user_id, cfg) || noAdminConfigured)) {
     const reply = await handleCommand(chat, userSay);
     if (reply) await sender.send(chat, { bubbles: [reply] });
     return;
@@ -1330,9 +1359,11 @@ async function onMessage(event) {
         userText: body,
         requestText: userSay || recognizedSpeech,
         attachments: { files, audios, videos },
-        coverValidator: (intent, input) => {
+        coverValidator: (intent, input, { task } = {}) => {
+          const routing = coverDelivery.resolve({ slots: intent.slots, instruction: input.instruction, actorId: String(event.user_id), chatKey: chat.key, previous: task?.deliveryAuthorization });
+          if (routing.reply) return routing;
           if (!voiceConvert.enabled) return { reply: voiceConvert.configurationIssue };
-          if (intent.slots.source === 'next_audio') return { reply: '已记下，等你下一条要翻唱的音频；这条准备指令不会拿去翻唱。要取消可以说“取消翻唱”。' };
+          if (intent.slots.source === 'next_audio') return { authorization: routing.authorization, reply: '已记下，等你下一条要翻唱的音频；这条准备指令不会拿去翻唱。要取消可以说“取消翻唱”。' };
           if (['attachment','recent_audio'].includes(intent.slots.source)) {
             if (intent.slots.source === 'attachment' && audios.length !== 1) return { reply: '请一次发送一条明确要翻唱的音频。' };
             if (intent.slots.seconds || intent.slots.startPhrase) return { reply: '音频附件的指定片段还需要单独核验，当前不会自动截取或改唱全段。' };
@@ -1340,13 +1371,14 @@ async function onMessage(event) {
             const source = intent.slots.source === 'attachment' ? downloadedAudio :
               recent && Date.now() - recent.at < 30 * 60 * 1000 ? recent.path : '';
             if (!source || !fs.existsSync(source)) return { reply: '没有可用的对应音频，请重新发送要翻唱的音频文件。' };
-            return { value: { audioPath: source } };
+            return { authorization: routing.authorization, value: { audioPath: source, delivery: routing.authorization } };
           }
-          return brain.understanding.validators.cover(intent, input);
+          const checked = brain.understanding.validators.cover(intent, input);
+          return checked.reply ? checked : { authorization: routing.authorization, value: { ...checked.value, delivery: routing.authorization } };
         },
         coverExecutor: (hit, slots) => hit.audioPath
-          ? runCoverJob(chat, hit.audioPath, { title: '你发的这段' })
-          : startLibraryCover(chat, hit, { requestedSeconds: slots.seconds || 0, managed: true }),
+          ? runCoverJob(chat, hit.audioPath, { title: '你发的这段', delivery: hit.delivery })
+          : startLibraryCover(chat, hit, { requestedSeconds: slots.seconds || 0, managed: true, delivery: hit.delivery }),
         images: effectiveImages,
         meta,
         onProgress: async (ev) => {

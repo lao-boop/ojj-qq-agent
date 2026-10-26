@@ -20,6 +20,8 @@ export const CAPABILITIES = Object.freeze({
 
 export function validateCapabilities(intent, input) {
   const s = intent.slots, ops = intent.operations;
+  if (s.delivery === 'other_chat' && intent.kind !== 'cover') return '这项任务还不能直接交付到别人的聊天，请先确认是否改为在当前聊天生成；本次没有生成或转发。';
+  if (s.delivery === 'unclear' || (s.recipient && !s.delivery)) return intent.kind === 'cover' ? '你提到的对象是歌手/版本，还是要送给某个人听？请同时确认是在当前聊天播放，还是要发给对方。' : '这份结果是在当前聊天交给你，还是需要发送到对方的聊天？请先确认交付位置。';
   if (ops.some(op => intent.forbiddenOperations.includes(op))) return '你要求的操作同时被禁止了，请明确保留哪项操作。';
   if (ops.some(op => CAPABILITIES[op].unsupported)) return '本次包含尚未接入主管执行的空间发布或传话；不会只执行一部分，请拆开任务。';
   if (intent.kind === 'cover' && (ops.length !== 1 || ops[0] !== 'cover.perform')) return '翻唱与其他操作请分开提出，当前不会只执行一部分。';

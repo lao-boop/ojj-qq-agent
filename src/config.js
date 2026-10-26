@@ -97,6 +97,7 @@ export const DEFAULTS = {
   },
   voice: {
     enabled: true,
+    recipients: [],
     token: '',
     model: 'zsxkib/realistic-voice-cloning',
     rvcModel: 'Drake',
