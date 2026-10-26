@@ -100,7 +100,7 @@ export async function silkToWav(input, { python, tag = 'silk' } = {}) {
   try {
     await execFileAsync(bin, [script, input, out, '24000'], { timeout: 60000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
   } catch (err) {
-    throw new Error(`SILK 转码失败：${String(err.stderr || err.message).slice(0, 120)}`);
+    throw new Error(`SILK 转码失败：${String(err.stderr || err.message).trim().slice(-1800)}`);
   }
   if (!fs.existsSync(out) || fs.statSync(out).size < 1000) throw new Error('SILK 转码失败：没有产出');
   return out;

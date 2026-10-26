@@ -28,7 +28,8 @@ def configure(cfg):
     local = cfg.setdefault("asr", {}).setdefault("local", {})
     ready = bool(ffmpeg and importlib.util.find_spec("faster_whisper") and importlib.util.find_spec("pilk"))
     cfg["asr"].update(enabled=ready, maxSeconds=300)
-    local.update(enabled=ready, pythonPath=python, url="http://127.0.0.1:8090", port=8090, model="small")
+    model = ask("本地语音模型 small / medium / large-v3（越大通常越慢）", local.get("model") or "small")
+    local.update(enabled=ready, pythonPath=python, url="http://127.0.0.1:8090", port=8090, model=model)
     if not ready:
         print("本地语音识别尚缺 ffmpeg、faster-whisper 或 pilk，本次保持关闭；装好后可重跑向导。")
 

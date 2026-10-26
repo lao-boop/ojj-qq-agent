@@ -14,6 +14,8 @@ const { FileReader } = await import('../src/files.js');
 const { ConsoleServer } = await import('../src/server.js');
 const { normalizeInput } = await import('../src/agents/intent.js');
 const { ReplySender } = await import('../src/reply.js');
+const { localAsrStatus, localAsrHealthy } = await import('../src/asr-local.js');
+const { silkToWav } = await import('../src/media.js');
 const logger = { info() {}, warn() {}, debug() {}, error() {}, child() { return this; } };
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -37,6 +39,19 @@ async function server(t, respond) {
   t.after(() => new Promise(resolve => srv.close(resolve)));
   return { baseUrl: `http://127.0.0.1:${srv.address().port}`, requests };
 }
+
+test('ASR status reports actual loaded model, not requested config', async t => {
+  const api = await server(t, () => ({ ok: true, model: 'small' }));
+  assert.deepEqual(await localAsrStatus(api.baseUrl), { ok: true, model: 'small' });
+  assert.equal(await localAsrHealthy(api.baseUrl), true);
+});
+
+test('SILK decoder error retains final exception instead of truncating at traceback header', async () => {
+  const fake = path.join(tmp, 'decoder');
+  fs.writeFileSync(fake, '#!/bin/sh\nprintf "%s\\n" "Traceback: ' + 'frame '.repeat(80) + '" "DecoderError: invalid SILK header" >&2\nexit 1\n', { mode: 0o700 });
+  const input = path.join(tmp, 'invalid.silk'); fs.writeFileSync(input, 'bad input');
+  await assert.rejects(silkToWav(input, { python: fake }), /DecoderError: invalid SILK header/);
+});
 
 test('MiniMax emits exact MP3 bytes and sends configured voice/model, not Edge TTS options', async t => {
   const bytes = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(1400, 42)]);

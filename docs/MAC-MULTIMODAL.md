@@ -26,6 +26,7 @@ npm start
 - 不确定 DeepSeek API 是否支持图片时，可以运行 `node scripts/check-vision.mjs /你的图片绝对路径.png`。未配置独立视觉时使用本地现有文字模型和密钥进行一次图片请求，不修改配置；核对返回描述是否与原图一致。检测失败不会自动购买或切换服务。如果省略图片路径，使用仓库示例图。此命令调用真实 API，按服务商计费。
 - 本地语音识别使用 CPU faster-whisper small，需要 ffmpeg 和 pilk。默认最多 300 秒；首次下载模型较慢。模型从 Hugging Face 下载；若网络不通，可在启动前设置你能访问的 `HF_ENDPOINT`。`asr.enabled=false` 会停止转写请求；更改模型后重启旧 ASR 服务。
 - 本地 ASR 可单独运行并查看加载错误：`~/qq-agent-dev/python-env/bin/python scripts/asr_server.py 8090`。不要在 8090 已被 ASR 占用时重复启动。健康检查：`curl http://127.0.0.1:8090/health`。首次加载超过机器人等待时间时，等待模型完成后再发语音。
+- 想增强识别时，可将 `asr.local.model` 从 `small` 改为 `medium`，或再评估 `large-v3`。当前实现是 CPU int8，未使用 Apple GPU；更大模型占用更多内存、首次下载更大且通常更慢，不增加聊天模型或工具能力。配置向导会保留所选模型。修改后先停止旧的 ASR 进程，再启动机器人；否则 8090 可能仍运行旧模型。以 `/health` 返回的 `model` 为准。后台模型下载和异常日志保存在 `data/logs/asr.log`（自定义 QQBOT_DATA 时以对应数据目录为准）。
 
 ## Docker 附件
 

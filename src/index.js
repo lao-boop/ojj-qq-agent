@@ -21,7 +21,7 @@ import { extractAudio, extractFrame, trimAudio, cutAudioFrom, probeDuration, toM
 import { MusicLibrary, resolveCoverTrack, extractSongQuery, parseCoverRequest, isCorrection, parseDuration } from './library.js';
 import { webSearch } from './websearch.js';
 import { Aligner } from './asr.js';
-import { localAsrHealthy, localTranscribe } from './asr-local.js';
+import { localAsrHealthy, localAsrStatus, localTranscribe } from './asr-local.js';
 import * as OpenCC from 'opencc-js';
 import { Qzone } from './qzone.js';
 import { ActionJournal, selfContext } from './self-state.js';
@@ -771,31 +771,46 @@ async function notifyFriend(uin, text) {
 async function ensureLocalAsr() {
   const local = cfg.asr?.local;
   if (!cfg.asr?.enabled || !local?.enabled) return false;
-  if (await localAsrHealthy(local.url)) return true;
+  const running = await localAsrStatus(local.url);
+  if (running) {
+    if (running.model && running.model !== (local.model || 'small')) {
+      logger.warn(`本地 ASR 正在使用 ${running.model}，配置为 ${local.model || 'small'}；请停止旧 ASR 进程再重启机器人，尚未切换模型`);
+    }
+    return true;
+  }
   const bin = findPython(local.pythonPath || cfg.office?.pythonPath || cfg.tts?.pythonPath || process.env.PYTHON_PATH);
+  const asrLog = path.join(DATA_DIR, 'logs', 'asr.log');
   try {
-    const child = spawn(bin, [path.join(ROOT, 'scripts', 'asr_server.py'), String(local.port || 8090)], {
-      cwd: ROOT,
-      detached: true,
-      stdio: 'ignore',
-      env: {
-        ...process.env,
-        HF_ENDPOINT: process.env.HF_ENDPOINT || 'https://huggingface.co',
-        HF_HUB_DISABLE_XET: '1',
-        ASR_MODEL_SIZE: local.model || 'small',
-        FFMPEG_PATH: cfg.media?.ffmpegPath || process.env.FFMPEG_PATH || 'ffmpeg',
-      },
-    });
+    fs.mkdirSync(path.dirname(asrLog), { recursive: true });
+    const fd = fs.openSync(asrLog, 'a', 0o600);
+    let child;
+    try {
+      child = spawn(bin, [path.join(ROOT, 'scripts', 'asr_server.py'), String(local.port || 8090)], {
+        cwd: ROOT,
+        detached: true,
+        stdio: ['ignore', fd, fd],
+        env: {
+          ...process.env,
+          HF_ENDPOINT: process.env.HF_ENDPOINT || 'https://huggingface.co',
+          HF_HUB_DISABLE_XET: '1',
+          ASR_MODEL_SIZE: local.model || 'small',
+          FFMPEG_PATH: cfg.media?.ffmpegPath || process.env.FFMPEG_PATH || 'ffmpeg',
+        },
+      });
+    } finally { fs.closeSync(fd); }
+    child.on('exit', code => { if (code) logger.warn(`本地 ASR 退出（code=${code}），详情：${asrLog}`); });
     child.on('error', err => logger.warn(`本地 ASR 进程启动失败：${err.message}`));
     child.unref();
-    logger.info('本地 ASR 服务启动中…');
+    logger.info(`本地 ASR 服务启动中（${local.model || 'small'}），下载/加载日志：${asrLog}`);
     for (let i = 0; i < 50; i++) {
+      if (child.exitCode !== null) return false;
       await sleep(1200);
       if (await localAsrHealthy(local.url)) {
-        logger.info('本地 ASR 就绪');
+        logger.info(`本地 ASR 就绪（${local.model || 'small'}）`);
         return true;
       }
     }
+    logger.warn(`本地 ASR 仍未就绪，首次下载可能较慢；请查看 ${asrLog}`);
   } catch (err) {
     logger.warn(`本地 ASR 启动失败：${err.message}`);
   }
