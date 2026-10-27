@@ -77,7 +77,7 @@ export function scanStickers() {
   return out;
 }
 
-const SPECS = {
+export const SPECS = {
   draw_image: {
     type: 'function',
     function: {

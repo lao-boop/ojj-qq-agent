@@ -23,3 +23,7 @@ temp/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 本机真实模型评测与人工记录，不提交回复内容
+reports/architecture-live.*
+reports/*-live.*
