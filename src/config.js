@@ -23,10 +23,7 @@ export const DEFAULTS = {
     maxTokens: 900,
     timeoutMs: 90000,
   },
-  vision: { enabled: null, baseUrl: '', apiKey: '', model: '', timeoutMs: 90000 },
-  files: { pythonPath: '', pathMappings: [] },
   chat: {
-    agents: { enabled: false, maxSteps: 4, maxToolCalls: 8, maxRounds: 3, timeoutMs: 120000 },
     privateAlwaysReply: true,
     maxBubbles: 3,
     splitDelayMs: [500, 1600],
@@ -70,8 +67,6 @@ export const DEFAULTS = {
   },
   tts: {
     enabled: true,
-    provider: 'edge',
-    minimax: { baseUrl: 'https://api.minimaxi.com', apiKey: '', model: 'speech-02-hd', voiceId: 'male-qn-qingse', speed: 1, volume: 1, pitch: 0, timeoutMs: 60000 },
     voice: 'zh-CN-XiaoyiNeural',
     rate: '+0%',
     pitch: '+0Hz',
@@ -97,7 +92,6 @@ export const DEFAULTS = {
   },
   voice: {
     enabled: true,
-    recipients: [],
     token: '',
     model: 'zsxkib/realistic-voice-cloning',
     rvcModel: 'Drake',
@@ -119,7 +113,6 @@ export const DEFAULTS = {
   asr: {
     enabled: true,
     token: '',
-    maxSeconds: 300,
     model: 'victor-upmeet/whisperx',
     local: { enabled: true, url: 'http://127.0.0.1:8090', port: 8090, model: 'small', pythonPath: '' },
   },

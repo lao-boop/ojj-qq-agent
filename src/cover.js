@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { coverConfigurationIssue } from './cover-config.js';
 import path from 'node:path';
 import { DATA_DIR } from './config.js';
 
@@ -24,15 +23,7 @@ export class VoiceConvert {
   }
 
   get enabled() {
-    return !this.configurationIssue;
-  }
-
-  get configurationIssue() {
-    return coverConfigurationIssue(this.cfg);
-  }
-
-  get api() {
-    return (this.cfg.apiBase || API).replace(/\/+$/, '');
+    return Boolean(this.cfg?.enabled && this.cfg?.token);
   }
 
   async #json(url, options = {}) {
@@ -57,10 +48,9 @@ export class VoiceConvert {
   }
 
   async resolveVersion() {
-    if (this.cfg.version) return this.cfg.version;
     if (this.versionCache) return this.versionCache;
     const model = this.cfg.model || 'zsxkib/realistic-voice-cloning';
-    const data = await this.#json(`${this.api}/models/${model}`);
+    const data = await this.#json(`${API}/models/${model}`);
     const id = data?.latest_version?.id;
     if (!id) throw new Error(`拿不到模型版本：${model}`);
     this.versionCache = id;
@@ -77,10 +67,9 @@ export class VoiceConvert {
     } catch {
       cache = {};
     }
-    const cached = cache[key];
-    if (cached?.url && cached.expiresAt > Date.now()) {
+    if (cache[key]) {
       this.logger.info('复用已上传的音频地址');
-      return cached.url;
+      return cache[key];
     }
 
     const buf = fs.readFileSync(audioPath);
@@ -89,7 +78,7 @@ export class VoiceConvert {
       try {
         const form = new FormData();
         form.append('content', new Blob([buf], { type: 'audio/mpeg' }), path.basename(audioPath));
-        const res = await fetch(`${this.api}/files`, {
+        const res = await fetch(`${API}/files`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${this.cfg.token}` },
           body: form,
@@ -100,7 +89,7 @@ export class VoiceConvert {
         const url = data?.urls?.get;
         if (!url) throw new Error('上传后没有拿到音频地址');
         fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
-        cache[key] = { url, expiresAt: Date.now() + 30 * 60 * 1000 };
+        cache[key] = url;
         fs.writeFileSync(cacheFile, JSON.stringify(cache));
         return url;
       } catch (err) {
@@ -114,8 +103,7 @@ export class VoiceConvert {
 
   /** 变声，返回 { file, name, ms, voice }。 */
   async convert({ audioPath, voice, pitch, customModelUrl }) {
-    if (!this.enabled) throw new Error(this.configurationIssue);
-    if (!fs.existsSync(audioPath) || !fs.statSync(audioPath).size) throw new Error('待翻唱音频不存在或为空');
+    if (!this.enabled) throw new Error('没有配置 Replicate token');
     const started = Date.now();
     const version = await this.resolveVersion();
     const audioUrl = await this.upload(audioPath);
@@ -131,19 +119,18 @@ export class VoiceConvert {
     };
     if (customUrl) input.custom_rvc_model_download_url = customUrl;
 
-    const created = await this.#json(`${this.api}/predictions`, {
+    const created = await this.#json(`${API}/predictions`, {
       method: 'POST',
       body: JSON.stringify({ version, input }),
     });
-    if (!created.id) throw new Error('翻唱服务未返回任务 ID；不会自动重提');
     this.logger.info(`变声任务已提交：${created.id}（${rvcModel}）`);
 
     const deadline = Date.now() + (this.cfg.timeoutMs || 300000);
     let pred = created;
-    while (Date.now() < deadline && !['succeeded', 'failed', 'canceled'].includes(pred.status)) {
-      await new Promise((r) => setTimeout(r, Math.max(50, this.cfg.pollIntervalMs || 5000)));
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5000));
       try {
-        pred = await this.#json(`${this.api}/predictions/${created.id}`);
+        pred = await this.#json(`${API}/predictions/${created.id}`);
       } catch (err) {
         this.logger.warn(`查询变声进度失败：${err.message}`);
         continue;
@@ -153,8 +140,7 @@ export class VoiceConvert {
         throw new Error(`变声失败：${(pred.error || pred.status).toString().slice(0, 200)}`);
       }
     }
-    if (['failed', 'canceled'].includes(pred.status)) throw new Error(`变声失败：${String(pred.error || pred.status).slice(0, 200)}`);
-    if (pred.status !== 'succeeded') throw new Error(`翻唱结果未确认（任务 ${created.id}），请先查询该任务，避免重复提交`);
+    if (pred.status !== 'succeeded') throw new Error('变声超时');
 
     const outUrl = Array.isArray(pred.output) ? pred.output[0] : pred.output;
     if (!outUrl) throw new Error('没有返回音频');
@@ -169,9 +155,7 @@ export class VoiceConvert {
         await new Promise((r) => setTimeout(r, 3000));
       }
     }
-    if (!audio?.ok) throw new Error('下载翻唱结果失败');
     const buf = Buffer.from(await audio.arrayBuffer());
-    if (buf.length < 1000 || /(?:json|text\/|html)/i.test(audio.headers.get('content-type') || '')) throw new Error('翻唱服务返回的不是有效音频文件');
     const name = `cover-${Date.now()}.mp3`;
     const file = path.join(this.dir, name);
     fs.writeFileSync(file, buf);

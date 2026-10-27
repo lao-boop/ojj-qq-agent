@@ -55,7 +55,6 @@ export class ReplySender {
         await sleep(rand([400, 900]));
       } catch (err) {
         this.logger.warn(`发送语音失败：${err.message}`);
-        throw err;
       }
     }
 

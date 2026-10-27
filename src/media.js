@@ -4,7 +4,6 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { findPython } from './tts.js';
 import { DATA_DIR } from './config.js';
 
 const execFileAsync = promisify(execFile);
@@ -95,12 +94,15 @@ export async function silkToWav(input, { python, tag = 'silk' } = {}) {
   const key = crypto.createHash('sha1').update(`${input}:${stat.size}:${stat.mtimeMs}`).digest('hex').slice(0, 12);
   const out = path.join(dir, `${tag}-${key}.wav`);
   if (fs.existsSync(out) && fs.statSync(out).size > 1000) return out;
-  const bin = findPython(python || process.env.PYTHON_PATH);
+  const bin =
+    python ||
+    process.env.PYTHON_PATH ||
+    path.join(process.env.LOCALAPPDATA || '', 'AstrBot', 'backend', 'python', 'python.exe');
   const script = fileURLToPath(new URL('../scripts/silk_to_wav.py', import.meta.url));
   try {
     await execFileAsync(bin, [script, input, out, '24000'], { timeout: 60000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
   } catch (err) {
-    throw new Error(`SILK 转码失败：${String(err.stderr || err.message).trim().slice(-1800)}`);
+    throw new Error(`SILK 转码失败：${String(err.stderr || err.message).slice(0, 120)}`);
   }
   if (!fs.existsSync(out) || fs.statSync(out).size < 1000) throw new Error('SILK 转码失败：没有产出');
   return out;

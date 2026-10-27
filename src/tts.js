@@ -1,4 +1,3 @@
-import { synthesizeMiniMax } from './minimax-tts.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
@@ -29,7 +28,8 @@ export function findPython(configured) {
   if (configured && fs.existsSync(configured)) return configured;
   const candidates = [
     path.join(process.env.LOCALAPPDATA || '', 'AstrBot', 'backend', 'python', 'python.exe'),
-    ...(process.platform === 'win32' ? ['python', 'python3'] : ['python3', 'python']),
+    'python',
+    'python3',
   ];
   for (const c of candidates) {
     if (!c) continue;
@@ -50,17 +50,16 @@ export class TTS {
     this.dir = path.join(DATA_DIR, 'audio');
     fs.mkdirSync(this.dir, { recursive: true });
     this.python = findPython(cfg.pythonPath);
-    this.voice = cfg.provider === 'minimax' ? cfg.minimax?.voiceId || '' : resolveVoice(cfg.voice);
+    this.voice = resolveVoice(cfg.voice);
   }
 
   updateConfig(cfg) {
     this.cfg = cfg;
     this.python = findPython(cfg.pythonPath);
-    this.voice = cfg.provider === 'minimax' ? cfg.minimax?.voiceId || '' : resolveVoice(cfg.voice);
+    this.voice = resolveVoice(cfg.voice);
   }
 
   async checkAvailable() {
-    if (this.cfg.provider === 'minimax') return this.cfg.minimax?.apiKey && this.voice ? 'minimax-configured' : '';
     try {
       const { stdout } = await execFileAsync(this.python, ['-c', 'import edge_tts; print(edge_tts.__version__)'], {
         timeout: 15000,
@@ -79,19 +78,13 @@ export class TTS {
     const clean = String(text || '')
       .replace(/[\r\n]+/g, ' ')
       .replace(/[#*`>]/g, '')
-      .trim();
+      .trim()
+      .slice(0, this.cfg.maxChars || 120);
     if (!clean) throw new Error('空文本');
-    if (clean.length > (this.cfg.maxChars || 120)) throw new Error(`语音文本超过 ${this.cfg.maxChars || 120} 字，请分段发送；未截断或调用语音服务`);
 
     const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp3`;
     const file = path.join(this.dir, name);
     const started = Date.now();
-    if (this.cfg.provider === 'minimax') {
-      const bytes = await synthesizeMiniMax(clean, this.cfg.minimax || {});
-      fs.writeFileSync(file, bytes, { mode: 0o600 });
-      return { file, name, bytes: bytes.length, ms: Date.now() - started, text: clean, voice: this.voice };
-    }
-    if (this.cfg.provider && this.cfg.provider !== 'edge') throw new Error('未知的语音输出服务');
     const args = [
       '-m',
       'edge_tts',

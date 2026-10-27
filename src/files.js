@@ -33,27 +33,6 @@ export class FileReader {
     this.python = findPython(this.cfg.pythonPath);
   }
 
-  /** Map only explicitly shared Docker roots; reject traversal and symlink escapes. */
-  resolveLocal(raw) {
-    let value = String(raw || '');
-    if (value.startsWith('file://')) {
-      try { value = fileURLToPath(value); } catch { return ''; }
-    }
-    for (const mapping of this.cfg.pathMappings || []) {
-      const remote = String(mapping.remote || '').replace(/\/+$/, '');
-      if (!remote || !mapping.local || !(value === remote || value.startsWith(`${remote}/`))) continue;
-      const relative = value.slice(remote.length).replace(/^\/+/, '');
-      if (relative.split(/[\\/]/).includes('..')) return '';
-      try {
-        const root = fs.realpathSync(path.resolve(mapping.local));
-        const candidate = fs.realpathSync(path.resolve(root, relative));
-        if (candidate.startsWith(`${root}${path.sep}`) && fs.statSync(candidate).isFile()) return candidate;
-      } catch { /* QQ may still be downloading this file. */ }
-      return '';
-    }
-    return value && fs.existsSync(value) && fs.statSync(value).isFile() ? value : '';
-  }
-
   /** seg.data: { file, file_id, name, size, url }（OneBot 各种实现字段不完全一样） */
   async download(onebot, data = {}) {
     const name = safeName(data.name || data.file || 'file');
@@ -77,8 +56,7 @@ export class FileReader {
         local = local.replace(/^file:\/\/\/?/, '');
       }
     }
-    local = this.resolveLocal(local);
-    if (local) {
+    if (local && fs.existsSync(local)) {
       const size = fs.statSync(local).size;
       if (size > MAX_BYTES) throw new Error('文件太大（>20MB）');
       fs.copyFileSync(local, target);
@@ -88,15 +66,16 @@ export class FileReader {
     const fileId = data.file_id || data.file;
     if (fileId && onebot) {
       const info = await onebot.call('get_file', { file_id: fileId, file: fileId }, 20000);
-      const got = this.resolveLocal(info?.file);
-      if (got) {
+      const got = info?.file || info?.url;
+      if (got && /^https?:\/\//i.test(got)) {
+        return this.download(onebot, { ...data, url: got, file: '' });
+      }
+      if (got && fs.existsSync(got)) {
         const size = fs.statSync(got).size;
         if (size > MAX_BYTES) throw new Error('文件太大（>20MB）');
         fs.copyFileSync(got, target);
         return { path: target, name, size };
       }
-      const remote = [info?.url, info?.file].find(value => /^https?:\/\//i.test(value || ''));
-      if (remote) return this.download(null, { ...data, url: remote, file: '' });
     }
     throw new Error('拿不到文件内容（OneBot 没给链接，get_file 也失败）');
   }
@@ -127,7 +106,7 @@ export class FileReader {
 
   /** 抽出 Office 文件里内嵌的图片（docx/pptx/xlsx）。 */
   async extractImages(file, limit = 3) {
-    if (!/\.(docx|pptx|xlsx|pdf)$/i.test(file.name || file.path || '')) return [];
+    if (!/\.(docx|pptx|xlsx)$/i.test(file.name || file.path || '')) return [];
     const outDir = path.join(FILES_DIR, 'media');
     const script = path.join(ROOT, 'scripts', 'extract_media.py');
     try {

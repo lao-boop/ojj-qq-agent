@@ -17,33 +17,11 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     found = []
     try:
-        if src.lower().endswith(".pdf"):
-            import pypdfium2 as pdfium
-            doc = pdfium.PdfDocument(src)
-            try:
-                for i in range(min(3, len(doc))):
-                    page = doc[i]
-                    width, height = page.get_size()
-                    bitmap = page.render(scale=min(2, 1600 / max(width, height)))
-                    pic = bitmap.to_pil()
-                    digest = hashlib.sha256(pic.tobytes()).hexdigest()[:16]
-                    out = os.path.join(outdir, f"pdf-{digest}-{i + 1}.jpg")
-                    pic.convert("RGB").save(out)
-                    found.append(out)
-                    pic.close()
-                    bitmap.close()
-                    page.close()
-            finally:
-                doc.close()
-            print(json.dumps({"ok": True, "images": found}, ensure_ascii=False))
-            return
         with zipfile.ZipFile(src) as z:
             for name in z.namelist():
                 if "/media/" not in name:
                     continue
                 if not name.lower().endswith(EXTS):
-                    continue
-                if z.getinfo(name).file_size > 8 * 1024 * 1024:
                     continue
                 data = z.read(name)
                 if len(data) < 4000:
@@ -54,8 +32,6 @@ def main():
                     with open(out, "wb") as f:
                         f.write(data)
                 found.append(out)
-                if len(found) >= 6:
-                    break
     except Exception as exc:  # noqa: BLE001
         print(json.dumps({"ok": False, "error": str(exc), "images": []}))
         return

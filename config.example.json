@@ -1,7 +1,5 @@
 {
-  "bot": {
-    "name": "小鲸鱼"
-  },
+  "bot": { "name": "小鲸鱼" },
   "onebot": {
     "wsUrl": "ws://127.0.0.1:3001",
     "accessToken": "YOUR_ONEBOT_TOKEN",
@@ -18,18 +16,9 @@
     "timeoutMs": 90000
   },
   "chat": {
-    "agents": {
-      "enabled": false,
-      "maxSteps": 4,
-      "maxToolCalls": 8,
-      "maxRounds": 3,
-      "timeoutMs": 120000
-    },
     "privateAlwaysReply": true,
     "group": {
-      "wakeWords": [
-        "小鲸鱼"
-      ],
+      "wakeWords": ["小鲸鱼"],
       "replyOnAt": true,
       "chanceReply": 0.12,
       "replyAllWhenFew": true
@@ -66,23 +55,9 @@
     "pitch": "+0Hz",
     "maxChars": 120,
     "timeoutMs": 30000,
-    "pythonPath": "",
-    "provider": "edge",
-    "minimax": {
-      "baseUrl": "https://api.minimaxi.com",
-      "apiKey": "",
-      "model": "speech-02-hd",
-      "voiceId": "male-qn-qingse",
-      "speed": 1,
-      "volume": 1,
-      "pitch": 0,
-      "timeoutMs": 60000
-    }
+    "pythonPath": ""
   },
-  "music": {
-    "tempo": 92,
-    "noise": 0.4
-  },
+  "music": { "tempo": 92, "noise": 0.4 },
   "song": {
     "enabled": true,
     "provider": "replicate",
@@ -105,38 +80,17 @@
     "dailyLimit": 10,
     "autoConvert": false,
     "autoConvertPitch": "no-change",
-    "sendAsVoice": true,
-    "recipients": []
+    "sendAsVoice": true
   },
-  "console": {
-    "enabled": true,
-    "port": 3010,
-    "token": "YOUR_CONSOLE_PASSWORD"
-  },
-  "log": {
-    "level": "info",
-    "file": true
-  },
-  "media": {
-    "ffmpegPath": ""
-  },
-  "library": {
-    "enabled": true,
-    "dir": "D:\\Music",
-    "maxSeconds": 0
-  },
+  "console": { "enabled": true, "port": 3010, "token": "YOUR_CONSOLE_PASSWORD" },
+  "log": { "level": "info", "file": true },
+  "media": { "ffmpegPath": "" },
+  "library": { "enabled": true, "dir": "D:\\Music", "maxSeconds": 0 },
   "asr": {
     "enabled": true,
     "token": "YOUR_REPLICATE_TOKEN",
     "model": "victor-upmeet/whisperx",
-    "local": {
-      "enabled": true,
-      "url": "http://127.0.0.1:8090",
-      "port": 8090,
-      "model": "small",
-      "pythonPath": ""
-    },
-    "maxSeconds": 300
+    "local": { "enabled": true, "url": "http://127.0.0.1:8090", "port": 8090, "model": "small", "pythonPath": "" }
   },
   "qzone": {
     "enabled": false,
@@ -156,21 +110,5 @@
     "imagesPerDeck": 0,
     "imageDelayMs": 15000
   },
-  "relay": {
-    "enabled": true,
-    "allow": [],
-    "dailyLimit": 5,
-    "maxLen": 200
-  },
-  "vision": {
-    "enabled": false,
-    "baseUrl": "",
-    "apiKey": "",
-    "model": "",
-    "timeoutMs": 90000
-  },
-  "files": {
-    "pythonPath": "",
-    "pathMappings": []
-  }
+  "relay": { "enabled": true, "allow": [], "dailyLimit": 5, "maxLen": 200 }
 }

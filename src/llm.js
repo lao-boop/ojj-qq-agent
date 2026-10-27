@@ -24,7 +24,6 @@ export class LLM {
     maxTokens = this.cfg.maxTokens,
     timeoutMs = this.cfg.timeoutMs,
     toolChoice,
-    responseFormat,
   }) {
     const body = {
       model,
@@ -33,19 +32,14 @@ export class LLM {
       max_tokens: maxTokens,
       stream: false,
     };
-    if (responseFormat && this.cfg.jsonMode !== false) body.response_format = responseFormat;
     if (tools?.length) {
       body.tools = tools;
       body.tool_choice = toolChoice ?? 'auto';
     }
 
     const url = `${this.cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-    const budget = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.floor(timeoutMs) : 90000;
-    const deadline = Date.now() + budget;
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) throw new DOMException('LLM request deadline exceeded', 'TimeoutError');
       const started = Date.now();
       try {
         const res = await fetch(url, {
@@ -55,7 +49,7 @@ export class LLM {
             Authorization: `Bearer ${this.cfg.apiKey}`,
           },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(remaining),
+          signal: AbortSignal.timeout(timeoutMs),
         });
         if (!res.ok) {
           const text = await res.text().catch(() => '');
@@ -78,18 +72,14 @@ export class LLM {
           message,
           usage,
           model,
-          finishReason: json.choices?.[0]?.finish_reason,
         };
       } catch (err) {
         lastErr = err;
         this.stats.failures++;
         const retryable = !err.status || RETRYABLE.has(err.status) || err.name === 'TimeoutError';
-        const category = Number.isInteger(err.status) ? `HTTP=${err.status}` : ['TimeoutError', 'AbortError'].includes(err.name) ? 'timeout' : 'connection_or_response';
-        this.logger.warn(`LLM 请求失败（第 ${attempt + 1} 次）：${category}`);
+        this.logger.warn(`LLM 请求失败（第 ${attempt + 1} 次）：${err.message}`);
         if (!retryable || attempt === 2) break;
-        const delay = 1200 * (attempt + 1);
-        if (deadline - Date.now() <= delay) break;
-        await sleep(delay);
+        await sleep(1200 * (attempt + 1));
       }
     }
     throw lastErr;

@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from './config.js';
 import { formatGlobal } from './global.js';
-import { ActionJournal } from './self-state.js';
 
 const STATE_FILE = path.join(DATA_DIR, 'qzone-state.json');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -12,9 +11,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * 依赖 SnowLuma 的扩展动作：send_qzone_msg / get_qzone_msg_list / get_qzone_msg_detail / comment_qzone
  */
 export class Qzone {
-  constructor({ onebot, cfg, llm, imageGen, logger, selfId, persona, memory, journal }) {
+  constructor({ onebot, cfg, llm, imageGen, logger, selfId, persona, memory }) {
     this.onebot = onebot;
-    this.journal = journal || new ActionJournal({ logger });
     this.cfg = cfg || {};
     this.llm = llm;
     this.imageGen = imageGen;
@@ -57,25 +55,15 @@ export class Qzone {
   }
 
   /** 发一条说说，返回 { tid, time }。 */
-  async post({ content, imagePath, ugcRight, source = 'direct', chatKey = '', actionId } = {}) {
+  async post({ content, imagePath, ugcRight } = {}) {
     const text = String(content || '').trim();
     if (!text) throw new Error('说说内容不能为空');
     const images = imagePath ? [`file:///${imagePath.replace(/\\/g, '/')}`] : [];
-    const id = actionId || this.journal.begin({ source, chatKey, content: text });
-    this.journal.update(id, { status: 'running', content: text.slice(0, 4000), withImage: images.length > 0 });
-    let res;
-    try {
-      res = await this.#call('send_qzone_msg', {
-        content: text,
-        images,
-        ugc_right: ugcRight ?? this.cfg.ugcRight ?? 1,
-      });
-    } catch (err) {
-      const failed = /retcode=|未连接/.test(err.message || '');
-      this.journal.finish(id, { status: failed ? 'failed' : 'unknown', detail: failed ? '发布接口拒绝或未连接' : '调用中断或超时，无法确认是否发布，请核对空间后再决定' });
-      throw err;
-    }
-    this.journal.finish(id, { status: 'succeeded', tid: String(res?.tid || ''), detail: 'OneBot 返回成功；没有动态 ID 时不编造 ID' });
+    const res = await this.#call('send_qzone_msg', {
+      content: text,
+      images,
+      ugc_right: ugcRight ?? this.cfg.ugcRight ?? 1,
+    });
     const tid = res?.tid || '';
     this.state.lastPostAt = Date.now();
     this.state.lastPostTid = tid;
@@ -153,13 +141,10 @@ export class Qzone {
   }
 
   /** 主动发一条（模型自己写内容 + 配图）。 */
-  async postAuto({ topic, source = 'direct', chatKey = '' } = {}) {
+  async postAuto({ topic } = {}) {
     if (this.busy) return null;
     this.busy = true;
-    let actionId;
-    let sending = false;
     try {
-      actionId = this.journal.begin({ source, chatKey, content: topic || '' });
       let text = '';
       let imagePrompt = '';
       if (topic) {
@@ -171,11 +156,7 @@ export class Qzone {
       }
       if (!text) throw new Error('没写出内容');
       const imagePath = await this.makeImage(imagePrompt);
-      sending = true;
-      return await this.post({ content: text, imagePath, source, chatKey, actionId });
-    } catch (err) {
-      if (actionId && !sending) this.journal.finish(actionId, { status: 'failed', detail: '准备内容失败，未发送发布请求' });
-      throw err;
+      return await this.post({ content: text, imagePath });
     } finally {
       this.busy = false;
     }
@@ -320,7 +301,7 @@ export class Qzone {
         try {
           if (!this.canPostToday()) return;
           if (Date.now() - (this.state.lastPostAt || 0) < postEveryMs) return;
-          const r = await this.postAuto({ source: 'scheduler' });
+          const r = await this.postAuto();
           if (r) this.logger.info(`自动说说完成：${r.tid}`);
         } catch (err) {
           this.logger.warn(`自动说说失败：${err.message}`);

@@ -112,26 +112,6 @@ npm start
 
 ---
 
-## Mac 多模态接入
-
-支持独立视觉接口、MiniMax 国内/国际语音输出、本地语音识别、扫描 PDF 前 3 页渲染，以及 Mac 与 NapCat Docker 共享附件路径映射。使用本地配置向导，保留现有 QQ 和 DeepSeek 配置：[安装与验证步骤](docs/MAC-MULTIMODAL.md)。
-
-## 多 Agent 与意图理解
-
-可选的两层流程：多模态语义理解 → 会话任务更新与执行前校验 → Manager 调度专业 Agent。
-支持文档、图像、语音、资料、汽修和记忆操作的权限约束，并对曲库翻唱做准确匹配。
-空间发布记录会提供给有权限的聊天上下文，区分计划、执行中、成功、失败及结果未知。
-
-在实际 `config.json` 的 `chat` 中添加 `"agents": { "enabled": true }` 并重启即可启用；设为 `false` 回退旧流程。默认不开启，更新代码不会自动改变已有运行模式。
-
-- [Agent 架构与迁移边界](docs/AGENT-ARCHITECTURE.md)
-- [意图理解与操作约束](docs/INTENT-UNDERSTANDING.md)
-- [身份、能力与行动记录](docs/SELF-STATE.md)
-
-验证命令：`node --test --test-concurrency=1 tests/*.test.js`。测试使用模拟模型和 OneBot，真实模型效果需另行联调；运行中任务暂不能可靠取消，任务上下文不跨进程重启保留。
-
----
-
 ## 人格与说话方式
 
 人格文件在 `data/persona.md`（首次启动从 `assets/persona.default.md` 复制）。
@@ -180,8 +160,6 @@ npm start
 ---
 
 ## 点歌 / 翻唱 / 创作
-
-首次接入翻唱请看 [翻唱账号、音色和本地配置向导](docs/COVER-SETUP.md)。MiniMax 朗读和本地语音识别不能替代 RVC 翻唱服务。
 
 ### 点歌（本地曲库）
 

@@ -1,19 +1,15 @@
 const DEFAULT_URL = 'http://127.0.0.1:8090';
 
 /** 本地 faster-whisper 服务是否在线。 */
-export async function localAsrStatus(url = DEFAULT_URL, timeoutMs = 1500) {
+export async function localAsrHealthy(url = DEFAULT_URL, timeoutMs = 1500) {
   try {
     const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok) return null;
+    if (!res.ok) return false;
     const data = await res.json();
-    return data?.ok ? { ok: true, model: String(data.model || "") } : null;
+    return Boolean(data?.ok);
   } catch {
-    return null;
+    return false;
   }
-}
-
-export async function localAsrHealthy(url = DEFAULT_URL, timeoutMs = 1500) {
-  return Boolean(await localAsrStatus(url, timeoutMs));
 }
 
 /** 调本地服务转写一个音频文件。 */
