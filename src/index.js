@@ -18,6 +18,7 @@ import { renderHum } from './music.js';
 import { SongGen } from './song.js';
 import { CoverDelivery } from './cover-delivery.js';
 import { isOwner } from './global.js';
+import { allowedPrivate, allowedGroup } from './access.js';
 import { coverCapabilityReply } from './cover-config.js';
 import { VoiceConvert } from './cover.js';
 import { extractAudio, extractFrame, trimAudio, cutAudioFrom, probeDuration, toMp3, silkToWav } from './media.js';
@@ -310,23 +311,6 @@ function chatOf(event) {
 
 function isAdmin(qq) {
   return (cfg.access.adminQQ ?? []).some((x) => String(x) === String(qq));
-}
-
-function allowedPrivate(qq) {
-  if (cfg.access.mode === 'open') return true;
-  if (isAdmin(qq)) return true;
-  if ((cfg.access.privateAllow ?? []).some((x) => String(x) === String(qq))) return true;
-  const empty =
-    !(cfg.access.adminQQ?.length) && !(cfg.access.privateAllow?.length) && !(cfg.access.groupAllow?.length);
-  return Boolean(cfg.access.allowAllWhenEmpty && empty);
-}
-
-function allowedGroup(groupId) {
-  if (cfg.access.mode === 'open') return true;
-  if ((cfg.access.groupAllow ?? []).some((x) => String(x) === String(groupId))) return true;
-  const empty =
-    !(cfg.access.adminQQ?.length) && !(cfg.access.privateAllow?.length) && !(cfg.access.groupAllow?.length);
-  return Boolean(cfg.access.allowAllWhenEmpty && empty);
 }
 
 function rateLimited(key) {
@@ -846,6 +830,7 @@ async function ensureLocalAsr() {
 async function onMessage(event) {
   stats.received++;
   if (String(event.user_id) === String(onebot.selfId)) return;
+  if (!event.__batch) logger.info(`消息事件：${event.message_type} sender=${event.user_id} id=${event.message_id || '-'}`);
 
   const { text, images, files, audios, videos, stickerCount, mentioned, quoteId } = extractMessage(event);
   const chat = chatOf(event);
@@ -853,14 +838,21 @@ async function onMessage(event) {
   const senderName = event.sender?.card || event.sender?.nickname || '';
   if (senderName) upsertContact(event.user_id, senderName);
 
-  if (isPrivate && !allowedPrivate(event.user_id)) {
+  if (isPrivate && !allowedPrivate(event.user_id, cfg)) {
     stats.ignored++;
-    logger.debug(`忽略未授权私聊 ${event.user_id}`);
+    logger.warn(`忽略未授权私聊 ${event.user_id}：检查 access.ownerQQ / adminQQ / privateAllow`);
     return;
   }
-  if (!isPrivate && !allowedGroup(event.group_id)) {
+  if (!isPrivate && !allowedGroup(event.group_id, cfg)) {
     stats.ignored++;
     logger.debug(`忽略未授权群 ${event.group_id}`);
+    return;
+  }
+
+  // Read-only connectivity check must not wait on a model, media queue or chat rate limit.
+  if (isPrivate && text.trim() === '/status') {
+    const status = await handleCommand(chat, '/status');
+    await onebot.sendPrivate(chat.userId, [{ type: 'text', data: { text: status } }]);
     return;
   }
 

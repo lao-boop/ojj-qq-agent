@@ -36,7 +36,7 @@ export class OneBot extends EventEmitter {
       /* ignore */
     }
     this.connected = false;
-    for (const [, p] of this.pending) p.reject(new Error('连接已关闭'));
+    for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(new Error('连接已关闭，发送结果未确认')); }
     this.pending.clear();
   }
 
@@ -100,6 +100,9 @@ export class OneBot extends EventEmitter {
     });
 
     ws.on('close', (code, reason) => {
+      if (this.ws !== ws) return;
+      for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(new Error('OneBot 连接断开，调用结果未确认')); }
+      this.pending.clear();
       const wasConnected = this.connected;
       this.connected = false;
       this.logger.warn(`OneBot 断开（code=${code}${reason ? `，${reason}` : ''}）${wasConnected ? '' : '，连接未建立'}`);

@@ -25,14 +25,14 @@ export class TaskState {
 
 export class UnderstandingPipeline {
   constructor({ llm, state = new TaskState(), validators = {}, logger }) { Object.assign(this, { llm, state, validators, logger }); }
-  async prepare(chatKey, input) {
+  async prepare(chatKey, input, { llm = this.llm } = {}) {
     const snapshot = this.state.list(chatKey).map(t => ({ id:t.id, goal:t.goal, kind:t.kind, slots:t.slots, operations:t.operations, forbiddenOperations:t.forbiddenOperations, exclude:t.exclude, status:t.status }));
     let intent;
-    try { intent = await new IntentRecognizer(this.llm, this.logger).recognize({ ...input, tasks: snapshot }); }
+    try { intent = await new IntentRecognizer(llm, this.logger).recognize({ ...input, tasks: snapshot }); }
     catch (error) { return intentFailure(error, this.logger); }
     const contradiction = needsNegationReview(intent, input.instruction);
     if (contradiction) {
-      try { intent = await new IntentRecognizer(this.llm, this.logger).recognize({ ...input, tasks: snapshot, review: '上次判为新建，但用户有否定。重新检查否定范围与纠正对象；不明确则 clarification，禁止照旧执行。' }); }
+      try { intent = await new IntentRecognizer(llm, this.logger).recognize({ ...input, tasks: snapshot, review: '上次判为新建，但用户有否定。重新检查否定范围与纠正对象；不明确则 clarification，禁止照旧执行。' }); }
       catch (error) { return intentFailure(error, this.logger); }
       if (needsNegationReview(intent, input.instruction) && !intent.clarification) return { reply: '为避免做反，请明确这次要执行的内容和不要执行的内容。' };
     }

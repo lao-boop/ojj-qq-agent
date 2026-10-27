@@ -31,13 +31,14 @@ export class AgentManager {
     const trace = { id: randomUUID(), status: 'running', steps: [], toolCalls: 0 };
     const deadline = Date.now() + this.timeoutMs;
     // No detached Promise.race: an in-flight legacy tool is awaited, never retried in a fallback.
-    const check = () => { if (Date.now() >= deadline) throw new Error('Task deadline exceeded'); };
-    const model = { chat: async args => { check(); return this.llm.chat({ ...args, timeoutMs: Math.min(deadline - Date.now(), 60000) }); } };
+    const check = () => { if (Date.now() >= deadline) throw new DOMException('Task deadline exceeded', 'TimeoutError'); };
+    const withDeadline = llm => ({ chat: async args => { check(); return llm.chat({ ...args, timeoutMs: Math.max(1, Math.min(deadline - Date.now(), llm.cfg?.timeoutMs || 60000, 60000)) }); } });
+    const model = withDeadline(this.llm);
     const executed = new Map();
     const pipeline = this.understanding || new UnderstandingPipeline({ llm: model, logger: this.logger });
     let task;
     try {
-      const prepared = await pipeline.prepare(toolCtx.chatKey || 'test', input);
+      const prepared = await pipeline.prepare(toolCtx.chatKey || 'test', input, { llm: pipeline.llm ? withDeadline(pipeline.llm) : model });
       task = prepared.task;
       trace.taskId = task?.id;
       if (prepared.reply) { trace.status = prepared.failed ? 'failed' : 'clarification'; return { reply: prepared.reply, trace }; }
