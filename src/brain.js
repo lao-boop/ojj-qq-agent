@@ -182,7 +182,7 @@ export class Brain {
     return { reply };
   }
 
-  async respond({ chatKey, title, userText, requestText, attachments = {}, images = [], meta, onProgress, coverExecutor, coverValidator }) {
+  async respond({ chatKey, title, userText, requestText, attachments = {}, images = [], meta, onProgress, coverExecutor, coverValidator, projectAttachments = [] }) {
     const started = Date.now();
     const ctx = this.memory.context(chatKey, { title, query: userText });
 
@@ -209,6 +209,7 @@ export class Brain {
 
     const toolCtx = {
       chatKey,
+      projectAttachments,
       peerName: meta?.peerName || '',
       images: [],
       voices: [],

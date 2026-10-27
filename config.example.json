@@ -111,5 +111,6 @@
     "imagesPerDeck": 0,
     "imageDelayMs": 15000
   },
+  "secretary": { "enabled": false, "members": [], "autoRemind": false, "reminderMinutes": 1440 },
   "relay": { "enabled": true, "allow": [], "dailyLimit": 5, "maxLen": 200 }
 }

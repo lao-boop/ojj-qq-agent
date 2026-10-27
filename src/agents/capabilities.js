@@ -1,5 +1,11 @@
 /** Operations are the execution contract, not merely a routing hint. */
 export const CAPABILITIES = Object.freeze({
+  'project.create': { agent:'secretary',tools:['project_create'] },
+  'project.read': { agent:'secretary',tools:['project_status'] },
+  'project.update': { agent:'secretary',tools:['project_update'] },
+  'project.review': { agent:'secretary',tools:['project_review'] },
+  'project.remind': { agent:'secretary',tools:['project_remind'] },
+  'project.files': { agent:'secretary',tools:['project_files'] },
   'chat.reply': { agent: 'conversation', tools: ['get_time'] },
   'memory.read': { agent: 'conversation', tools: ['search_history','find_media'] },
   'memory.write': { agent: 'conversation', tools: ['remember'] },
@@ -20,6 +26,10 @@ export const CAPABILITIES = Object.freeze({
 
 export function validateCapabilities(intent, input) {
   const s = intent.slots, ops = intent.operations;
+  if (ops.includes('project.create') && (!s.assignees || !s.title || !s.description)) return '交办给谁？请提供登记成员姓名或QQ号、项目名称和交付要求。';
+  if (ops.some(op=>['project.update','project.review','project.remind','project.files'].includes(op)) && !s.projectId) return '请说明项目编号，避免交接到错误项目。';
+  if (ops.includes('project.update') && !s.state) return '这次是进度、阻塞还是提交交付？';
+  if (ops.includes('project.review') && (!s.member || !s.decision)) return '要验收哪位负责人的提交？通过还是退回？';
   if (ops.some(op => intent.forbiddenOperations.includes(op))) return '你要求的操作同时被禁止了，请明确保留哪项操作。';
   if (ops.some(op => CAPABILITIES[op].unsupported)) return '本次包含尚未接入主管执行的空间发布或传话；不会只执行一部分，请拆开任务。';
   if (intent.kind === 'cover' && (ops.length !== 1 || ops[0] !== 'cover.perform')) return '翻唱与其他操作请分开提出，当前不会只执行一部分。';
@@ -61,7 +71,7 @@ export function allowedTools(intent) {
     const chosen = {ppt:'make_ppt',docx:'make_docx',excel:'make_excel'}[intent.slots.format];
     for (const name of ['make_ppt','make_docx','make_excel']) if (name !== chosen) names.delete(name);
   }
-  if (intent.readOnly) for (const name of names) if (!['get_time','search_history','find_media','search_web','lookup_part'].includes(name)) names.delete(name);
+  if (intent.readOnly) for (const name of names) if (!['get_time','search_history','find_media','search_web','lookup_part','project_status'].includes(name)) names.delete(name);
   return names;
 }
 
@@ -70,6 +80,7 @@ export function bindArguments(name, args, intent) {
   const s = intent.slots;
   const out = { ...args };
   const copy = keys => { for (const k of keys) if (s[k] !== undefined) out[k] = s[k]; };
+  if (name.startsWith('project_')) { copy(['projectId','assignees','title','description','deadline','state','text','member','decision']); }
   if (['make_ppt','make_docx','make_excel'].includes(name)) {
     copy(['topic']);
     if (name === 'make_ppt') copy(['pages']);

@@ -50,7 +50,7 @@ export class UnderstandingPipeline {
     if (intent.act === 'cancel' && ['completed','failed'].includes(target.status)) return { reply: '这项任务已经结束，没有等待取消的执行；已交付内容无法撤回。' };
     if (intent.act === 'cancel') { this.state.finish(target, 'cancelled'); return { reply: '已取消这项待处理任务；已经交付的结果无法撤回。' }; }
     if (intent.act === 'chat') {
-      const readonly = { ...intent, operations: intent.operations.filter(op => ['chat.reply','memory.read','research.search','image.inspect','automotive.identify'].includes(op)), readOnly: true };
+      const readonly = { ...intent, operations: intent.operations.filter(op => ['chat.reply','memory.read','research.search','image.inspect','automotive.identify','project.read'].includes(op)), readOnly: true };
       if (!readonly.operations.length) readonly.operations = ['chat.reply'];
       readonly.agents = [...new Set(readonly.operations.map(op => CAPABILITIES[op].agent))];
       const issue = intent.clarification || validateCapabilities(readonly, input);

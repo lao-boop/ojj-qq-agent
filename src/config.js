@@ -109,6 +109,7 @@ export const DEFAULTS = {
   log: { level: 'info', file: true },
   media: { ffmpegPath: '' },
   office: { pythonPath: '', theme: 'history', model: 'deepseek-flash', maxImages: 8, imagesPerDeck: 0, imageDelayMs: 12000 },
+  secretary: { enabled: false, members: [], autoRemind: false, reminderMinutes: 1440 },
   relay: { enabled: true, allow: [], dailyLimit: 5, maxLen: 200 },
   library: { enabled: true, dir: 'D:\\Music', maxSeconds: 0 },
   asr: {

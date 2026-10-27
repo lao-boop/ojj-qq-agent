@@ -72,7 +72,7 @@ export class AgentManager {
         const adapter = toolAdapter(this.tools, step.agent);
         const authorized = allowedTools(intent);
         adapter.specs = adapter.specs.filter(s => authorized.has(s.function.name));
-        if (intent.readOnly) adapter.specs = adapter.specs.filter(s => ['get_time','search_history','find_media'].includes(s.function.name));
+        if (intent.readOnly) adapter.specs = adapter.specs.filter(s => ['get_time','search_history','find_media','project_status'].includes(s.function.name));
         if (intent.slots.format) {
           const docTool = { ppt: 'make_ppt', docx: 'make_docx', excel: 'make_excel' }[intent.slots.format];
           adapter.specs = adapter.specs.filter(s => !['make_ppt','make_docx','make_excel'].includes(s.function.name) || s.function.name === docTool);
@@ -130,7 +130,7 @@ export class AgentManager {
         if (record.status === 'running') { record.status = 'failed'; record.result = 'Agent reached round limit; do not claim completion.'; }
       }
       const effects = new Set(trace.steps.flatMap(s => s.tools.filter(t => !t.failed).map(t => t.name)));
-      const expected = { 'document.create':['make_ppt','make_docx','make_excel'], 'image.generate':['draw_image'], 'speech.synthesize':['send_voice'], 'music.compose':['sing_song'], 'music.hum':['sing'], 'memory.write':['remember'], 'memory.publish':['remember_global'], 'sticker.send':['send_sticker'] };
+      const expected = { 'project.create':['project_create'], 'project.update':['project_update'], 'project.review':['project_review'], 'project.remind':['project_remind'], 'project.files':['project_files'], 'document.create':['make_ppt','make_docx','make_excel'], 'image.generate':['draw_image'], 'speech.synthesize':['send_voice'], 'music.compose':['sing_song'], 'music.hum':['sing'], 'memory.write':['remember'], 'memory.publish':['remember_global'], 'sticker.send':['send_sticker'] };
       trace.unfulfilled = intent.operations.filter(op => expected[op] && !expected[op].some(name => effects.has(name)));
       const summary = await model.chat({ messages: [
         messages[0],

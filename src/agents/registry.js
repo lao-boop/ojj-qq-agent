@@ -1,5 +1,6 @@
 /** Stable capability boundary. New upstream tools must be assigned explicitly. */
 export const AGENTS = Object.freeze({
+  secretary: { description: '项目秘书：老板交办、负责人反馈、附件交接、催办和验收。提交不等于完成，实际权限由服务端核验。', tools: ['project_create','project_status','project_update','project_review','project_remind','project_files'] },
   conversation: { description: '日常对话、时间和会话记忆', tools: ['get_time', 'search_history', 'find_media', 'remember', 'remember_global', 'send_sticker'] },
   research: { description: '检索资料，区分事实和不确定信息', tools: ['search_web', 'search_history', 'find_media'] },
   automotive: { description: '汽修配件识别；缺车型/OE/位置时追问，不承诺适配', tools: ['lookup_part', 'search_web'] },

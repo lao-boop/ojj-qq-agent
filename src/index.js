@@ -22,6 +22,8 @@ import { webSearch } from './websearch.js';
 import { Aligner } from './asr.js';
 import { localAsrHealthy, localTranscribe } from './asr-local.js';
 import * as OpenCC from 'opencc-js';
+import { ProjectSecretary, parseProjectCommand } from './secretary.js';
+import { attachProjectTools } from './secretary-tools.js';
 import { Qzone } from './qzone.js';
 import { ActionJournal, selfContext } from './self-state.js';
 import { Office } from './office.js';
@@ -70,6 +72,27 @@ const brain = new Brain({
 });
 const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
 const sender = new ReplySender({ onebot, cfg: cfg.chat, logger: logger.child('reply') });
+const secretary = new ProjectSecretary({ cfg, logger: logger.child('secretary'),
+  download: async (item) => {
+    if (item.kind === 'image') {
+      const bytes = await brain.loadImageBuffer(item);
+      if (bytes) {
+        const dir = path.join(DATA_DIR, 'secretary-inbox'); fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+        fs.writeFileSync(file, bytes);
+        return { path:file, name:item.name || 'image.jpg' };
+      }
+    }
+    return fileReader.download(onebot,item);
+  },
+  send: async ({to,text,asset}) => {
+    if (text) return onebot.sendPrivate(Number(to), [{type:'text',data:{text}}]);
+    if (asset.kind === 'image') return onebot.sendPrivate(Number(to), [{type:'image',data:{file:`base64://${fs.readFileSync(asset.file).toString('base64')}`}}]);
+    return sender.sendFile({type:'private',id:Number(to),key:`private:${to}`}, asset.file, asset.name);
+  },
+});
+tools = attachProjectTools(tools, secretary); brain.tools = tools;
+
 
 const stats = { received: 0, replied: 0, ignored: 0, errors: 0, startedAt: Date.now() };
 const activeJobs = new Map();
@@ -848,6 +871,22 @@ async function onMessage(event) {
     return;
   }
 
+  let projectAttachments = [];
+  const projectCommand = parseProjectCommand(text);
+  let projectActor;
+  try { projectActor = secretary.actor(chat.key); } catch (err) {
+    if (projectCommand) { await sender.send(chat, {bubbles:[err.message]}); return; }
+  }
+  if (projectActor) {
+    try {
+      const inputs = [...images.map(i=>({...i,kind:'image',name:i.name||'image.jpg',file_id:i.fileId})), ...files.map(f=>({...f,kind:'file'})), ...audios.map(f=>({...f,kind:'audio'})), ...videos.map(f=>({...f,kind:'video'}))];
+      projectAttachments = await secretary.capture(projectActor, inputs);
+      if (projectCommand) {
+        const response = projectCommand.help || JSON.stringify(await secretary.execute(projectCommand.op,projectCommand.args,{chatKey:chat.key,projectAttachments}),null,2);
+        await sender.send(chat,{bubbles:[response]}); return;
+      }
+    } catch (err) { await sender.send(chat,{bubbles:[`项目材料或操作未完成：${err.message}`]}); return; }
+  }
   let body = text;
   if (!isPrivate) {
     const hasWake = (cfg.chat.group.wakeWords ?? []).some((w) => w && text.includes(w));
@@ -1313,6 +1352,7 @@ async function onMessage(event) {
         userText: body,
         requestText: userSay || recognizedSpeech,
         attachments: { files, audios, videos },
+        projectAttachments,
         coverValidator: (intent, input) => {
           if (['attachment','recent_audio'].includes(intent.slots.source)) {
             if (!voiceConvert.enabled) return { reply: '翻唱服务当前未启用或缺少配置。' };
@@ -1540,7 +1580,9 @@ onebot.on('ready', ({ selfId, nickname }) => {
       });
       qzone.startAuto();
       tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
-      brain.tools = tools;
+      tools = attachProjectTools(tools, secretary);
+      tools = attachProjectTools(tools, secretary);
+  brain.tools = tools;
     } else {
       qzone.updateConfig(cfg.qzone);
     }
@@ -1583,6 +1625,7 @@ async function applyConfig(rawPatch) {
   memory.updateConfig(cfg.chat);
   sender.updateConfig(cfg.chat);
   tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+  tools = attachProjectTools(tools, secretary);
   brain.tools = tools;
   if (cfg.llm.maxTokens) llm.cfg.maxTokens = cfg.llm.maxTokens;
 
@@ -1681,12 +1724,15 @@ logger.info('==========================================');
 
 onebot.start();
 consoleServer.start();
+const secretaryTimer = setInterval(() => secretary.tick().catch(err=>logger.warn(`项目跟进失败：${err.message}`)), 60000);
+secretaryTimer.unref();
 
 let stopping = false;
 function shutdown(signal) {
   if (stopping) return;
   stopping = true;
   logger.info(`收到 ${signal}，正在退出…`);
+  clearInterval(secretaryTimer);
   onebot.stop();
   consoleServer.stop();
   setTimeout(() => process.exit(0), 500);
