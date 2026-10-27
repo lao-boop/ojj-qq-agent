@@ -1,5 +1,7 @@
 # ojj · 小鲸鱼 QQ Agent
 
+当前是 **`dev/agent-architecture` 开发分支**，保留意图理解、Agent Manager、多模态和评测改动。`main` 已恢复原始版本；后续更新请跟踪本分支，切换方法见 [分支说明](docs/BRANCHES.md)。
+
 一个跑在 QQ 上的拟人化 Agent：会聊天、有长期记忆、能发语音、唱歌、翻唱、画图、做 PPT/Word/Excel、发 QQ 空间动态，还带一个汽修配件识别模块。
 
 底层用 **DeepSeek**（OpenAI 兼容接口），QQ 协议端用 **SnowLuma / NapCat**（OneBot v11），图像用 **FLUX**，语音合成用 **Edge TTS**，变声用 **RVC**，语音识别用 **faster-whisper**（本地）或 **WhisperX**（云端）。

@@ -13,12 +13,16 @@ export function sandboxTools(calls) {
       if (name === 'sing_song') ctx.songs.push({ title: args.title || '评测歌曲' });
       if (name === 'draw_image') ctx.images.push({ file: 'simulation-only.png' });
       if (['send_voice', 'sing'].includes(name)) ctx.voices.push({ file: 'simulation-only.mp3' });
+      const query = String(args.query || args.keyword || '');
+      const search = /刹车片|制动片/.test(query)
+        ? '配件检索样例：刹车片通过摩擦协助车轮减速，通常包含钢背与摩擦材料，外形随设计变化；不能据此确认车型适配。来源：https://example.org/brake-pads（评测样例，非实时联网）。'
+        : /太阳能|光伏|solar/i.test(query) ? '检索样例：光伏电池通过光伏效应将光能转为电能；系统通常包括组件、逆变器等。来源：https://example.org/solar（评测样例，非实时联网）。' : '当前样例库没有与此查询匹配的资料，不得引用无关内容。';
       const values = {
         get_time: '模拟时钟：2026-10-27 09:00，星期二。',
-        search_web: '模拟检索事实：光伏电池将光能转化为电能。来源：https://example.org/solar（评测样例，并非实时检索）。',
-        lookup_part: '模拟配件记录：刹车片是摩擦材料组件；无车型适配结论。',
-        search_history: '模拟历史：之前讨论过去郊外露营。',
-        find_media: '模拟历史：周报.docx，尚未读取正文。',
+        search_web: search,
+        lookup_part: /刹车片|制动片/.test(query) ? '配件库样例：刹车片通常由钢背与摩擦块组成，作用是通过摩擦制动；常见轮廓为弧形或不规则块状，可能带槽、倒角或磨损指示。无车型适配结论。' : '配件库样例中没有匹配项。',
+        search_history: /露营/.test(query) ? '模拟历史：之前讨论过去郊外露营。' : '模拟历史中没有匹配记录。',
+        find_media: '模拟文件检索：没有与当前关键词匹配的历史文件。',
       };
       return values[name] || (['make_ppt', 'make_docx', 'make_excel', 'sing_song'].includes(name) ? '模拟任务已排队；尚未生成或交付真实文件。' : '模拟工具执行成功；仅沙箱记录，没有真实发送或写入。');
     },
@@ -26,6 +30,10 @@ export function sandboxTools(calls) {
 }
 
 export function assess(expected, actual) {
+  if (expected.alternatives) {
+    const outcomes = expected.alternatives.map(e => assess(e, actual));
+    return outcomes.find(x => !x.length) || outcomes.sort((a, b) => a.length - b.length)[0];
+  }
   const issues = [], names = actual.calls.map(c => c.name);
   if (actual.status !== expected.status) issues.push(`状态应为 ${expected.status}，实际 ${actual.status}`);
   if (expected.act && actual.intent?.act !== expected.act) issues.push(`意图动作应为 ${expected.act}，实际 ${actual.intent?.act}`);
@@ -38,6 +46,8 @@ export function assess(expected, actual) {
   }
   for (const [key, value] of Object.entries(expected.slots || {})) if (actual.intent?.slots?.[key] !== value) issues.push(`参数 ${key} 应为 ${JSON.stringify(value)}，实际 ${JSON.stringify(actual.intent?.slots?.[key])}`);
   for (const op of expected.forbidden || []) if (!actual.intent?.forbiddenOperations?.includes(op)) issues.push(`未保留禁止项：${op}`);
+  for (const op of expected.absentForbidden || []) if (actual.intent?.forbiddenOperations?.includes(op)) issues.push(`否定范围扩大：不应禁止整个 ${op}`);
+  if (expected.queryContains) for (const call of actual.calls) if (['search_web', 'lookup_part', 'search_history', 'find_media'].includes(call.name) && !String(call.args?.query || call.args?.keyword || '').includes(expected.queryContains)) issues.push(`查询偏离对象：${call.name}`);
   if (expected.taskStatus && actual.taskStatus !== expected.taskStatus) issues.push(`任务应为 ${expected.taskStatus}，实际 ${actual.taskStatus}`);
   if (expected.dependency) {
     const [before, after] = expected.dependency;
@@ -75,8 +85,8 @@ export async function evaluateScenario(scenario, llm) {
     const effective = result.trace.intent || task || recognized;
     const actual = {
       status: result.trace.status, taskStatus: task?.status || '',
-      intent: effective ? { act: recognized?.act || effective.act, operations: effective.operations, forbiddenOperations: effective.forbiddenOperations, slots: effective.slots } : null,
-      calls: calls.slice(beforeCalls), steps: result.trace.steps.map(s => ({ agent: s.agent, id: s.id, dependsOn: s.dependsOn, status: s.status })), reply: result.reply,
+      intent: effective ? { act: recognized?.act || effective.act, operations: effective.operations, forbiddenOperations: effective.forbiddenOperations, exclude: effective.exclude, slots: effective.slots } : null,
+      calls: calls.slice(beforeCalls), steps: result.trace.steps.map(s => ({ agent: s.agent, id: s.id, dependsOn: s.dependsOn, status: s.status, unfulfilled: s.unfulfilled || [], tools: s.tools })), reply: result.reply,
     };
     const issues = assess(turn.expected, actual);
     turns.push({ index: index + 1, text: turn.text, expected: turn.expected, actual, issues, status: issues.length ? 'fail' : 'pass', ms: Date.now() - start });

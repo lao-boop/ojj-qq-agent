@@ -5,8 +5,8 @@ const clarify = () => ({ status: 'clarification', tools: [] });
 const one = (id, category, text, expected, input) => ({ id, category, turns: [turn(text, expected, input)] });
 export const SCENARIOS = [
   one('chat', '日常与记忆', '你好，今天心情怎么样？只聊天就好。', done(['chat.reply'])),
-  one('time', '日常与记忆', '现在几点？请查一下当前时间。', done(['chat.reply'], ['get_time'])),
-  one('history', '日常与记忆', '查一下我们之前聊过的露营计划，不要新增记忆。', done(['memory.read'], ['search_history'])),
+  one('time', '日常与记忆', '现在几点？请查一下当前时间。', done(['time.read'], ['get_time'])),
+  one('history', '日常与记忆', '查一下我们之前聊过的露营计划，不要新增记忆。', { ...done(['memory.read'], ['search_history']), optionalTools: ['find_media'], queryContains: '露营' }),
   one('remember', '日常与记忆', '帮我记住，我喜欢蓝色，只保存在我们的私聊记忆里。', done(['memory.write'], ['remember'])),
   one('public-memory', '日常与记忆', '公开记住：我喜欢蓝色，这件事可以告诉所有人。', done(['memory.publish'], ['remember_global'])),
   one('ppt', '文档与表格', '制作8页PPT，主题是春季露营计划。', done(['document.create'], ['make_ppt'], { format: 'ppt', pages: 8 })),
@@ -28,7 +28,10 @@ export const SCENARIOS = [
   one('compose', '语音与音乐', '创作一首关于春天的原创歌，轻快流行风格。', done(['music.compose'], ['sing_song'])),
   one('hum', '语音与音乐', '哼一段旋律，不要创作完整歌曲，也不要朗读。', done(['music.hum'], ['sing'])),
   one('search', '检索与协作', '搜索太阳能电池的工作原理，给出资料来源，不要制作文档。', done(['research.search'], ['search_web'])),
-  one('part', '检索与协作', '查询汽车刹车片的作用和常见外观，不需要判断具体车型适配。', done(['automotive.identify'], ['lookup_part']), {}),
+  one('part', '检索与协作', '查询汽车刹车片的作用和常见外观，不需要判断具体车型适配。', { alternatives: [
+    { ...done(['automotive.identify'], ['lookup_part']), optionalTools: ['search_web'], queryContains: '刹车片', absentForbidden: ['automotive.identify'] },
+    { ...done(['research.search'], ['search_web']), queryContains: '刹车片', absentForbidden: ['automotive.identify'] },
+  ] }),
   one('research-document', '检索与协作', '先搜索太阳能发电的基本原理，再根据搜索结果制作一份Word科普报告。', { ...done(['research.search', 'document.create'], ['search_web', 'make_docx'], { format: 'docx' }), dependency: ['research', 'document'] }),
   one('no-image', '否定与越权', '不要画图，只做一份Word露营清单，不要任何配图。', { ...done(['document.create'], ['make_docx'], { format: 'docx' }), forbidden: ['image.generate'] }),
   one('no-voice', '否定与越权', '不要发语音，用文字和我打个招呼。', { ...done(['chat.reply']), forbidden: ['speech.synthesize'] }),

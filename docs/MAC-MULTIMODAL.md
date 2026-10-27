@@ -7,7 +7,9 @@
 在运行机器人终端按 Control+C；保持 Docker Desktop 和 NapCat 运行。在仓库目录执行：
 
 ```bash
-git pull --ff-only origin main
+git fetch origin
+git switch dev/agent-architecture
+git pull --ff-only origin dev/agent-architecture
 npm install
 brew install python@3.11 ffmpeg
 python3.11 -m venv ~/qq-agent-dev/python-env

@@ -11,7 +11,9 @@
 
 ```bash
 cd ~/qq-agent-dev/ojj-qq-agent
-git pull --ff-only origin main
+git fetch origin
+git switch dev/agent-architecture
+git pull --ff-only origin dev/agent-architecture
 ~/qq-agent-dev/python-env/bin/python scripts/configure_cover.py
 npm start
 ```

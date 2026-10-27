@@ -2,6 +2,7 @@ import { CAPABILITIES, validateCapabilities } from './capabilities.js';
 import { randomUUID } from 'node:crypto';
 import { intentFailure } from './intent-errors.js';
 import { IntentRecognizer } from './intent.js';
+import { completeExplicitTopic } from './intent-fields.js';
 
 /** Task state is scoped by conversation, bounded, and deliberately not execution history. */
 export class TaskState {
@@ -53,7 +54,7 @@ export class UnderstandingPipeline {
     if (intent.act === 'cancel' && ['completed','failed'].includes(target.status)) return { reply: '这项任务已经结束，没有等待取消的执行；已交付内容无法撤回。' };
     if (intent.act === 'cancel') { this.state.finish(target, 'cancelled'); return { reply: '已取消这项待处理任务；已经交付的结果无法撤回。' }; }
     if (intent.act === 'chat') {
-      const readonly = { ...intent, operations: intent.operations.filter(op => ['chat.reply','memory.read','research.search','image.inspect','automotive.identify'].includes(op)), readOnly: true };
+      const readonly = { ...intent, operations: intent.operations.filter(op => ['chat.reply','time.read','memory.read','research.search','image.inspect','automotive.identify'].includes(op)), readOnly: true };
       if (!readonly.operations.length) readonly.operations = ['chat.reply'];
       readonly.agents = [...new Set(readonly.operations.map(op => CAPABILITIES[op].agent))];
       const issue = intent.clarification || validateCapabilities(readonly, input);
@@ -61,7 +62,8 @@ export class UnderstandingPipeline {
     }
     if (intent.act === 'create' && intent.targetId) return { reply: '新建还是修改原任务？请明确一下。' };
     if (target && target.status === 'cancelled') return { reply: '这项任务已取消；要重新开始，请重新提出完整需求。' };
-    const merged = target ? { ...intent, kind: target.kind, operations: intent.operations.length ? intent.operations : target.operations, forbiddenOperations: [...new Set([...target.forbiddenOperations, ...intent.forbiddenOperations])], agents: intent.agents.length ? intent.agents : target.agents, slots: { ...target.slots, ...intent.slots }, exclude: [...new Set([...target.exclude, ...intent.exclude])] } : intent;
+    let merged = target ? { ...intent, kind: target.kind, operations: intent.operations.length ? intent.operations : target.operations, forbiddenOperations: [...new Set([...target.forbiddenOperations, ...intent.forbiddenOperations])], agents: intent.agents.length ? intent.agents : target.agents, slots: { ...target.slots, ...intent.slots }, exclude: [...new Set([...target.exclude, ...intent.exclude])] } : intent;
+    merged = completeExplicitTopic(merged, input.instruction);
     if (intent.act === 'reject') {
       Object.assign(target, { exclude: merged.exclude, forbiddenOperations: merged.forbiddenOperations });
       this.state.finish(target, 'draft');
@@ -78,7 +80,7 @@ export class UnderstandingPipeline {
     Object.assign(task, merged);
     if (merged.slots.delivery !== 'other_chat') delete task.deliveryAuthorization;
     this.state.finish(task, 'running');
-    const clarify = intent.clarification || (intent.missing.length ? `还需要补充：${intent.missing.join('、')}。` : '');
+    const clarify = intent.clarification || (merged.missing.length ? `还需要补充：${merged.missing.join('、')}。` : '');
     if (clarify) { this.state.finish(task, 'draft'); return { reply: clarify, task }; }
     const capabilityIssue = validateCapabilities(merged, input);
     if (capabilityIssue) { this.state.finish(task, 'draft'); return { reply: capabilityIssue, task }; }
@@ -102,6 +104,9 @@ export class UnderstandingPipeline {
 // If a prohibition has already been captured and enforced, do not ask again just
 // because the sentence contains “不要”. Unknown negative scope still gets reviewed.
 function needsNegationReview(intent, instruction) {
+  // A scoped exclusion of fitment must not disable the explicitly requested parts knowledge lookup.
+  if (intent.act === 'create' && intent.forbiddenOperations.includes('automotive.identify') &&
+      /作用|外观|结构|原理/.test(instruction) && /(不需要|不用|不要|不必|别)[^，。！？\n]{0,12}(车型|适配)/.test(instruction)) return true;
   if (intent.act !== 'create' || !/(没让你|不要(?:做|画|唱|生成|发)|别(?:做|画|唱|发)|不是要)/.test(instruction)) return false;
   const targets = [];
   if (/(不要|别|没让你)(再)?(画图|生成图片|做图)/.test(instruction)) targets.push('image.generate');

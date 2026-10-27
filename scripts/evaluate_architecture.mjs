@@ -40,7 +40,7 @@ for (const file of files) {
   if (!matches.length || (child.status !== 0 && !matches.some(m => m[1] === 'not ok'))) tests.push({ file, name: '测试进程异常或没有结果', status: 'fail', ms: 0, detail: child.error?.code || `exit=${child.status}; ${String(child.stderr || '').slice(0, 1500)}` });
   console.log(`${file}: ${child.status === 0 ? '完成' : '失败'}`);
 }
-const report = { version: 1, generatedAt: new Date().toISOString(), revision, dirty, node: process.version, engine: tests, live: { requested: live, model: llm?.cfg.model || '', results: [], selected: live ? selected.map(s => s.id) : [], repeat, completed: false }, scenarios: SCENARIOS, manual: MANUAL_CASES, ms: 0 };
+const report = { version: 1, rubric: 'routing-v2', generatedAt: new Date().toISOString(), revision, dirty, node: process.version, engine: tests, live: { requested: live, model: llm?.cfg.model || '', results: [], selected: live ? selected.map(s => s.id) : [], repeat, completed: false }, scenarios: SCENARIOS, manual: MANUAL_CASES, ms: 0 };
 function save() {
   report.ms = Date.now() - started; report.generatedAt = new Date().toISOString();
   fs.mkdirSync(path.dirname(out), { recursive: true });

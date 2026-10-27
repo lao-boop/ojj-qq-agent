@@ -1,6 +1,7 @@
 /** Operations are the execution contract, not merely a routing hint. */
 export const CAPABILITIES = Object.freeze({
-  'chat.reply': { agent: 'conversation', tools: ['get_time'] },
+  'chat.reply': { agent: 'conversation', tools: [] },
+  'time.read': { agent: 'conversation', tools: ['get_time'] },
   'memory.read': { agent: 'conversation', tools: ['search_history','find_media'] },
   'memory.write': { agent: 'conversation', tools: ['remember'] },
   'memory.publish': { agent: 'conversation', tools: ['remember_global'] },
@@ -27,7 +28,8 @@ export function validateCapabilities(intent, input) {
   if (intent.kind === 'cover' && (ops.length !== 1 || ops[0] !== 'cover.perform')) return '翻唱与其他操作请分开提出，当前不会只执行一部分。';
   if (intent.kind !== 'cover' && ops.includes('cover.perform')) return '翻唱任务的类型不一致，请明确翻唱来源。';
   if (ops.includes('document.create')) {
-    if (!s.format || !s.topic) return '要制作什么主题的文档？请同时说明 PPT、Word 或 Excel。';
+    if (!s.format) return '要制作哪种格式的文档？请选择 PPT、Word 或 Excel。';
+    if (!s.topic?.trim()) return '文档格式已确认，还需要说明具体主题或表名。';
     if (!['ppt','docx','excel'].includes(s.format)) return '目前文档格式支持 PPT、Word 和 Excel。';
     if (s.format === 'excel' && !s.dataPolicy) return '表格要使用你提供的真实数据，还是允许生成示例数据？';
     if (s.dataPolicy === 'provided' && !input.attachments?.files?.length && !s.dataText) return '还没有收到所需的真实数据，请提供文件或数据内容；不会编造数值。';
@@ -54,6 +56,13 @@ export function validateCapabilities(intent, input) {
   if (s.inputRef === 'history') return '历史附件还没有定位，请先说明文件名或查询历史文件，确认后再处理。';
   if (s.pages && s.format !== 'ppt') return '页数约束目前仅用于 PPT；请明确其他格式的结构要求。';
   return '';
+}
+
+/** Every requested lookup/effect needs execution evidence; plain replies and perception do not. */
+export function requiredToolGroups(intent, agent) {
+  return intent.operations.filter(op => !agent || CAPABILITIES[op].agent === agent)
+    .filter(op => !['chat.reply', 'image.inspect', 'cover.perform'].includes(op))
+    .map(op => ({ operation: op, tools: CAPABILITIES[op].tools }));
 }
 
 export function allowedTools(intent) {
