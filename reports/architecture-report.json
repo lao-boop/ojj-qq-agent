@@ -1,7 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-27T03:54:31.409Z",
-  "revision": "45920f9",
+  "rubric": "routing-v2",
+  "generatedAt": "2026-10-27T07:20:15.434Z",
+  "revision": "26e9daa",
   "dirty": false,
   "node": "v24.19.0",
   "engine": [
@@ -9,826 +10,959 @@
       "file": "agents-integration.test.js",
       "name": "real bot validates input and delivery (Manager=true, cover=false, recipient=false)",
       "status": "pass",
-      "ms": 1077.923141,
+      "ms": 1094.200669,
       "detail": ""
     },
     {
       "file": "agents-integration.test.js",
       "name": "real bot validates input and delivery (Manager=false, cover=false, recipient=false)",
       "status": "pass",
-      "ms": 1023.366483,
+      "ms": 1033.279012,
       "detail": ""
     },
     {
       "file": "agents-integration.test.js",
       "name": "real bot validates input and delivery (Manager=true, cover=true, recipient=false)",
       "status": "pass",
-      "ms": 870.155021,
+      "ms": 1084.524918,
       "detail": ""
     },
     {
       "file": "agents-integration.test.js",
       "name": "real bot validates input and delivery (Manager=true, cover=false, recipient=true)",
       "status": "pass",
-      "ms": 2890.130742,
+      "ms": 3274.702922,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "multimodal envelope separates instructions and evidence without exposing local paths",
       "status": "pass",
-      "ms": 4.259318,
+      "ms": 1.839685,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "reject unknown intent roles and malformed output",
       "status": "pass",
-      "ms": 1.266518,
+      "ms": 1.234264,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "reject cycles, duplicate IDs, unauthorized roles and oversized plans",
       "status": "pass",
-      "ms": 0.376016,
+      "ms": 0.366937,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "adapter enforces role permissions at execution, even for known upstream tools",
       "status": "pass",
-      "ms": 1.71848,
+      "ms": 0.600787,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "research result reaches document agent AND queued document context",
       "status": "pass",
-      "ms": 8.310403,
+      "ms": 4.112749,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "clarification executes no tools and does not invoke planner",
       "status": "pass",
-      "ms": 0.475518,
+      "ms": 0.701275,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "duplicate tool requests reuse results without duplicate artifacts",
       "status": "pass",
-      "ms": 0.795544,
+      "ms": 0.968796,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "tool budget failure preserves artifacts and does not retry in legacy path",
       "status": "pass",
-      "ms": 0.870038,
+      "ms": 0.926036,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "failed dependency blocks document generation",
       "status": "pass",
-      "ms": 0.892614,
+      "ms": 1.345496,
       "detail": ""
     },
     {
       "file": "agents.test.js",
       "name": "permission violation and model failure fail closed",
       "status": "pass",
-      "ms": 0.934016,
+      "ms": 1.177248,
       "detail": ""
     },
     {
       "file": "architecture-eval.test.js",
       "name": "evaluation detects wrong and extra tools, parameter loss and missing dependencies",
       "status": "pass",
-      "ms": 1.073453,
+      "ms": 1.51967,
       "detail": ""
     },
     {
       "file": "architecture-eval.test.js",
       "name": "live evaluation path drives production Manager and pins tool arguments without generating files",
       "status": "pass",
-      "ms": 8.701116,
+      "ms": 5.278942,
       "detail": ""
     },
     {
       "file": "architecture-eval.test.js",
       "name": "multi-turn cancellation checks actual task state and sends no tools",
       "status": "pass",
-      "ms": 0.899662,
+      "ms": 3.489121,
       "detail": ""
     },
     {
       "file": "architecture-eval.test.js",
       "name": "sandbox never instantiates real media or messaging tools; side effects remain fixture arrays",
       "status": "pass",
-      "ms": 0.287289,
+      "ms": 0.408714,
       "detail": ""
     },
     {
       "file": "architecture-eval.test.js",
       "name": "HTML report escapes embedded script delimiters and labels unrun model cases",
       "status": "pass",
-      "ms": 1.622007,
+      "ms": 1.330056,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "文档缺主题",
       "status": "pass",
-      "ms": 5.367557,
+      "ms": 1.572257,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "文档缺格式",
       "status": "pass",
-      "ms": 1.134162,
+      "ms": 0.214875,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "Excel未决定数据来源",
       "status": "pass",
-      "ms": 0.420346,
+      "ms": 0.09627,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "真实数据缺失不能填造",
       "status": "pass",
-      "ms": 0.161117,
+      "ms": 0.098879,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "绘图缺画面",
       "status": "pass",
-      "ms": 1.612423,
+      "ms": 0.185802,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "朗读缺原文",
       "status": "pass",
-      "ms": 0.186789,
+      "ms": 0.198426,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "语音不能悄悄截断",
       "status": "pass",
-      "ms": 0.124303,
+      "ms": 0.163262,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "原创歌缺主题",
       "status": "pass",
-      "ms": 0.120352,
+      "ms": 0.115173,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "检索缺查询对象",
       "status": "pass",
-      "ms": 2.666773,
+      "ms": 0.123622,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "汽修无可见证据",
       "status": "pass",
-      "ms": 1.941965,
+      "ms": 0.268475,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "私有记忆不能擅自公开",
       "status": "pass",
-      "ms": 0.365125,
+      "ms": 0.281708,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "要求和禁止冲突",
       "status": "pass",
-      "ms": 0.160246,
+      "ms": 0.170558,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "混合外部动作不能只做一半",
       "status": "pass",
-      "ms": 0.156403,
+      "ms": 0.36501,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "历史附件未定位",
       "status": "pass",
-      "ms": 0.123953,
+      "ms": 0.054052,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "看图只授权阅读，不能画图；语音只授权朗读，不能作曲",
       "status": "pass",
-      "ms": 3.401475,
+      "ms": 1.454261,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "附件失败、缺失与多文件歧义都阻止执行",
       "status": "pass",
-      "ms": 2.012956,
+      "ms": 0.614023,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "页数、行数等超出执行能力不得静默夹取；未知操作拒绝",
       "status": "pass",
-      "ms": 3.387537,
+      "ms": 1.156897,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "确认参数绑定到执行参数，模型不能改成另一主题或念另一句话",
       "status": "pass",
-      "ms": 1.971689,
+      "ms": 0.542563,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "资料查询不能越权创建文件，即使专业Agent请求该工具",
       "status": "pass",
-      "ms": 11.199579,
+      "ms": 4.325704,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "修改文档保留主题和禁止配图条件",
       "status": "pass",
-      "ms": 4.175321,
+      "ms": 1.556177,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "仅口头说生成完毕不能成为任务完成",
       "status": "pass",
-      "ms": 0.569825,
+      "ms": 0.571899,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "普通聊天的看图请求也经过输入核验",
       "status": "pass",
-      "ms": 0.269784,
+      "ms": 0.34542,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "明确不画图但做文档，不因为含有否定词反复追问",
       "status": "pass",
-      "ms": 0.369683,
+      "ms": 0.562589,
       "detail": ""
     },
     {
       "file": "capabilities.test.js",
       "name": "禁止配图和真实数据要求传入后台文档队列",
       "status": "pass",
-      "ms": 8.338819,
+      "ms": 1.946672,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "dedication, guessed name, unknown recipient, group and non-owner cannot authorize delivery",
       "status": "pass",
-      "ms": 6.070431,
+      "ms": 4.47302,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "authorized result goes only to exact recipient and confirmed receipt is persisted",
       "status": "pass",
-      "ms": 3.047985,
+      "ms": 2.212271,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "long audio sends one file upload with no retry or alternate recipient",
       "status": "pass",
-      "ms": 1.805245,
+      "ms": 1.135022,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "next-audio can reuse a scoped authorization; another actor, target or expiration cannot",
       "status": "pass",
-      "ms": 1.057357,
+      "ms": 0.804782,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "delivery timeout never falsely reports success or retries",
       "status": "pass",
-      "ms": 1.574332,
+      "ms": 1.179381,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "delivery rejection never falsely reports success or retries",
       "status": "pass",
-      "ms": 1.067572,
+      "ms": 0.93272,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "delivery disk never falsely reports success or retries",
       "status": "pass",
-      "ms": 0.686593,
+      "ms": 0.590429,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "delivery revoked never falsely reports success or retries",
       "status": "pass",
-      "ms": 0.799097,
+      "ms": 0.668476,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "restarting after an interrupted send marks unknown and refuses repeat",
       "status": "pass",
-      "ms": 2.142842,
+      "ms": 0.752901,
       "detail": ""
     },
     {
       "file": "cover-delivery.test.js",
       "name": "delivery facts stay in the requesting owner chat and omit local paths",
       "status": "pass",
-      "ms": 2.327934,
+      "ms": 1.614898,
       "detail": ""
     },
     {
       "file": "cover-integration.test.js",
       "name": "spoken next-audio request waits and delivers only subsequent audio: current",
       "status": "pass",
-      "ms": 4179.74541,
+      "ms": 2211.316525,
       "detail": ""
     },
     {
       "file": "cover-integration.test.js",
       "name": "spoken next-audio request waits and delivers only subsequent audio: recipient",
       "status": "pass",
-      "ms": 3505.375933,
+      "ms": 2262.977685,
       "detail": ""
     },
     {
       "file": "cover-integration.test.js",
       "name": "spoken next-audio request waits and delivers only subsequent audio: rejected",
       "status": "pass",
-      "ms": 2387.246766,
+      "ms": 2266.507259,
       "detail": ""
     },
     {
       "file": "cover.test.js",
       "name": "QQ voice upload gets a longer response budget without retrying",
       "status": "pass",
-      "ms": 1.564842,
+      "ms": 1.795234,
       "detail": ""
     },
     {
       "file": "cover.test.js",
       "name": "cover readiness validates switch, provider credentials and custom voice before upload",
       "status": "pass",
-      "ms": 0.697398,
+      "ms": 0.632137,
       "detail": ""
     },
     {
       "file": "cover.test.js",
       "name": "RVC succeeded: pinned schema, exact source and no duplicate predictions",
       "status": "pass",
-      "ms": 60.081862,
+      "ms": 57.988048,
       "detail": ""
     },
     {
       "file": "cover.test.js",
       "name": "RVC failed: pinned schema, exact source and no duplicate predictions",
       "status": "pass",
-      "ms": 14.397294,
+      "ms": 16.48715,
       "detail": ""
     },
     {
       "file": "cover.test.js",
       "name": "RVC invalid-output: pinned schema, exact source and no duplicate predictions",
       "status": "pass",
-      "ms": 15.47719,
+      "ms": 13.713065,
       "detail": ""
     },
     {
       "file": "cover.test.js",
       "name": "spoken prepare instruction with audio attached waits; only next task update becomes executable",
       "status": "pass",
-      "ms": 3.566614,
+      "ms": 4.889549,
       "detail": ""
     },
     {
       "file": "cover.test.js",
       "name": "waiting cover can be cancelled, expires, and cannot be claimed by another group member",
       "status": "pass",
-      "ms": 1.104932,
+      "ms": 1.709353,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "recipient survives format repair; ambiguous artist/recipient clarifies without executing",
       "status": "pass",
-      "ms": 5.545049,
+      "ms": 4.727931,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "a truncated response is repaired once without treating partial JSON as an action",
       "status": "pass",
-      "ms": 0.804813,
+      "ms": 0.416261,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "two invalid outputs stop before state creation and produce a format-specific message",
       "status": "pass",
-      "ms": 0.510003,
+      "ms": 0.604502,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "HTTP 401 is not retried as a parsing error or exposed verbatim",
       "status": "pass",
-      "ms": 0.590912,
+      "ms": 0.561858,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "HTTP 402 is not retried as a parsing error or exposed verbatim",
       "status": "pass",
-      "ms": 0.592328,
+      "ms": 0.555664,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "HTTP 429 is not retried as a parsing error or exposed verbatim",
       "status": "pass",
-      "ms": 0.189067,
+      "ms": 1.411487,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "HTTP 404 is not retried as a parsing error or exposed verbatim",
       "status": "pass",
-      "ms": 0.270338,
+      "ms": 0.257077,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "HTTP 400 is not retried as a parsing error or exposed verbatim",
       "status": "pass",
-      "ms": 0.856205,
+      "ms": 0.165592,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "non-cover cross-chat delivery stays unsupported; cover delivery requires its dedicated validator",
       "status": "pass",
-      "ms": 0.54689,
+      "ms": 0.766134,
       "detail": ""
     },
     {
       "file": "intent-recovery.test.js",
       "name": "LLM sends JSON response format and exposes truncation reason; opt-out supports older endpoints",
       "status": "pass",
-      "ms": 51.393648,
+      "ms": 52.211212,
       "detail": ""
     },
     {
       "file": "message-response.test.js",
       "name": "owner-only configuration replies to chat and status at rate limit (Manager=true)",
       "status": "pass",
-      "ms": 887.111089,
+      "ms": 868.163938,
       "detail": ""
     },
     {
       "file": "message-response.test.js",
       "name": "owner-only configuration replies to chat and status at rate limit (Manager=false)",
       "status": "pass",
-      "ms": 843.631916,
+      "ms": 821.065377,
       "detail": ""
     },
     {
       "file": "multimodal-integration.test.js",
       "name": "real QQ message pipeline: tts",
       "status": "pass",
-      "ms": 880.691856,
+      "ms": 787.567499,
       "detail": ""
     },
     {
       "file": "multimodal-integration.test.js",
       "name": "real QQ message pipeline: asr",
       "status": "pass",
-      "ms": 1188.800128,
+      "ms": 1080.309371,
       "detail": ""
     },
     {
       "file": "multimodal-integration.test.js",
       "name": "real QQ message pipeline: asr-disabled",
       "status": "pass",
-      "ms": 972.846048,
+      "ms": 1417.394533,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "long voice text is rejected before contacting MiniMax; QQ delivery failure propagates",
       "status": "pass",
-      "ms": 10.60979,
+      "ms": 9.110184,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "ASR status reports actual loaded model, not requested config",
       "status": "pass",
-      "ms": 46.018485,
+      "ms": 37.378383,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "SILK decoder error retains final exception instead of truncating at traceback header",
       "status": "pass",
-      "ms": 12.977525,
+      "ms": 9.530297,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "MiniMax emits exact MP3 bytes and sends configured voice/model, not Edge TTS options",
       "status": "pass",
-      "ms": 8.783845,
+      "ms": 9.160976,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "MiniMax http failure produces no artifact and no paid retry",
       "status": "pass",
-      "ms": 4.557048,
+      "ms": 5.946911,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "MiniMax business failure produces no artifact and no paid retry",
       "status": "pass",
-      "ms": 5.055771,
+      "ms": 4.962424,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "MiniMax invalid-audio failure produces no artifact and no paid retry",
       "status": "pass",
-      "ms": 5.894767,
+      "ms": 4.796359,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "MiniMax missing-code failure produces no artifact and no paid retry",
       "status": "pass",
-      "ms": 5.106383,
+      "ms": 4.93968,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "vision routes image and credentials exclusively to its independent API",
       "status": "pass",
-      "ms": 13.466953,
+      "ms": 13.382764,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "vision failure cannot become valid image evidence or leak reasoning; disabled sends nothing",
       "status": "pass",
-      "ms": 7.519417,
+      "ms": 8.428304,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "Docker path mapping reads shared bytes and blocks traversal and symlink escape",
       "status": "pass",
-      "ms": 2.307227,
+      "ms": 2.327398,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "get_file URL remains usable when its container file path is inaccessible",
       "status": "pass",
-      "ms": 5.754734,
+      "ms": 5.28617,
       "detail": ""
     },
     {
       "file": "multimodal.test.js",
       "name": "console masks all new and existing provider credentials",
       "status": "pass",
-      "ms": 5.099978,
+      "ms": 4.57869,
       "detail": ""
     },
     {
       "file": "onebot-diagnostic.test.js",
       "name": "read-only OneBot diagnostic distinguishes event stream (true) without disclosing secrets",
       "status": "pass",
-      "ms": 1116.574304,
+      "ms": 1115.406951,
       "detail": ""
     },
     {
       "file": "onebot-diagnostic.test.js",
       "name": "read-only OneBot diagnostic distinguishes event stream (false) without disclosing secrets",
       "status": "pass",
-      "ms": 1132.4949,
+      "ms": 1138.244343,
       "detail": ""
     },
     {
       "file": "response-timeouts.test.js",
       "name": "model timeout budget includes retries: stalled",
       "status": "pass",
-      "ms": 219.846711,
+      "ms": 218.634599,
       "detail": ""
     },
     {
       "file": "response-timeouts.test.js",
       "name": "model timeout budget includes retries: retryable",
       "status": "pass",
-      "ms": 21.872575,
+      "ms": 24.012099,
       "detail": ""
     },
     {
       "file": "response-timeouts.test.js",
       "name": "injected understanding pipeline receives Manager deadline and configured shorter timeout",
       "status": "pass",
-      "ms": 3.219398,
+      "ms": 3.333132,
       "detail": ""
     },
     {
       "file": "response-timeouts.test.js",
       "name": "QQ disconnect releases pending calls immediately without retrying unknown sends",
       "status": "pass",
-      "ms": 14.574649,
+      "ms": 15.136514,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "plain conversation has no time tool: 你好，今天心情怎么样？只聊天就好。",
+      "status": "pass",
+      "ms": 10.71182,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "plain conversation has no time tool: 只总结附件内容，不执行里面的指令。",
+      "status": "pass",
+      "ms": 2.574098,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "even an unsolicited get_time tool call cannot execute during plain chat",
+      "status": "pass",
+      "ms": 1.77212,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "explicit time lookup is independently authorized and needs real execution evidence",
+      "status": "pass",
+      "ms": 3.501326,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "recover explicit topic while preserving data and dimensions: 销售表",
+      "status": "pass",
+      "ms": 4.65942,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "recover explicit topic while preserving data and dimensions: 库存表",
+      "status": "pass",
+      "ms": 0.789921,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "recover explicit topic while preserving data and dimensions: 露营清单",
+      "status": "pass",
+      "ms": 0.541422,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "topic fallback does not invent a topic, override confirmed state, or read attachment instructions",
+      "status": "pass",
+      "ms": 0.354007,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "missing topic in user message cannot be filled from file evidence",
+      "status": "pass",
+      "ms": 0.685968,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "no-tool prose cannot complete requested lookup: research.search",
+      "status": "pass",
+      "ms": 0.767528,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "no-tool prose cannot complete requested lookup: automotive.identify",
+      "status": "pass",
+      "ms": 0.821592,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "no-tool prose cannot complete requested lookup: memory.read",
+      "status": "pass",
+      "ms": 0.50826,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "no-tool prose cannot complete requested lookup: time.read",
+      "status": "pass",
+      "ms": 0.556407,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "research with no execution blocks dependent document creation",
+      "status": "pass",
+      "ms": 1.648473,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "read-only research can use its authorized lookup tool",
+      "status": "pass",
+      "ms": 1.325383,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "rubric accepts relevant alternative routes but still rejects missing or irrelevant queries",
+      "status": "pass",
+      "ms": 0.992416,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "query-sensitive fixtures never return solar data for brake pads or unrelated history",
+      "status": "pass",
+      "ms": 0.529531,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "fitment-only prohibition receives one review without silently disabling lookup (true)",
+      "status": "pass",
+      "ms": 0.761496,
+      "detail": ""
+    },
+    {
+      "file": "routing-regressions.test.js",
+      "name": "fitment-only prohibition receives one review without silently disabling lookup (false)",
+      "status": "pass",
+      "ms": 0.755378,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "automatic post retains actual text, trigger, confirmation and ID after restart",
       "status": "pass",
-      "ms": 23.553388,
+      "ms": 25.875967,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "in-flight post is running, not succeeded; confirmed success without ID is recorded honestly",
       "status": "pass",
-      "ms": 2.569881,
+      "ms": 0.594814,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "explicit rejection fails; timeout/connection loss remains unknown",
       "status": "pass",
-      "ms": 4.186012,
+      "ms": 2.617141,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "interrupted actions recover as unknown, never as active forever or successful",
       "status": "pass",
-      "ms": 1.511436,
+      "ms": 0.371437,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "owner can inspect automatic actions; other conversations only see their own actions",
       "status": "pass",
-      "ms": 2.630211,
+      "ms": 1.494111,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "a journal write failure after successful send does not cause resend or failed result",
       "status": "pass",
-      "ms": 1.113913,
+      "ms": 0.619681,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "corrupt history is not silently discarded",
       "status": "pass",
-      "ms": 0.405991,
+      "ms": 0.424958,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "published fact reaches actual chat model contexts (Manager=false)",
       "status": "pass",
-      "ms": 5.057633,
+      "ms": 3.999521,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "published fact reaches actual chat model contexts (Manager=true)",
       "status": "pass",
-      "ms": 5.489005,
+      "ms": 4.102991,
       "detail": ""
     },
     {
       "file": "self-state.test.js",
       "name": "storage failure before sending does not publish",
       "status": "pass",
-      "ms": 1.952563,
+      "ms": 0.777221,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "missing structured act cannot default into an executable request",
       "status": "pass",
-      "ms": 1.594125,
+      "ms": 1.136143,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "updates retain confirmed artist and duration and replace only title",
       "status": "pass",
-      "ms": 3.403682,
+      "ms": 3.677122,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "negation does not execute or automatically choose another song",
       "status": "pass",
-      "ms": 1.119969,
+      "ms": 1.087986,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "contradictory new action gets one review, then fails closed if contradiction persists",
       "status": "pass",
-      "ms": 0.565924,
+      "ms": 0.647568,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "multiple tasks and cross-chat references must be clarified",
       "status": "pass",
-      "ms": 0.649795,
+      "ms": 0.724408,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "status/cancel do not execute; running task cannot be silently replaced",
       "status": "pass",
-      "ms": 0.646496,
+      "ms": 0.565032,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "document format update retains topic",
       "status": "pass",
-      "ms": 2.252381,
+      "ms": 0.54894,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "strict catalog resolution rejects artist-only match and ambiguous versions",
       "status": "pass",
-      "ms": 0.768895,
+      "ms": 0.972635,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "read-only chat cannot invoke mutating conversation tools",
       "status": "pass",
-      "ms": 1.497157,
+      "ms": 4.89424,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "cover dispatch only uses read-only validated track, bypassing free-form tool guesses",
       "status": "pass",
-      "ms": 1.18291,
+      "ms": 1.107444,
       "detail": ""
     },
     {
       "file": "understanding.test.js",
       "name": "model cannot inject task IDs/status, and mixed cover requests are not silently truncated",
       "status": "pass",
-      "ms": 0.3972,
+      "ms": 0.449476,
       "detail": ""
     }
   ],
@@ -868,7 +1002,7 @@
           "expected": {
             "status": "completed",
             "ops": [
-              "chat.reply"
+              "time.read"
             ],
             "tools": [
               "get_time"
@@ -893,7 +1027,11 @@
             "tools": [
               "search_history"
             ],
-            "slots": {}
+            "slots": {},
+            "optionalTools": [
+              "find_media"
+            ],
+            "queryContains": "露营"
           },
           "input": {}
         }
@@ -1332,14 +1470,39 @@
         {
           "text": "查询汽车刹车片的作用和常见外观，不需要判断具体车型适配。",
           "expected": {
-            "status": "completed",
-            "ops": [
-              "automotive.identify"
-            ],
-            "tools": [
-              "lookup_part"
-            ],
-            "slots": {}
+            "alternatives": [
+              {
+                "status": "completed",
+                "ops": [
+                  "automotive.identify"
+                ],
+                "tools": [
+                  "lookup_part"
+                ],
+                "slots": {},
+                "optionalTools": [
+                  "search_web"
+                ],
+                "queryContains": "刹车片",
+                "absentForbidden": [
+                  "automotive.identify"
+                ]
+              },
+              {
+                "status": "completed",
+                "ops": [
+                  "research.search"
+                ],
+                "tools": [
+                  "search_web"
+                ],
+                "slots": {},
+                "queryContains": "刹车片",
+                "absentForbidden": [
+                  "automotive.identify"
+                ]
+              }
+            ]
           },
           "input": {}
         }
@@ -1605,5 +1768,5 @@
       "expect": "打开文件逐格核对，无虚构行、无错误合计。"
     }
   ],
-  "ms": 27251
+  "ms": 24162
 }
