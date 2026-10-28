@@ -51,7 +51,7 @@ QQ 好友/群消息 ──► NapCat / SnowLuma（OneBot v11 WS）──► 本�
    `config.json` 里对应的密钥字段留空即可，启动时会自动用环境变量覆盖。
    不建 `.env` 也可以，直接把 key 填进 `config.json → llm.apiKey`。
 2. **接 QQ**（二选一，见下一节）
-   装好 NapCat 或 SnowLuma，用它登录一个 QQ 小号，并开启 OneBot 的 WebSocket 服务（默认 `127.0.0.1:3001`）。
+   装好 SnowLuma（本文验证过的方案）或 NapCat，用它登录一个 QQ 小号，并开启 OneBot 的 WebSocket 服务（默认 `127.0.0.1:3001`）。
 3. **启动**
    双击 `start.bat`（或 `node src/index.js`）。控制台显示“已连接”就成功了，去 QQ 给小号发条消息。
 
@@ -59,7 +59,9 @@ QQ 好友/群消息 ──► NapCat / SnowLuma（OneBot v11 WS）──► 本�
 
 ## 接 QQ：选一种
 
-### 方式一：NapCat（推荐，社区最常用）
+> 两者都是 OneBot v11 实现，本程序代码不依赖具体用哪个。本仓库的示例与截图是在 **SnowLuma** 上验证的；NapCat 同样可用，只是步骤略有不同。
+
+### 方式一：NapCat（社区最常用，可替换）
 
 1. 电脑上先装好 QQ（QQNT），并**用一次你的 QQ 小号登录过**，让客户端准备好运行环境。
 2. 到 [NapCat Releases](https://github.com/NapNeko/NapCatQQ/releases/latest) 下载 `NapCat.Shell.zip`（约 36MB），解压到比如 `C:\NapCat`。
@@ -67,12 +69,12 @@ QQ 好友/群消息 ──► NapCat / SnowLuma（OneBot v11 WS）──► 本�
 4. 在 NapCat 的 WebUI 里扫码登录**小号**。
 5. 进「网络配置」→ 新建「WebSocket 服务器」：
    - 地址 `127.0.0.1`，端口 `3001`
-   - token 可以不设；设了就把同样的值填到本项目的 `config.json → onebot.accessToken`
+   - token 可以不设；设了就把同样的值填到 `.env` 的 `ONEBOT_ACCESS_TOKEN`（或 `config.json → onebot.accessToken`）
 6. 回到本项目，确认 `onebot.wsUrl` 是 `ws://127.0.0.1:3001`，启动。
 
 > ⚠️ NapCat 会接管它启动的那个 QQ 客户端。用小号时，主号建议在手机上或另一台设备上待着；同一台电脑上两个 QQ 号同时在线需要额外折腾（复制一份 QQ 目录、改端口），不建议新手尝试。
 
-### 方式二：SnowLuma（视频里同款）
+### 方式二：SnowLuma（视频里同款，本仓库验证过的方案）
 
 > SnowLuma 的 EULA 规定安装、启动、扫码要由使用者自己完成，所以这一步得你本人操作；本程序只负责连它的 OneBot。
 
