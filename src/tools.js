@@ -7,6 +7,9 @@ import { lookupPart } from './parts.js';
 import { addGlobalFact, isOwner, loadGlobal } from './global.js';
 import { addRelay, canRelay, findContact, markDelivered, peekPending } from './relay.js';
 import { formatMediaList, searchMedia } from './media-log.js';
+import { searchBili, pickVideo, downloadBili, videoFileName } from './bilibili.js';
+import { findPython } from './tts.js';
+import { logMc } from './mc-log.js';
 
 const STICKER_DIR = path.join(DATA_DIR, 'stickers');
 const STICKER_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
@@ -298,7 +301,7 @@ const SPECS = {
     function: {
       name: 'relay_message',
       description:
-        '帮对方给主人带一句话（只有主人白名单里的好友能用）。对方说“帮我告诉 Owner…”“帮我转告你主人…”时用。',
+        '帮对方给主人带一句话（只有主人白名单里的好友能用）。对方说“帮我告诉 Pay…”“帮我转告你主人…”时用。',
       parameters: {
         type: 'object',
         properties: {
@@ -321,7 +324,7 @@ const SPECS = {
     function: {
       name: 'relay_to_friend',
       description:
-        '主人让给某个好友带话时用（只有主人能用）。主人说“帮我告诉 好友A……”“给某某发一句……”时调用，会立刻发出去。',
+        '主人让给某个好友带话时用（只有主人能用）。主人说“帮我告诉 TDHD·R……”“给某某发一句……”时调用，会立刻发出去。',
       parameters: {
         type: 'object',
         properties: {
@@ -346,6 +349,226 @@ const SPECS = {
       },
     },
   },
+  mc_connect: {
+    type: 'function',
+    function: {
+      name: 'mc_connect',
+      description: '让机器人进入 Minecraft 服务器（只有主人能用）。对方说“连 127.0.0.1:25565”“进服陪我玩”时用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          host: { type: 'string', description: '服务器地址，默认 127.0.0.1' },
+          port: { type: 'string', description: '端口，默认 25565' },
+        },
+      },
+    },
+  },
+  mc_status: {
+    type: 'function',
+    function: {
+      name: 'mc_status',
+      description: '查看机器人在 Minecraft 里的状态：坐标、血量、饥饿、维度、在线玩家、手持物。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  mc_move: {
+    type: 'function',
+    function: {
+      name: 'mc_move',
+      description: '让机器人走到指定坐标（只有主人能用）。一次最多走 20 秒，没到会报超时。',
+      parameters: {
+        type: 'object',
+        properties: {
+          x: { type: 'string' }, y: { type: 'string' }, z: { type: 'string' },
+        },
+        required: ['x', 'y', 'z'],
+      },
+    },
+  },
+  mc_dig: {
+    type: 'function',
+    function: {
+      name: 'mc_dig',
+      description: '让机器人挖最近的某种方块（只有主人能用）。方块名用英文 id，例如 oak_log、iron_ore、stone。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '方块英文名' },
+          count: { type: 'string', description: '挖几个，默认 1，最多 12' },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  mc_say: {
+    type: 'function',
+    function: {
+      name: 'mc_say',
+      description: '让机器人在 Minecraft 公屏说一句话（所有玩家可见）。',
+      parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+    },
+  },
+  mc_inventory: {
+    type: 'function',
+    function: {
+      name: 'mc_inventory',
+      description: '查看机器人在 Minecraft 里的背包和手持物。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  mc_follow: {
+    type: 'function',
+    function: {
+      name: 'mc_follow',
+      description: '让机器人在 Minecraft 里跟着某个玩家走（只有主人能用）。',
+      parameters: { type: 'object', properties: { name: { type: 'string', description: '玩家名' } }, required: ['name'] },
+    },
+  },
+  mc_stop: {
+    type: 'function',
+    function: {
+      name: 'mc_stop',
+      description: '让机器人停下当前动作（停止跟随、停止寻路）。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  mc_eat: {
+    type: 'function',
+    function: {
+      name: 'mc_eat',
+      description: '让机器人吃东西回饥饿值（背包里有食物才行）。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  mc_place: {
+    type: 'function',
+    function: {
+      name: 'mc_place',
+      description: '让机器人在指定坐标放一个方块（需要背包里有这个方块）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          x: { type: 'string' }, y: { type: 'string' }, z: { type: 'string' },
+          name: { type: 'string', description: '方块名，比如 oak_planks、dirt、cobblestone' },
+        },
+        required: ['x', 'y', 'z', 'name'],
+      },
+    },
+  },
+  mc_craft: {
+    type: 'function',
+    function: {
+      name: 'mc_craft',
+      description: '让机器人在 Minecraft 里合成物品（只有主人能用）。会尽量自动补木板、木棍等中间材料。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '物品名，如 oak_planks、stick、crafting_table、wooden_pickaxe、chest' },
+          count: { type: 'string', description: '数量，默认 1' },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  mc_chest: {
+    type: 'function',
+    function: {
+      name: 'mc_chest',
+      description: '让机器人操作附近的箱子：list 看内容、put 存东西、take 取东西（只有主人能用）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', description: 'list / put / take' },
+          name: { type: 'string', description: '物品名（put/take 需要）' },
+          count: { type: 'string', description: '数量' },
+        },
+        required: ['action'],
+      },
+    },
+  },
+  mc_attack: {
+    type: 'function',
+    function: {
+      name: 'mc_attack',
+      description: '让机器人打附近 16 格内的怪（只有主人能用）。不给名字就打最近的敌对生物。',
+      parameters: {
+        type: 'object',
+        properties: { name: { type: 'string', description: '怪的名字，比如 zombie，可留空' } },
+      },
+    },
+  },
+  mc_sleep: {
+    type: 'function',
+    function: {
+      name: 'mc_sleep',
+      description: '让机器人走到附近床上睡觉（只有主人能用，夜晚或雷雨才有效）。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  mc_task: {
+    type: 'function',
+    function: {
+      name: 'mc_task',
+      description: '给机器人派长任务：收集 N 个方块，挖够自动回来。也可查进度、取消（只有主人能用）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', description: 'start / status / cancel' },
+          block: { type: 'string', description: '方块英文名（start 且不填 target 时用）' },
+          target: { type: 'string', description: '按目标自动规划：iron / stone / wood / coal' },
+          count: { type: 'string', description: '数量' },
+        },
+        required: ['action'],
+      },
+    },
+  },
+  mc_build: {
+    type: 'function',
+    function: {
+      name: 'mc_build',
+      description: '用背包里的方块在指定坐标搭一个实心长方体（最多 64 格，只有主人能用）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          x: { type: 'string' }, y: { type: 'string' }, z: { type: 'string' },
+          width: { type: 'string' }, height: { type: 'string' }, depth: { type: 'string' },
+          block: { type: 'string', description: '方块名，如 cobblestone、oak_planks' },
+        },
+        required: ['x', 'y', 'z', 'block'],
+      },
+    },
+  },
+  mc_farm: {
+    type: 'function',
+    function: {
+      name: 'mc_farm',
+      description: '让机器人收割附近成熟的作物（小麦/胡萝卜/土豆/甜菜，只有主人能用）。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  mc_disconnect: {
+    type: 'function',
+    function: {
+      name: 'mc_disconnect',
+      description: '让机器人从 Minecraft 下线（只有主人能用）。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  fetch_video: {
+    type: 'function',
+    function: {
+      name: 'fetch_video',
+      description:
+        '去 B 站找一个短视频并发给对方（约 5 分钟以内、30MB 以内）。对方说“给我找个 xx 视频”“发个搞笑视频”“找个猫猫视频”时用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '视频关键词，比如“猫猫”“搞笑翻车”“周杰伦演唱会”' },
+        },
+        required: ['query'],
+      },
+    },
+  },
 };
 
 /**
@@ -366,7 +589,7 @@ async function checkImageQuality(llm, file, logger, model) {
             {
               type: 'text',
               text:
-                '检查这张图有没有明显错误：1) 重复或多出来的物体（比如多出来一个篮球/一只手）2) 肢体、手指错乱 3) 衣服或背景上的乱码文字。' +
+                '检查这张图有没有明显错误：1) 重复或多出来的物体（比如多出来一个篮球/一只手/一只鞋）2) 肢体、手指错乱 3) 衣服或背景上的乱码文字 4) 身体部件是否断开或悬空（比如尾巴、翅膀与身体分离，或单独漂在旁边）。' +
                 '只输出 JSON：{"bad": true 或 false, "issue": "简短说明哪里错了"}。没问题就 bad=false。',
             },
             { type: 'image_url', image_url: { url: dataUrl } },
@@ -389,13 +612,15 @@ async function checkImageQuality(llm, file, logger, model) {
 }
 
 const QUALITY_SUFFIX =
-  '。画面里只出现一个主体和必要道具，不要重复物体，不要多出来的球或手，肢体比例正常，不要文字、字母、数字、logo、水印';
+  '。画面里只出现一个主体和必要道具，不要重复物体，不要多出来的球或手，不要多余的鞋或脚，肢体比例正常；' +
+  '如果是人外或半人外角色（尾巴、翅膀、耳朵），这些部件必须与身体自然连接，不能悬空、不能断开、不能单独漂在旁边；' +
+  '构图完整，不要文字、字母、数字、logo、水印';
 
 /**
  * 组装可用工具。
  * ctx: { chatKey, images: [], voices: [], memory }
  */
-export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, relayNotify, friendNotify, jobTracker, logger }) {
+export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify, friendNotify, jobTracker, logger }) {
   const stickers = scanStickers();
   const stickerCats = Object.keys(stickers);
   const specs = [SPECS.draw_image, SPECS.get_time, SPECS.remember, SPECS.sing, SPECS.search_history, SPECS.search_web];
@@ -410,6 +635,25 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, r
     SPECS.relay_list,
     SPECS.relay_to_friend,
     SPECS.find_media,
+    SPECS.fetch_video,
+    SPECS.mc_connect,
+    SPECS.mc_status,
+    SPECS.mc_move,
+    SPECS.mc_dig,
+    SPECS.mc_say,
+    SPECS.mc_inventory,
+    SPECS.mc_follow,
+    SPECS.mc_stop,
+    SPECS.mc_eat,
+    SPECS.mc_place,
+    SPECS.mc_craft,
+    SPECS.mc_chest,
+    SPECS.mc_attack,
+    SPECS.mc_sleep,
+    SPECS.mc_task,
+    SPECS.mc_build,
+    SPECS.mc_farm,
+    SPECS.mc_disconnect,
   );
   if (stickerCats.length) {
     const labels = stickerCats.map((c) => `${c}（${CATEGORY_HINTS[c] || c}）`).join('、');
@@ -578,13 +822,231 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, r
           if (!items.length) return '文件记忆里没有匹配的记录。';
           return `文件记忆里找到这些：\n${formatMediaList(items)}\n回复时用口语说，不要报路径。`;
         }
+        case 'mc_connect': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我进服务器。';
+          if (!minecraft) return 'MC 模块没接上。';
+          try {
+            const st = await minecraft.connect({ host: args.host, port: args.port });
+            logMc({ kind: '进服', detail: `${st.position.x},${st.position.y},${st.position.z}` });
+            return `进服了：${st.username} 在 ${st.position.x},${st.position.y},${st.position.z}，血 ${st.health}。回复里说“我进来了”就行。`;
+          } catch (err) {
+            return `没进去：${String(err.message || '').slice(0, 120)}`;
+          }
+        }
+        case 'mc_status': {
+          if (!minecraft?.online) return '现在不在服务器里。';
+          const st = minecraft.status();
+          return `坐标 ${st.position.x},${st.position.y},${st.position.z}｜血 ${st.health}｜饥饿 ${st.food}｜维度 ${st.dimension}｜在线：${st.players.join('、') || '只有我'}｜手持 ${st.heldItem}`;
+        }
+        case 'mc_move': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能指挥我走。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const st = await minecraft.moveTo(args.x, args.y, args.z);
+            logMc({ kind: '走到', detail: `${st.position.x},${st.position.y},${st.position.z}` });
+            return `走到了 ${st.position.x},${st.position.y},${st.position.z}`;
+          } catch (err) {
+            return `没走到：${String(err.message || '').slice(0, 100)}`;
+          }
+        }
+        case 'mc_dig': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我挖东西。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.dig(args.name, args.count);
+            logMc({ kind: '挖方块', detail: `${args.name} x${r.mined}` });
+            return `挖到 ${r.mined} 个 ${args.name}${r.remaining ? `，还有 ${r.remaining} 个没挖` : ''}`;
+          } catch (err) {
+            return `没挖成：${String(err.message || '').slice(0, 100)}`;
+          }
+        }
+        case 'mc_say': {
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try { minecraft.say(args.text); logMc({ kind: '公屏说话', detail: String(args.text || '').slice(0, 80) }); return '说了。'; } catch (err) { return `没说成：${err.message}`; }
+        }
+        case 'mc_inventory': {
+          if (!minecraft?.online) return '现在不在服务器里。';
+          const inv = minecraft.inventory();
+          const list = Object.entries(inv.items).slice(0, 12).map(([k, v]) => `${k}x${v}`).join('、');
+          return `手持 ${inv.held}｜背包：${list || '空'}`;
+        }
+        case 'mc_follow': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我跟着走。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.follow(args.name, 3);
+            logMc({ kind: '跟随', detail: args.name });
+            return `跟着 ${r.following} 走了（保持 ${r.distance} 格）`;
+          } catch (err) {
+            return `跟不上：${String(err.message || '').slice(0, 100)}`;
+          }
+        }
+        case 'mc_stop': {
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try { minecraft.stopFollow(); logMc({ kind: '停下' }); return '停下了。'; } catch (err) { return `停不下来：${err.message}`; }
+        }
+        case 'mc_eat': {
+          if (!minecraft?.online) return '现在不在服务器里。';
+          const r = await minecraft.eatIfHungry(20);
+          if (r.ate) { logMc({ kind: '吃东西' }); return `吃了，饥饿值 ${r.food}`; }
+          return r.reason ? `没吃成：${r.reason}` : `还不饿（${r.food}）`;
+        }
+        case 'mc_place': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我放方块。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.placeAt(args.x, args.y, args.z, args.name);
+            logMc({ kind: '放方块', detail: `${args.name} @ ${args.x},${args.y},${args.z}` });
+            return '放好了。';
+          } catch (err) {
+            return `没放成：${String(err.message || '').slice(0, 100)}`;
+          }
+        }
+        case 'mc_craft': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我合成东西。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.craft(args.name, args.count);
+            logMc({ kind: '合成', detail: `${r.crafted} x${r.count}` });
+            return `做好了 ${r.crafted} x${r.count}`;
+          } catch (err) {
+            return `没做成：${String(err.message || '').slice(0, 110)}`;
+          }
+        }
+        case 'mc_chest': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我动箱子。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.chest(args.action || 'list', args.name || '', args.count);
+            logMc({ kind: '箱子', detail: `${args.action} ${args.name || ''}` });
+            if (r.chest) return `箱子里：${(r.chest || []).join('、') || '空'}｜背包：${(r.bag || []).join('、') || '空'}`;
+            return `${JSON.stringify(r)}`;
+          } catch (err) {
+            return `箱子没弄成：${String(err.message || '').slice(0, 110)}`;
+          }
+        }
+        case 'mc_attack': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我打怪。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.attack(args.name || '');
+            logMc({ kind: '打怪', detail: `${r.target} 打了${r.hits}下${r.killed ? '，打死了' : ''}` });
+            return r.killed ? `打死了 ${r.target}（${r.hits} 下）` : `打了 ${r.target} ${r.hits} 下，它还在`;
+          } catch (err) {
+            return `没打成：${String(err.message || '').slice(0, 110)}`;
+          }
+        }
+        case 'mc_sleep': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我睡觉。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            await minecraft.sleep();
+            logMc({ kind: '睡觉' });
+            return '躺下了。';
+          } catch (err) {
+            return `睡不着：${String(err.message || '').slice(0, 110)}`;
+          }
+        }
+        case 'mc_task': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能派任务。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          const action = String(args.action || 'status');
+          try {
+            if (action === 'cancel') { minecraft.cancelTask(); logMc({ kind: '取消任务' }); return '任务取消了。'; }
+            if (action === 'status') {
+              const s = minecraft.taskSummary();
+              if (!s.active) return '现在没有在跑的任务。';
+              return `${s.block || s.kind} ${s.progress || 0}/${s.target || '?'}｜状态 ${s.status}${s.error ? '｜' + s.error : ''}`;
+            }
+            if (args.target) {
+              const s2 = await minecraft.startGather(args.target, args.count, cfg.mc?.ownerName);
+              logMc({ kind: '接任务', detail: `${args.target} x${s2.targetCount}` });
+              return `接了：去弄 ${args.target} x${s2.targetCount}，我会先做工具再挖，挖够回来。`;
+            }
+            if (!args.block) return '要收集什么方块？';
+            const s = await minecraft.startCollect(args.block, args.count, cfg.mc?.ownerName);
+            logMc({ kind: '接任务', detail: `${args.block} x${s.target}` });
+            return `接了：收集 ${args.block} x${s.target}，挖够我就回来。`;
+          } catch (err) {
+            return `任务没派成：${String(err.message || '').slice(0, 110)}`;
+          }
+        }
+        case 'mc_build': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我盖东西。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.buildBox({ ...args });
+            logMc({ kind: '盖方块', detail: `${r.block} x${r.placed}` });
+            return `盖好了 ${r.placed} 格（计划 ${r.requested} 格）`;
+          } catch (err) {
+            return `没盖成：${String(err.message || '').slice(0, 110)}`;
+          }
+        }
+        case 'mc_farm': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我收庄稼。';
+          if (!minecraft?.online) return '现在不在服务器里。';
+          try {
+            const r = await minecraft.harvest();
+            logMc({ kind: '收庄稼', detail: `${r.harvested} 株` });
+            return `收了 ${r.harvested} 株（附近找到 ${r.found} 处作物）`;
+          } catch (err) {
+            return `没收成：${String(err.message || '').slice(0, 110)}`;
+          }
+        }
+        case 'mc_disconnect': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          const mcOwner = ctx.chatKey === 'mc:server' && String(ctx.peerName || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+          if (!isOwner(m?.[1], cfg) && !mcOwner) return '只有主人能让我下线。';
+          await minecraft?.disconnect();
+          logMc({ kind: '下线' });
+          return '下线了。';
+        }
+        case 'fetch_video': {
+          const q = String(args.query || '').trim();
+          if (!q) return '要找什么视频？';
+          try {
+            const list = await searchBili(q, 10);
+            const pick = pickVideo(list, 300);
+            if (!pick) return `B站没搜到合适的「${q}」短视频（15 秒~5 分钟）。换个词试试？`;
+            const python = findPython(cfg.office?.pythonPath || cfg.tts?.pythonPath || '');
+            const file = await downloadBili(pick.bvid, python);
+            ctx.videos.push({ file: file.file, name: videoFileName(pick.title), title: pick.title });
+            return `找到《${pick.title}》（${pick.durationText}，UP：${pick.author}），视频已经准备好了。回复里说一句“发你啦”就行，别报链接和路径。`;
+          } catch (err) {
+            return `视频没弄成：${String(err.message || '').slice(0, 120)}。跟对方说一声，换个词再试试。`;
+          }
+        }
         case 'post_qzone': {
           if (!qzone?.enabled) return '空间功能没开。';
           const content = String(args.content || '').slice(0, 300).trim();
           if (!content) return '说说内容为空，先想一句话。';
           const imagePrompt = String(args.image || '').trim() || content;
           const imagePath = args.withImage === false ? '' : await qzone.makeImage(imagePrompt);
-          await qzone.post({ content, imagePath });
+          await qzone.post({ content, imagePath, source: 'tool', chatKey: ctx.chatKey });
           return `说说发出去了${imagePath ? '，配图也一起传了' : '（这次没配图）'}。回复里自然提一句就行，不要报 tid、路径或链接。`;
         }
         case 'sing': {

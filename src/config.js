@@ -10,6 +10,42 @@ export const CONFIG_PATH = process.env.QQBOT_CONFIG
   : path.join(ROOT, 'config.json');
 export const EXAMPLE_CONFIG_PATH = path.join(ROOT, 'config.example.json');
 
+/** 读取 .env（没有也不报错），只在进程环境里没有同名变量时写入。 */
+function loadEnvFile() {
+  try {
+    const text = fs.readFileSync(path.join(ROOT, '.env'), 'utf8');
+    for (const line of text.split(/\r?\n/)) {
+      const m = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+      if (!m || !m[2] || /^#/.test(line)) continue;
+      let value = m[2];
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (!process.env[m[1]]) process.env[m[1]] = value;
+    }
+  } catch {
+    /* 没有 .env 就跳过 */
+  }
+}
+loadEnvFile();
+
+/** 用环境变量覆盖配置里的密钥；config.json 可以只留空字符串。 */
+export function applyEnvOverrides(cfg) {
+  const env = process.env;
+  if (env.DEEPSEEK_API_KEY) cfg.llm.apiKey = env.DEEPSEEK_API_KEY;
+  if (env.DEEPSEEK_BASE_URL) cfg.llm.baseUrl = env.DEEPSEEK_BASE_URL;
+  if (env.REPLICATE_API_TOKEN) {
+    cfg.image.apiKey = env.REPLICATE_API_TOKEN;
+    cfg.song.token = env.REPLICATE_API_TOKEN;
+    cfg.voice.token = env.REPLICATE_API_TOKEN;
+    if (cfg.asr) cfg.asr.token = env.REPLICATE_API_TOKEN;
+  }
+  if (env.ONEBOT_ACCESS_TOKEN) cfg.onebot.accessToken = env.ONEBOT_ACCESS_TOKEN;
+  if (env.ONEBOT_WS_URL) cfg.onebot.wsUrl = env.ONEBOT_WS_URL;
+  if (env.CONSOLE_TOKEN) cfg.console.token = env.CONSOLE_TOKEN;
+  return cfg;
+}
+
 export const DEFAULTS = {
   bot: { name: '小鲸鱼' },
   onebot: { wsUrl: 'ws://127.0.0.1:3001', accessToken: '', httpUrl: '' },
@@ -31,7 +67,7 @@ export const DEFAULTS = {
     historyTurns: 60,
     storeAllTurns: true,
     retrieval: true,
-    recallLimit: 6,
+    recallLimit: 10,
     summaryTriggerChars: 9000,
     group: {
       replyOnAt: true,
@@ -107,9 +143,10 @@ export const DEFAULTS = {
   console: { enabled: true, host: '127.0.0.1', port: 3010, token: '' },
   log: { level: 'info', file: true },
   media: { ffmpegPath: '' },
+  mc: { username: 'Xiaojingyu', host: '127.0.0.1', port: 25565, version: '26.1', ownerName: '' },
   office: { pythonPath: '', theme: 'history', model: 'deepseek-flash', maxImages: 8, imagesPerDeck: 0, imageDelayMs: 12000 },
   relay: { enabled: true, allow: [], dailyLimit: 5, maxLen: 200 },
-  library: { enabled: true, dir: 'D:\\Music', maxSeconds: 0 },
+  library: { enabled: true, dir: 'D:\\无损音乐', maxSeconds: 0 },
   asr: {
     enabled: true,
     token: '',
@@ -179,6 +216,7 @@ export function loadConfig() {
     }
   }
   const cfg = deepMerge(DEFAULTS, fileCfg);
+  applyEnvOverrides(cfg);
   if (!fs.existsSync(CONFIG_PATH)) saveConfig(cfg);
   return cfg;
 }

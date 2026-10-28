@@ -1,13 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadConfig, saveConfig, deepMerge, writePersona, readPersona, ensureDirs, DATA_DIR, ROOT } from './config.js';
+import { loadConfig, saveConfig, deepMerge, writePersona, readPersona, ensureDirs, DATA_DIR, ROOT, applyEnvOverrides } from './config.js';
 import { Logger } from './logger.js';
 import { OneBot } from './onebot.js';
 import { LLM, sleep } from './llm.js';
 import { ImageGen } from './image.js';
 import { peekPending, markDelivered, upsertContact } from './relay.js';
+import { ActionJournal, selfContext } from './self-state.js';
+import { GameHub } from './games.js';
+import { logMc, formatMcDigest } from './mc-log.js';
+import { MC_KNOWLEDGE, mcStatusText } from './mc-knowledge.js';
+import { Minecraft } from './minecraft.js';
 import { logMedia, formatMediaDigest } from './media-log.js';
+import { searchBili, pickVideo, downloadBili, videoFileName } from './bilibili.js';
+import { findPython } from './tts.js';
 import { Memory } from './memory.js';
 import { createTools } from './tools.js';
 import { Brain } from './brain.js';
@@ -50,8 +57,61 @@ const library = new MusicLibrary(cfg.library, logger.child('library'));
 if (library.enabled) library.scan();
 const aligner = new Aligner({ ...cfg.asr, token: cfg.asr.token || cfg.song.token }, logger.child('asr'));
 let qzone = null;
+const games = new GameHub({ logger: logger.child('games') });
+const minecraft = new Minecraft({
+  cfg: cfg.mc,
+  logger: logger.child('mc'),
+  onChat: async (name, message) => {
+    const isOwnerName = String(name || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
+    const text = String(message || '').trim();
+    // 游戏里的“停下/过来”直接处理，不等模型
+    if (minecraft.online) {
+      if (/^(停|停下|停手|别挖|别打了|别动|暂停)/.test(text)) {
+        minecraft.cancelTask();
+        try { minecraft.stopFollow(); } catch {}
+        try { minecraft.bot?.pathfinder?.setGoal(null); } catch {}
+        try { minecraft.say('好，停下了'); } catch {}
+        logMc({ kind: '听指令停下', detail: name });
+        return;
+      }
+      if (/^(过来|来我这|来我这边|回来|跟着我)/.test(text)) {
+        try {
+          const target = minecraft.bot?.players?.[name]?.entity;
+          if (target) {
+            await minecraft.moveTo(target.position.x, target.position.y, target.position.z).catch(() => {});
+            try { minecraft.say('来了'); } catch {}
+          }
+        } catch {}
+        logMc({ kind: '听指令过来', detail: name });
+        return;
+      }
+    }
+    try {
+      logMc({ kind: '公屏聊天', detail: `${name}：${String(message).slice(0, 80)}` });
+      const res = await brain.respond({
+        chatKey: isOwnerName ? `private:${cfg.access?.ownerQQ || ''}` : 'mc:server',
+        title: `MC ${name}`,
+        userText: (() => {
+          let state = '';
+          try {
+            if (minecraft.online) state = mcStatusText(minecraft.snapshot());
+          } catch {
+            state = '';
+          }
+          return `${isOwnerName ? '（这是我主人）' : ''}${state}\n${MC_KNOWLEDGE}\n[Minecraft 公屏] ${name}：${message}`;
+        })(),
+        meta: { scene: 'Minecraft 服务器', peerName: name },
+      });
+      const text = (res.bubbles || []).join(' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (text) minecraft.say(text);
+    } catch (err) {
+      logger.warn(`MC 聊天回复失败：${err.message}`);
+    }
+  },
+});
+const actionJournal = new ActionJournal({ logger: logger.child('actions') });
 const memory = new Memory({ logger: logger.child('memory'), llm, cfg: cfg.chat });
-let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
 const brain = new Brain({
   cfg: cfg.chat,
   llm,
@@ -59,12 +119,21 @@ const brain = new Brain({
   tools,
   logger: logger.child('brain'),
   visionModel: cfg.llm.visionModel,
+  selfState: (chatKey) =>
+    selfContext({
+      chatKey,
+      cfg,
+      journal: actionJournal,
+      runtime: { qzoneInitialized: Boolean(qzone), connected: Boolean(onebot?.status?.().connected) },
+    }),
 });
 const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
 const sender = new ReplySender({ onebot, cfg: cfg.chat, logger: logger.child('reply') });
 
 const stats = { received: 0, replied: 0, ignored: 0, errors: 0, startedAt: Date.now() };
 const activeJobs = new Map();
+const docJobs = new Map();
+const lastDocTopic = new Map();
 
 /** 记一个正在执行的长任务（PPT/写歌/翻唱），控制台能看到。 */
 function beginJob(kind, label) {
@@ -245,9 +314,33 @@ function chatKeyOf(event) {
 function shouldBatch(text, isPrivate, hasAttachment = false) {
   if (!isPrivate || hasAttachment) return false;
   const t = String(text || '').trim();
-  if (!t || t.startsWith('/') || t.length > 14) return false;
-  if (/[。！？!?…~]$/.test(t)) return false;
+  if (!t || t.startsWith('/')) return false;
+  // 太长的单条直接处理，避免把一整段话也拖慢
+  if (t.length > 400) return false;
   return true;
+}
+
+const pendingEvents = new Map();
+
+/** 把私聊里连续发来的消息攒成一条，安静几秒后再处理。 */
+function enqueueEvent(chatKey, event) {
+  const entry = pendingEvents.get(chatKey) || { segments: [], timer: null, event };
+  entry.segments.push(...(event.message || []).filter(Boolean));
+  entry.event = event;
+  clearTimeout(entry.timer);
+  const segs = event.message || [];
+  const text = segs.filter((s) => s.type === 'text').map((s) => s.data?.text || '').join('').trim();
+  const hasAttach = segs.some((s) => s.type !== 'text');
+  const looksDone = /[。！？!?…~]$/.test(text) || text.length >= 60;
+  // 等久一点，让“图片 + 两句话”这种连发尽量并成一次
+  const delay = hasAttach ? 4000 : looksDone ? 5000 : 8000;
+  entry.timer = setTimeout(() => {
+    pendingEvents.delete(chatKey);
+    onMessage({ ...entry.event, message: entry.segments, __batch: true }).catch((err) =>
+      logger.warn(`合并消息处理失败：${err.message}`),
+    );
+  }, delay);
+  pendingEvents.set(chatKey, entry);
 }
 
 const pendingBatches = new Map();
@@ -275,10 +368,14 @@ function enqueueBatch(chatKey, event, text) {
   entry.texts.push(String(text || '').trim());
   entry.event = event;
   clearTimeout(entry.timer);
-  const delay = entry.texts.join('').length < 10 ? 3200 : 2000;
+  const mergedLen = entry.texts.join('').length;
+  const last = entry.texts[entry.texts.length - 1] || '';
+  // 看起来说完了（有句末标点或已经够长）就早点回；像半句话就多等一会
+  const looksDone = /[。！？!?…~]$/.test(last) || mergedLen >= 60;
+  const delay = looksDone ? 1400 : 2800;
   entry.timer = setTimeout(() => {
     pendingBatches.delete(chatKey);
-    const merged = entry.texts.join('');
+    const merged = entry.texts.join('\n');
     onMessage({ ...entry.event, message: [{ type: 'text', data: { text: merged } }], __batch: true }).catch((err) =>
       logger.warn(`合并消息处理失败：${err.message}`),
     );
@@ -521,6 +618,37 @@ function wantDocType(text) {
   return '';
 }
 
+/** 是不是“真的要我做一份文档”，而不是只是提到/回忆某个文件。 */
+function wantsDocCreation(text) {
+  const t = String(text || '');
+  if (!t) return false;
+  // 回忆、提问、引用文件：不做
+  if (/(记得|还记得|记不记得|我刚才发|我发给|发给你的|你发的|回忆|想起来|有没有收到|看到了吗)/.test(t)) return false;
+  // 必须有明确的“做/写/生成/整理…”动词
+  if (!/(做|写|生成|整理|汇总|合并|导出|转成|弄|来一?份|来一?个|帮我做|帮我写|做个|写个|生成个)/.test(t)) return false;
+  return Boolean(wantDocType(t));
+}
+
+
+/** 对方是不是在要一段视频（不是自己拍/剪）。 */
+function wantsVideoRequest(text) {
+  const t = String(text || '');
+  if (!/视频/.test(t)) return false;
+  if (!/(找|搜|发|来|看|要|给我|整|搬)/.test(t)) return false;
+  if (/(拍|剪|做|生成|画|改)/.test(t)) return false;
+  return true;
+}
+
+/** 从“帮我找个搞笑视频”里抠出“搞笑”。 */
+function extractVideoQuery(text) {
+  const q = String(text || '')
+    .replace(/.*?(找个|找找|搜个|搜一下|搜|发个|来个|要个|给我|找|发|来|看)/, '')
+    .replace(/视频.*$/, '')
+    .replace(/[，。！？!?、,.\s]/g, '')
+    .trim();
+  return (q || '搞笑').slice(0, 20);
+}
+
 /** 粗暴地抠出文档主题：“帮我做个朱棣生平的PPT” → “朱棣生平”。 */
 function extractDocTopic(text, kind) {
   let t = String(text || '').trim();
@@ -623,6 +751,7 @@ async function runCoverJob(chat, audioPath, opts = {}) {
 
 /** 后台生成一首歌，完成后以文件形式发回；失败退回哼唱。 */
 async function runSongJob(chat, job) {
+  job.startedAt = job.startedAt || Date.now();
   const limit = cfg.song.dailyLimit ?? 5;
   const dayKey = `${chat.key}:${new Date().toISOString().slice(0, 10)}`;
   const used = songUsage.get(dayKey) ?? 0;
@@ -650,7 +779,9 @@ async function runSongJob(chat, job) {
       }
     }
     const title = job.title ? `《${job.title}》` : '新歌';
-    await sender.sendAudio(chat, song.file, `${title}-${song.seconds || 30}s.mp3`, pick(['写好啦，听听看～', '新鲜出炉，快听听～']), cfg.song.sendAsVoice ?? 'auto');
+    const tookSec = Math.round((Date.now() - (job.startedAt || Date.now())) / 1000);
+    const lead = tookSec > 120 ? `之前你让我写的${title}好了，听听看～` : `${title}写好啦，听听看～`;
+    await sender.sendAudio(chat, song.file, `${title}-${song.seconds || 30}s.mp3`, lead, cfg.song.sendAsVoice ?? 'auto');
     memory.append(chat.key, 'assistant', `[我刚写了一首${title}并发给你了，音频文件]`, chat.title);
     lastSent.set(chat.key, { kind: 'song', title: job.title || '原创' });
     logMedia({ chatKey: chat.key, direction: 'out', kind: 'audio', name: `${title}.mp3`, title: job.title || '原创', detail: `${song.seconds || 30} 秒`, path: song.file });
@@ -717,19 +848,28 @@ async function startLibraryCover(chat, hit, { startPhrase = '', requestedSeconds
 
 /** 后台生成 PPT / Word，完成后发文件。 */
 async function runOfficeJob(chat, job) {
+  const controller = new AbortController();
+  docJobs.set(chat.key, { controller, job });
+  if (job.topic) lastDocTopic.set(chat.key, job.topic);
   try {
     const doc =
       job.kind === 'docx'
-        ? await office.makeDocx({ topic: job.topic, sections: job.sections })
+        ? await office.makeDocx({ topic: job.topic, sections: job.sections, signal: controller.signal })
         : job.kind === 'excel'
-          ? await office.makeExcel({ topic: job.topic, rows: job.rows, columns: job.columns })
-          : await office.makePpt({ topic: job.topic, pages: job.pages, theme: job.theme, withImages: true });
+          ? await office.makeExcel({ topic: job.topic, rows: job.rows, columns: job.columns, signal: controller.signal })
+          : await office.makePpt({ topic: job.topic, pages: job.pages, theme: job.theme, withImages: true, signal: controller.signal });
     await sender.sendFile(chat, doc.file, doc.name, pick(['做好啦，看看行不行～', '出炉了，你看看要不要改～']));
     memory.append(chat.key, 'assistant', `[我刚做好并发给你一份文件：${doc.name}]`, chat.title);
     logMedia({ chatKey: chat.key, direction: 'out', kind: 'doc', name: doc.name, path: doc.file });
   } catch (err) {
+    if (err.name === 'AbortError' || /aborted|cancel/i.test(err.message)) {
+      logger.info('文档任务已取消');
+      return;
+    }
     logger.warn(`生成文档失败：${err.message}`);
     await sender.send(chat, { bubbles: [pick(['这次没做出来，等会儿再试一次？', '文档卡住了，我再来一次好不好？'])] }).catch(() => {});
+  } finally {
+    docJobs.delete(chat.key);
   }
 }
 
@@ -812,25 +952,56 @@ async function onMessage(event) {
     return;
   }
 
-  // 连着发好几个 Word/PPT/Excel：攒 2.5 秒一起看，只回一次
-  const fileSegs = (event.message || []).filter((s) => s.type === 'file');
-  if (fileSegs.length && !event.__batch) {
-    enqueueFiles(chat.key, event, event.message || []);
-    return;
+  // 文档改需求：先停掉正在做的，再按新格式来
+  const msgText = String(text || '');
+  const stopDoc = /(别做|不要做|先不做|停|取消|别弄).{0,6}(ppt|幻灯片|word|文档|excel|表格)/.test(msgText) ||
+    /(ppt|幻灯片).{0,6}(别做|不要|停|取消)/.test(msgText) ||
+    /^(停|停下|别做了|取消|算了)$/.test(msgText.trim());
+  if (stopDoc) {
+    const cur = docJobs.get(chat.key);
+    if (cur) {
+      cur.controller.abort();
+      docJobs.delete(chat.key);
+      logger.info('收到取消指令，已中止文档任务');
+    }
+    if (/(word|docx|文档)/i.test(msgText) && /(改|换|还是|重新)/.test(msgText)) {
+      const topic = lastDocTopic.get(chat.key) || extractDocTopic(msgText, 'docx') || '本周学习任务';
+      trackJob(`文档：docx ${topic}`, runOfficeJob(chat, { kind: 'docx', topic, sections: 5 })).catch((err) =>
+        logger.warn(`文档任务异常：${err.message}`),
+      );
+      await sender.send(chat, { bubbles: ['好，PPT 停了，改做 Word～'] });
+      return;
+    }
   }
 
-  // 一句话被拆成几条发：短、没标点、纯文字的消息先攒一会儿再一起答
-  const pending = pendingBatches.get(chat.key);
-  if (pending && !event.__batch) {
-    clearTimeout(pending.timer);
-    pendingBatches.delete(chat.key);
-    const merged = [...pending.texts, String(text || '').trim()].filter(Boolean).join('');
-    const attachments = (event.message || []).filter((s) => s.type !== 'text');
-    logger.info(`合并碎片消息：${merged}`);
-    return onMessage({ ...event, message: [{ type: 'text', data: { text: merged } }, ...attachments], __batch: true });
+  // 游戏：私聊里开了局就直接按规则处理，不走进普通聊天
+  if (isPrivate && !String(text || '').trim().startsWith('/')) {
+    const started = games.tryStart(chat.key, text);
+    if (started) {
+      await sender.send(chat, { bubbles: [started] });
+      return;
+    }
+    const out = games.handle(chat.key, text);
+    if (out?.reply) {
+      await sender.send(chat, { bubbles: [out.reply] });
+      return;
+    }
+    if (out?.prompt) {
+      // 游戏进行中：直接交给模型扮演主持人，不经过点歌/文档/画图这些意图
+      const gameReply = await brain.respond({
+        chatKey: chat.key,
+        title: chat.title,
+        userText: `${text}\n\n${out.prompt}`,
+        meta: { scene: '私聊', peerName: senderName },
+      });
+      await sender.send(chat, gameReply);
+      return;
+    }
   }
-  if (!event.__batch && shouldBatch(text, isPrivate, images.length + files.length + audios.length + videos.length > 0)) {
-    enqueueBatch(chat.key, event, text);
+
+  // 私聊消息统一缓冲：连续发多条（文字/图片/文件/语音）合并成一次处理，只回一次
+  if (isPrivate && !event.__batch && !String(text || '').trim().startsWith('/')) {
+    enqueueEvent(chat.key, event);
     return;
   }
 
@@ -851,6 +1022,23 @@ async function onMessage(event) {
   // 用户自己说的话：只用来判断意图（点歌/画图/文档…），
   // 后面会把文件正文、图片说明等拼进 body，那些内容不能触发点歌。
   const userSay = String(body || '');
+
+  // 自动记笔记：行程、考试、承诺、偏好这类信息，直接写进长期记忆
+  const noteHints = /(下周|这周|本周|明天|后天|周[一二三四五六日天]|考试|截止|ddl|deadline|proposal|presentation|\bpre\b|作业|论文|报告|会议|面试|约好|答应|提醒我|我喜欢|我讨厌|我住|我在准备|养了|生日)/i;
+  if (
+    noteHints.test(userSay) &&
+    userSay.length >= 6 &&
+    userSay.length <= 140 &&
+    !/^https?:/i.test(userSay) &&
+    !/^\/[a-z]/i.test(userSay)
+  ) {
+    const clean = userSay.replace(/\s+/g, ' ').trim().slice(0, 120);
+    try {
+      if (memory.addNote(chat.key, clean, chat.title)) logger.info(`自动记笔记：${clean.slice(0, 40)}`);
+    } catch {
+      /* ignore */
+    }
+  }
 
   // 自己没发图，但引用了一张图（常见的“看看这张”用法）
   let effectiveImages = images;
@@ -1138,12 +1326,23 @@ async function onMessage(event) {
       return;
     }
     if (songQuery.length >= 2) {
+      const songLabel = coverReq.artist ? `${coverReq.artist}的《${songQuery}》` : `《${songQuery}》`;
+      if (coverReq.artist) {
+        const byArtist = library.search(coverReq.artist, { limit: 5 });
+        const names = byArtist.map((h) => `《${h.title}》`).slice(0, 3);
+        if (names.length) {
+          await sender.send(chat, {
+            bubbles: [`${songLabel}我这儿没有呀。不过${coverReq.artist}的我存了${names.join('、')}，想听哪首？`],
+          }).catch(() => {});
+          return;
+        }
+      }
       const lines = [
-        `《${songQuery}》我翻了一圈没翻到…要不换一首？或者我给你写一首同味道的原创？`,
-        `唔，《${songQuery}》不在我曲库里诶。要不换一首？或者我现写一首类似的给你听？`,
-        `找了一圈，《${songQuery}》没存下来，有点可惜～要不我给你写一首同味道的原创？`,
-        `《${songQuery}》我暂时唱不了，曲库没这首。要不我给你写一首相似的？`,
-        `哎，《${songQuery}》这首我这儿还没有。你先换一首？或者我现写一首给你？`,
+        `${songLabel}我翻了一圈没翻到…要不换一首？或者我给你写一首同味道的原创？`,
+        `唔，${songLabel}不在我曲库里诶。要不换一首？或者我现写一首类似的给你听？`,
+        `找了一圈，${songLabel}没存下来，有点可惜～要不我给你写一首同味道的原创？`,
+        `${songLabel}我暂时唱不了，曲库没这首。要不我给你写一首相似的？`,
+        `哎，${songLabel}这首我这儿还没有。你先换一首？或者我现写一首给你？`,
       ];
       await sender.send(chat, { bubbles: [pick(lines)] }).catch(() => {});
       return;
@@ -1285,6 +1484,17 @@ async function onMessage(event) {
   await runSerial(chat.key, async () => {
     try {
       logger.info(`收到 ${chat.key}：${body.slice(0, 60)}${effectiveImages.length ? ` [图片x${effectiveImages.length}]` : ''}`);
+      const isOwnerChat = chat.key === `private:${cfg.access?.ownerQQ || ''}`;
+      if (isOwnerChat && /(我的世界|minecraft|mc|游戏里|服务器)/i.test(userSay) && minecraft?.online) {
+        try {
+          body += `\n\n${MC_KNOWLEDGE}\n${mcStatusText(minecraft.snapshot())}`;
+        } catch {
+          /* ignore */
+        }
+      }
+      // 游戏动态只给主人看，避免其他聊天对象看到主人在 MC 的坐标与活动
+      const mcDigest = isOwnerChat ? formatMcDigest() : '';
+      if (mcDigest) body += `\n\n${mcDigest}`;
       const mediaDigest = formatMediaDigest(chat.key);
       if (mediaDigest) body += `\n\n${mediaDigest}`;
       let result = await brain.respond({
@@ -1359,6 +1569,23 @@ async function onMessage(event) {
         }
       }
 
+      // 兜底：对方要视频，模型没调 fetch_video，就自己去找一段
+      if (wantsVideoRequest(userSay) && !(result.videos ?? []).length) {
+        const q = extractVideoQuery(userSay);
+        try {
+          const list = await searchBili(q, 10);
+          const pick = pickVideo(list, 300);
+          if (pick) {
+            const py = findPython(cfg.office?.pythonPath || cfg.tts?.pythonPath || cfg.tts?.pythonPath || '');
+            const f = await downloadBili(pick.bvid, py);
+            result = { ...result, videos: [{ file: f.file, name: videoFileName(pick.title), title: pick.title }] };
+            logger.info(`模型没发起视频，兜底下载：${pick.title}`);
+          }
+        } catch (err) {
+          logger.warn(`兜底找视频失败：${err.message}`);
+        }
+      }
+
       // 兜底：说了“翻唱/变声/用我刚唱的”，但模型没真的发起翻唱
       if (/(翻唱|变声|唱成|用我(刚|刚才)?(唱|录|发)的)/.test(userSay) && !(result.voices ?? []).length) {
         const rec = prevAudio.get(chat.key) || lastAudio.get(chat.key);
@@ -1372,11 +1599,18 @@ async function onMessage(event) {
 
       await sender.send(chat, result, { quoteId: isPrivate ? event.message_id : undefined });
       if (relayIds.length) markDelivered(relayIds);
+      for (const v of result.videos ?? []) {
+        sender
+          .sendVideo(chat, v.file, v.name, pick(['视频来啦～', '找到啦，发你看看', '给你搬过来了～']))
+          .then(() => logMedia({ chatKey: chat.key, direction: 'out', kind: 'video', name: v.name, title: v.title || '', path: v.file }))
+          .catch((err) => logger.warn(`发送视频失败：${err.message}`));
+      }
       for (const job of result.songs ?? []) {
         trackJob(`写歌：${job.title || '新歌'}`, runSongJob(chat, job)).catch((err) => logger.warn(`歌曲任务异常：${err.message}`));
       }
-      // 兜底：对方要 PPT/Word/Excel，模型却没调工具，就替它排队生成
-      const docKind = wantDocType(userSay);
+      // 兜底：对方明确要 PPT/Word/Excel，模型却没调工具，就替它排队生成
+      // 只是“提到/回忆某个文档”不算，别自作主张做文件
+      const docKind = wantsDocCreation(userSay) ? wantDocType(userSay) : '';
       if (docKind && !(result.documents ?? []).length) {
         const topic = extractDocTopic(body, docKind) || body.replace(/\[[^\]]*\]/g, '').trim().slice(0, 60);
         if (topic) {
@@ -1493,9 +1727,10 @@ onebot.on('ready', ({ selfId, nickname }) => {
         selfId,
         persona: readPersona(),
         memory,
+        journal: actionJournal,
       });
       qzone.startAuto();
-      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
     } else {
       qzone.updateConfig(cfg.qzone);
     }
@@ -1522,8 +1757,17 @@ async function applyConfig(rawPatch) {
   const oldToken = cfg.onebot.accessToken;
 
   Object.assign(cfg, next);
+  applyEnvOverrides(cfg);
 
-  saveConfig(cfg);
+  // 落盘时不要把环境变量里的密钥写回 config.json
+  const disk = structuredClone(cfg);
+  if (disk.llm) disk.llm.apiKey = '';
+  if (disk.image) disk.image.apiKey = '';
+  if (disk.song) disk.song.token = '';
+  if (disk.voice) disk.voice.token = '';
+  if (disk.onebot) disk.onebot.accessToken = '';
+  if (disk.console) disk.console.token = '';
+  saveConfig(disk);
   llm.updateConfig(cfg.llm);
   brain.visionModel = cfg.llm.visionModel;
   imageGen.updateConfig(cfg.image);
@@ -1537,7 +1781,7 @@ async function applyConfig(rawPatch) {
   brain.updateConfig(cfg.chat);
   memory.updateConfig(cfg.chat);
   sender.updateConfig(cfg.chat);
-  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
   brain.tools = tools;
   if (cfg.llm.maxTokens) llm.cfg.maxTokens = cfg.llm.maxTokens;
 

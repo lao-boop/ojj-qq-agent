@@ -11,7 +11,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * 依赖 SnowLuma 的扩展动作：send_qzone_msg / get_qzone_msg_list / get_qzone_msg_detail / comment_qzone
  */
 export class Qzone {
-  constructor({ onebot, cfg, llm, imageGen, logger, selfId, persona, memory }) {
+  constructor({ onebot, cfg, llm, imageGen, logger, selfId, persona, memory, journal }) {
     this.onebot = onebot;
     this.cfg = cfg || {};
     this.llm = llm;
@@ -20,6 +20,7 @@ export class Qzone {
     this.selfId = String(selfId || '');
     this.persona = persona || '';
     this.memory = memory || null;
+    this.journal = journal || null;
     this.state = this.#loadState();
     this.timers = [];
     this.busy = false;
@@ -55,23 +56,39 @@ export class Qzone {
   }
 
   /** 发一条说说，返回 { tid, time }。 */
-  async post({ content, imagePath, ugcRight } = {}) {
+  async post({ content, imagePath, ugcRight, source = 'direct', chatKey = '' } = {}) {
     const text = String(content || '').trim();
     if (!text) throw new Error('说说内容不能为空');
     const images = imagePath ? [`file:///${imagePath.replace(/\\/g, '/')}`] : [];
-    const res = await this.#call('send_qzone_msg', {
-      content: text,
-      images,
-      ugc_right: ugcRight ?? this.cfg.ugcRight ?? 1,
-    });
-    const tid = res?.tid || '';
-    this.state.lastPostAt = Date.now();
-    this.state.lastPostTid = tid;
-    const day = new Date().toISOString().slice(0, 10);
-    this.state.posts[day] = (this.state.posts[day] || 0) + 1;
-    this.#saveState();
-    this.logger.info(`说说已发布：${tid}（${images.length ? '带图' : '纯文字'}）`);
-    return { tid, time: res?.time, text, withImage: images.length > 0 };
+    const actionId = this.journal?.begin({ source, chatKey, content: text }) || '';
+    try {
+      if (actionId) this.journal.update(actionId, { status: 'running', content: text.slice(0, 4000), withImage: images.length > 0 });
+      const res = await this.#call('send_qzone_msg', {
+        content: text,
+        images,
+        ugc_right: ugcRight ?? this.cfg.ugcRight ?? 1,
+      });
+      const tid = res?.tid || '';
+      if (actionId) {
+        this.journal.finish(actionId, { status: 'succeeded', tid, detail: '接口返回成功' });
+      }
+      this.state.lastPostAt = Date.now();
+      this.state.lastPostTid = tid;
+      const day = new Date().toISOString().slice(0, 10);
+      this.state.posts[day] = (this.state.posts[day] || 0) + 1;
+      this.#saveState();
+      this.logger.info(`说说已发布：${tid}（${images.length ? '带图' : '纯文字'}）`);
+      return { tid, time: res?.time, text, withImage: images.length > 0 };
+    } catch (err) {
+      if (actionId) {
+        const failed = /拒绝|未连接|没有连接|not connected/i.test(err.message || '');
+        this.journal.finish(actionId, {
+          status: failed ? 'failed' : 'unknown',
+          detail: failed ? '发布接口拒绝或未连接' : `调用中断：${String(err.message || '').slice(0, 80)}`,
+        });
+      }
+      throw err;
+    }
   }
 
   /** 让模型写一条说说 + 一句配图描述。 */
@@ -156,7 +173,7 @@ export class Qzone {
       }
       if (!text) throw new Error('没写出内容');
       const imagePath = await this.makeImage(imagePrompt);
-      return await this.post({ content: text, imagePath });
+      return await this.post({ content: text, imagePath, source: 'scheduler' });
     } finally {
       this.busy = false;
     }

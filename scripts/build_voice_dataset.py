@@ -17,10 +17,7 @@ import zipfile
 import edge_tts
 
 VOICE = "zh-CN-XiaoyiNeural"
-FFMPEG = os.environ.get(
-    "FFMPEG_PATH",
-    r"C:\Users\user\AppData\Local\AstrBot\backend\python\ffmpeg.exe",
-)
+FFMPEG = os.environ.get("FFMPEG_PATH") or shutil.which("ffmpeg") or "ffmpeg"
 
 # 覆盖尽量多的音素/语气：陈述、疑问、感叹、数字、人名、情绪、日常、书面、歌词感
 TEXTS = [

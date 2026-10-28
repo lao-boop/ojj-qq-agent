@@ -178,6 +178,7 @@ export class Office {
         timeout: 180000,
         windowsHide: true,
         maxBuffer: 8 * 1024 * 1024,
+        signal: this._signal || undefined,
       });
     } catch (err) {
       throw new Error(`生成失败：${String(err.stderr || err.message).slice(0, 200)}`);
@@ -193,7 +194,8 @@ export class Office {
   }
 
   /** 生成 PPT，返回 { file, name, title, pages }。 */
-  async makePpt({ topic, pages = 12, theme = 'history', withImages = true } = {}) {
+  async makePpt({ topic, pages = 12, theme = 'history', withImages = true, signal } = {}) {
+    this._signal = signal || null;
     const started = Date.now();
     const outline = await this.#outlinePpt({ topic, pages, theme });
     if (!outline.slides.length) throw new Error('大纲为空');
@@ -253,7 +255,8 @@ export class Office {
   }
 
   /** 生成 Excel 表格，返回 { file, name, title, rows }。 */
-  async makeExcel({ topic, rows = 10, columns = 5 } = {}) {
+  async makeExcel({ topic, rows = 10, columns = 5, signal } = {}) {
+    this._signal = signal || null;
     const started = Date.now();
     const res = await this.llm.chat({
       messages: [
@@ -291,7 +294,8 @@ export class Office {
   }
 
   /** 生成 Word，返回 { file, name, title, sections }。 */
-  async makeDocx({ topic, sections = 5 } = {}) {
+  async makeDocx({ topic, sections = 5, signal } = {}) {
+    this._signal = signal || null;
     const started = Date.now();
     const outline = await this.#outlineDocx({ topic, sections });
     const file = await this.#build({

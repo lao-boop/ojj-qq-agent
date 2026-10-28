@@ -2,8 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_DIR } from './config.js';
+import { buildIndex, vectorScores } from './memory-index.js';
 
 const SESSION_DIR = path.join(DATA_DIR, 'sessions');
+const vecCache = new WeakMap();
 
 const emptySession = (key, title) => ({
   key,
@@ -127,6 +129,13 @@ export class Memory {
         .filter((t) => t.length >= 2)
         .slice(0, 12);
       if (tokens.length) {
+        // 本地向量检索：字级 2/3-gram + TF-IDF，能扛住“换个说法”
+        let vecIndex = vecCache.get(session);
+        if (!vecIndex || vecIndex.cutoff !== cutoff) {
+          vecIndex = { cutoff, data: buildIndex(session.turns.slice(0, cutoff)) };
+          vecCache.set(session, vecIndex);
+        }
+        const vecs = vectorScores(vecIndex.data, query);
         const scored = [];
         const qVec = bigrams(query);
         for (let i = 0; i < cutoff; i++) {
@@ -135,7 +144,21 @@ export class Memory {
           let score = 0;
           for (const k of tokens) if (t.content.includes(k)) score += k.length >= 3 ? 2 : 1;
           score += cosineSim(qVec, bigrams(t.content)) * 4;
-          if (score >= 2) scored.push({ score, turn: t });
+          const v = vecs[i] || 0;
+          score += v * 8;
+          if (score >= 0.8 || v >= 0.12) scored.push({ score, turn: t });
+        }
+        // 兜底：关键词一个没命中时，也按向量相似度取前 3 条，避免“完全想不起来”
+        if (scored.length < 3) {
+          const top = vecs
+            .map((v, i) => ({ v, i }))
+            .filter((x) => x.v > 0.06 && String(session.turns[x.i]?.content || '').length >= 10)
+            .sort((a, b) => b.v - a.v)
+            .slice(0, 3);
+          for (const { i, v } of top) {
+            const turn = session.turns[i];
+            if (turn && !scored.some((s) => s.turn === turn)) scored.push({ score: v * 8, turn });
+          }
         }
         scored.sort((a, b) => b.score - a.score || (b.turn.ts || 0) - (a.turn.ts || 0));
         result.recalled = scored.slice(0, this.cfg.recallLimit || 6).map((s) => ({

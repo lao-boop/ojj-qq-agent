@@ -108,6 +108,8 @@ export class MusicLibrary {
       else if (q.includes(t.normTitle) && t.normTitle.length >= 2) score = 70;
       else if (t.normArtist.includes(q)) score = 72;
       else if (t.normFile.includes(q)) score = 55;
+      // 歌名/文件名必须真的有匹配，不能因为“歌手对上了”就把别的歌塞进来
+      if (score <= 0) continue;
       if (a) {
         const artistHit =
           t.normArtist.includes(a) || t.normTitle.includes(a) || t.normFile.includes(a);
@@ -183,6 +185,10 @@ export function extractSongQuery(text) {
   q = q.replace(/^(帮我|给我|我想听|想听|我要听|能|可以|请|麻烦)\s*/, '').trim();
   q = q.replace(/[吗呢吧啊呀呗嘛哦喔]+$/, '').trim();
   q = q.replace(/^(一首|一下|个|首)\s*/, '').trim();
+  // “我让你翻唱的是乡愁四韵”“就是周深的歌”里的连接词
+  q = q.replace(/^(的|是|就是|那首|这首|那个|这个|一首|一下)+/, '').trim();
+  // 去掉残留的书名号/引号
+  q = q.replace(/^[《【「"'“]+/, '').replace(/[》】」"'”]+$/, '').trim();
   // “听听是不是…”“听一下”“唱得怎么样”这类是评价/聊天，不是点歌
   if (/^(是不是|是否|一下|起来|着|完|得|说)/.test(q)) return '';
   if (!q || /^(一下|这个|那个|吧|呀|啊|给我)$/.test(q)) return '';
@@ -202,9 +208,22 @@ export function parseCoverRequest(text) {
   const m = t.match(
     /(?:是|就是|要听|想听|听)\s*([\u4e00-\u9fa5A-Za-z·]{2,12})\s*的\s*《?([^》，,。！？\s]{1,20})》?/,
   );
-  if (m) {
+  // 只有“翻唱/点歌/想听/唱”，或者明确在澄清“是 X 的 Y”，才当成歌手+歌名；
+  // 否则“这个葬礼是姐姐的葬礼吗”会被误判成点歌
+  const musicWord = /(翻唱|点歌|点一首|点首|想听|来一首|唱)/.test(t);
+  const clarify = /^(是|就是|要听的?是|我想听的是)/.test(t) && !/(吗|呢|为什么|怎么|是不是|什么)/.test(t);
+  if (m && (musicWord || clarify)) {
     artist = m[1].trim();
     title = m[2].trim();
+  }
+  if (!artist && title.includes('的')) {
+    const parts = title.split('的');
+    const maybeArtist = parts[0].trim();
+    const maybeTitle = parts.slice(1).join('的').trim();
+    if (maybeArtist.length >= 2 && maybeArtist.length <= 10 && maybeTitle) {
+      artist = maybeArtist;
+      title = maybeTitle;
+    }
   }
 
   // 只有真的像点歌/翻唱才放行；普通聊天（“发条语音给我呗”）一律不算
@@ -213,6 +232,10 @@ export function parseCoverRequest(text) {
     Boolean(title) && (explicitSong || Boolean(m)) ||
     Boolean(startPhrase) ||
     (/翻唱|点歌|点一首|点首|想听|来一首|唱一段|开始唱/.test(t) && Boolean(title));
+  title = title
+    .replace(/^[《【「"'“]+/, '')
+    .replace(/[》】」"'”]+$/, '')
+    .trim();
   return { title: title.trim(), artist, startPhrase, coverIntent };
 }
 

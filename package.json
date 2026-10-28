@@ -1,27 +1,22 @@
 {
-  "name": "ojj-qq-agent",
+  "name": "qq-bot-whale",
   "version": "1.0.0",
-  "private": false,
+  "private": true,
   "type": "module",
-  "description": "拟人化 QQ Agent：人格对话、长期记忆、语音/唱歌/翻唱、画图、PPT/Word/Excel、QQ空间、汽修配件识别",
+  "description": "QQ 机器人：DeepSeek 驱动的小鲸鱼，支持人格、记忆、分条聊天、出图，自带本地控制台",
   "main": "src/index.js",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/lao-boop/ojj-qq-agent.git"
-  },
-  "keywords": ["qq-bot", "onebot", "deepseek", "agent", "multimodal", "rvc", "flux"],
   "scripts": {
     "start": "node src/index.js",
     "mock": "node src/mock-onebot.js",
-    "test:e2e": "node scripts/e2e.js",
-    "eval:autorepair": "node scripts/auto_repair_eval.mjs"
+    "test:e2e": "node scripts/e2e.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "opencc-js": "^1.4.2",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "mineflayer": "4.39.0",
+    "mineflayer-pathfinder": "2.4.5"
   }
 }

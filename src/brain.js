@@ -8,13 +8,14 @@ const MAX_BUBBLE_CHARS = 150;
 const CJK = /[\u4e00-\u9fff]/;
 
 export class Brain {
-  constructor({ cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash' }) {
+  constructor({ cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash', selfState = () => '' }) {
     this.cfg = cfg;
     this.llm = llm;
     this.memory = memory;
     this.tools = tools;
     this.logger = logger;
     this.visionModel = visionModel;
+    this.selfState = selfState;
     this.personaMtime = 0;
     this.personaCache = '';
   }
@@ -40,10 +41,18 @@ export class Brain {
     const now = new Date();
     const week = '日一二三四五六'[now.getDay()];
     const timeText = `${now.toLocaleString('zh-CN', { hour12: false })} 星期${week}`;
+    let selfBlock = '';
+    try {
+      selfBlock = this.selfState?.(chat) || '';
+    } catch {
+      selfBlock = '';
+    }
     const lines = [
       this.persona().trim(),
       '',
       formatGlobal(),
+      selfBlock ? '' : '',
+      selfBlock,
       '',
       '【当前情况】',
       `- 现在的时间：${timeText}`,
@@ -208,6 +217,7 @@ export class Brain {
       voices: [],
       songs: [],
       documents: [],
+      videos: [],
       memory: this.memory,
     };
     let toolCalls = 0;
@@ -253,6 +263,7 @@ export class Brain {
       voices: toolCtx.voices,
       songs: toolCtx.songs,
       documents: toolCtx.documents,
+      videos: toolCtx.videos,
       toolCalls,
       ms: Date.now() - started,
     };

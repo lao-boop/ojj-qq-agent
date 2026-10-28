@@ -92,6 +92,19 @@ export class ReplySender {
     return this.sendFile(chat, filePath, name, text);
   }
 
+  /** 发视频消息（QQ 里能直接播放），失败退回文件。 */
+  async sendVideo(chat, filePath, name, text) {
+    const buffer = fs.readFileSync(filePath);
+    if (text) await this.#call(chat, [seg.text(text)]);
+    try {
+      await this.#call(chat, [{ type: 'video', data: { file: `base64://${buffer.toString('base64')}` } }], 180000);
+      return;
+    } catch (err) {
+      this.logger.warn(`视频消息发送失败，改用文件：${err.message}`);
+      return this.sendFile(chat, filePath, name, '');
+    }
+  }
+
   /** 发文件（歌曲等大文件），QQ 里会显示成文件消息。 */
   async sendFile(chat, filePath, name, text) {
     const buffer = fs.readFileSync(filePath);
@@ -122,9 +135,9 @@ export class ReplySender {
     }
   }
 
-  #call(chat, segments) {
-    if (chat.type === 'group') return this.onebot.sendGroup(chat.groupId, segments);
-    return this.onebot.sendPrivate(chat.userId, segments);
+  #call(chat, segments, timeout = 20000) {
+    if (chat.type === 'group') return this.onebot.sendGroup(chat.groupId, segments, timeout);
+    return this.onebot.sendPrivate(chat.userId, segments, timeout);
   }
 }
 

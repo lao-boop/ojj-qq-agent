@@ -1,13 +1,15 @@
 {
-  "bot": { "name": "小鲸鱼" },
+  "bot": {
+    "name": "小鲸鱼"
+  },
   "onebot": {
     "wsUrl": "ws://127.0.0.1:3001",
-    "accessToken": "YOUR_ONEBOT_TOKEN",
+    "accessToken": "",
     "httpUrl": ""
   },
   "llm": {
     "baseUrl": "https://api.deepseek.com/v1",
-    "apiKey": "YOUR_DEEPSEEK_KEY",
+    "apiKey": "",
     "model": "deepseek-v4-pro",
     "visionModel": "deepseek-flash",
     "helperModel": "deepseek-flash",
@@ -17,36 +19,57 @@
   },
   "chat": {
     "privateAlwaysReply": true,
+    "maxBubbles": 3,
+    "splitDelayMs": [
+      500,
+      1600
+    ],
+    "firstDelayMs": [
+      400,
+      1200
+    ],
+    "historyTurns": 60,
+    "summaryTriggerChars": 9000,
     "group": {
-      "wakeWords": ["小鲸鱼"],
       "replyOnAt": true,
-      "chanceReply": 0.12,
-      "replyAllWhenFew": true
+      "wakeWords": [
+        "小鲸鱼",
+        "鲸鱼",
+        "小鱼"
+      ],
+      "chanceReply": 0.03,
+      "minIntervalMs": 4000
     },
-    "rateLimitPerMinute": 12,
+    "rateLimit": {
+      "perChatPerMinute": 12
+    },
     "storeAllTurns": true,
-    "stream": false
+    "retrieval": true,
+    "recallLimit": 10
   },
   "access": {
     "mode": "whitelist",
     "adminQQ": [],
-    "ownerQQ": "",
     "privateAllow": [],
     "groupAllow": [],
     "allowAllWhenEmpty": true,
     "autoAcceptFriend": true,
     "autoAcceptGroupInvite": false,
-    "greeting": "嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。"
+    "greeting": "嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。",
+    "ownerQQ": "123456789"
   },
   "image": {
     "enabled": true,
     "provider": "replicate",
-    "apiKey": "YOUR_REPLICATE_TOKEN",
-    "model": "black-forest-labs/flux-schnell",
+    "baseUrl": "https://image.pollinations.ai/prompt/",
+    "apiBase": "",
+    "apiKey": "",
+    "model": "black-forest-labs/flux-1.1-pro",
     "defaultSize": "square",
-    "maxPromptChars": 800,
-    "cooldownMs": 15000,
-    "timeoutMs": 180000
+    "timeoutMs": 90000,
+    "cooldownMs": 45000,
+    "maxPromptChars": 400,
+    "removeWatermark": true
   },
   "tts": {
     "enabled": true,
@@ -57,43 +80,68 @@
     "timeoutMs": 30000,
     "pythonPath": ""
   },
-  "music": { "tempo": 92, "noise": 0.4 },
+  "music": {
+    "minSeconds": 18,
+    "maxSeconds": 30,
+    "tempo": 84,
+    "noise": 0
+  },
   "song": {
     "enabled": true,
-    "provider": "replicate",
-    "token": "YOUR_REPLICATE_TOKEN",
+    "token": "",
     "model": "fishaudio/ace-step-1.5",
+    "defaultSeconds": 30,
     "maxSeconds": 60,
+    "timeoutMs": 300000,
     "dailyLimit": 5,
-    "sendAsVoice": "auto",
-    "timeoutMs": 600000
+    "sendAsVoice": "auto"
   },
   "voice": {
     "enabled": true,
-    "token": "YOUR_REPLICATE_TOKEN",
+    "token": "",
     "model": "zsxkib/realistic-voice-cloning",
     "rvcModel": "CUSTOM",
-    "customModelUrl": "",
     "pitchChange": "no-change",
+    "customModelUrl": "https://replicate.delivery/xezq/cqTSBCXLg9rsGxyMQZlgbXTYKso71jjMkzDv7wuO2bMHak2F/xiaoyi.zip",
     "outputFormat": "mp3",
     "timeoutMs": 300000,
     "dailyLimit": 10,
-    "autoConvert": false,
+    "autoConvert": true,
     "autoConvertPitch": "no-change",
     "sendAsVoice": true
   },
-  "console": { "enabled": true, "port": 3010, "token": "YOUR_CONSOLE_PASSWORD" },
-  "log": { "level": "info", "file": true },
-  "media": { "ffmpegPath": "" },
-  "library": { "enabled": true, "dir": "D:\\Music", "maxSeconds": 0 },
+  "console": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 3010,
+    "token": ""
+  },
+  "log": {
+    "level": "info",
+    "file": true
+  },
+  "media": {
+    "ffmpegPath": ""
+  },
+  "library": {
+    "enabled": true,
+    "dir": "D:\\\\Music",
+    "maxSeconds": 0
+  },
   "asr": {
     "enabled": true,
-    "token": "YOUR_REPLICATE_TOKEN",
+    "token": "",
     "model": "victor-upmeet/whisperx",
-    "local": { "enabled": true, "url": "http://127.0.0.1:8090", "port": 8090, "model": "small", "pythonPath": "" }
+    "local": {
+      "enabled": true,
+      "url": "http://127.0.0.1:8090",
+      "port": 8090,
+      "model": "small",
+      "pythonPath": ""
+    }
   },
   "qzone": {
-    "enabled": false,
+    "enabled": true,
     "autoPost": true,
     "intervalHours": 6,
     "dailyLimit": 2,
@@ -106,9 +154,22 @@
     "pythonPath": "",
     "theme": "history",
     "model": "deepseek-flash",
-    "maxImages": 8,
     "imagesPerDeck": 0,
-    "imageDelayMs": 15000
+    "imageDelayMs": 12000
   },
-  "relay": { "enabled": true, "allow": [], "dailyLimit": 5, "maxLen": 200 }
+  "relay": {
+    "enabled": true,
+    "allow": [
+      "2074602296"
+    ],
+    "dailyLimit": 5,
+    "maxLen": 200
+  },
+  "mc": {
+    "username": "Xiaojingyu",
+    "host": "127.0.0.1",
+    "port": 25565,
+    "version": "26.1",
+    "ownerName": "YourName"
+  }
 }

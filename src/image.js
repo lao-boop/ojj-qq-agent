@@ -127,20 +127,42 @@ export class ImageGen {
     throw new Error(`不认识的出图后端：${provider}`);
   }
 
-  /** Replicate 上的 FLUX（无水印，按张计费，一张几厘钱）。 */
+  /** Replicate 上的 FLUX（无水印，按张计费）。 */
   async #replicate(prompt, width, height, seed) {
     const token = this.cfg.apiKey || process.env.REPLICATE_API_TOKEN;
     if (!token) throw new Error('缺少 Replicate token');
-    const model = this.cfg.model || 'black-forest-labs/flux-schnell';
+    const model = this.cfg.model || 'black-forest-labs/flux-1.1-pro';
     const ratio = width > height * 1.2 ? '16:9' : height > width * 1.2 ? '9:16' : '1:1';
-    const input = {
-      prompt,
-      aspect_ratio: ratio,
-      output_format: 'jpg',
-      output_quality: 90,
-      num_outputs: 1,
-      go_fast: true,
-    };
+
+    let input;
+    if (/flux-1\.1-pro|flux-pro/i.test(model)) {
+      input = {
+        prompt,
+        aspect_ratio: ratio,
+        output_format: 'jpg',
+        output_quality: 92,
+        safety_tolerance: 2,
+      };
+    } else if (/flux-dev/i.test(model)) {
+      input = {
+        prompt,
+        aspect_ratio: ratio,
+        output_format: 'jpg',
+        output_quality: 92,
+        num_outputs: 1,
+        num_inference_steps: 28,
+        guidance: 3.5,
+      };
+    } else {
+      input = {
+        prompt,
+        aspect_ratio: ratio,
+        output_format: 'jpg',
+        output_quality: 90,
+        num_outputs: 1,
+        go_fast: true,
+      };
+    }
     if (seed) input.seed = seed;
 
     const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };

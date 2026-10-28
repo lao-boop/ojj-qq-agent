@@ -6,7 +6,7 @@ const FILE = path.join(DATA_DIR, 'memory-global.json');
 
 const DEFAULTS = {
   bot: { name: '小鲸鱼', alias: 'ojj' },
-  owner: { name: 'Owner', aliases: ['Boss'], likes: ['打篮球'], relation: 'ojj 这个 agent 唯一的主人' },
+  owner: { name: 'Pay', aliases: ['爵士'], likes: ['打篮球'], relation: 'ojj 这个 agent 唯一的主人' },
   facts: [],
 };
 
