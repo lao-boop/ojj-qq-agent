@@ -14,7 +14,10 @@ spec:
 import json
 import os
 import sys
+import math
+import subprocess
 from datetime import date
+from PIL import ImageFont
 
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
@@ -33,7 +36,46 @@ from openpyxl import Workbook
 from openpyxl.styles import Font as XFont, PatternFill, Alignment as XAlign, Border, Side
 from openpyxl.utils import get_column_letter
 
-FONT = "微软雅黑"
+FONT = os.environ.get("QQBOT_OFFICE_FONT") or ("微软雅黑" if os.name == "nt" else "Noto Sans CJK SC")
+
+
+def fit_text_frame(tf, width, height, minimum=12):
+    """Fit actual glyph widths without deleting text or adding unrequested pages."""
+    # Pillow uses pixels; use a 72dpi measurement grid so points map directly.
+    try:
+        font_path = subprocess.check_output(["fc-match", "-f", "%{file}", FONT], text=True).strip()
+    except (OSError, subprocess.SubprocessError):
+        font_path = "C:/Windows/Fonts/msyh.ttc"
+    sizes = [r.font.size.pt for p in tf.paragraphs for r in p.runs if r.font.size]
+    if not sizes:
+        return
+    original = max(sizes)
+    usable_w = width * 72 - 16
+    usable_h = height * 72 - 10
+    for size in range(math.ceil(original), minimum - 1, -1):
+        try:
+            font = ImageFont.truetype(font_path, size)
+            measure = font.getlength
+        except (OSError, ValueError):
+            measure = lambda text: sum(size if ord(c) > 127 else size * 0.6 for c in text)
+        used = 0
+        for p in tf.paragraphs:
+            lines, current = 1, 0
+            for ch in p.text:
+                glyph = measure(ch)
+                if ch == '\n' or current + glyph > usable_w:
+                    lines += 1
+                    current = 0
+                if ch != '\n':
+                    current += glyph
+            used += lines * size * 1.25 + (p.space_after.pt if p.space_after else 0)
+        if used <= usable_h:
+            for p in tf.paragraphs:
+                for r in p.runs:
+                    if r.font.size:
+                        r.font.size = Pt(min(size, r.font.size.pt))
+            return
+    raise ValueError("PPT文本超过当前版面容量，请减少单页内容；不会截断文字或悄悄增加页数")
 
 THEMES = {
     "history": {"bg": "F7F2E8", "fg": "2B2118", "accent": "8C2B2B", "muted": "8A7B66"},
@@ -94,7 +136,7 @@ def build_pptx(spec, out_path):
     bar.fill.solid()
     bar.fill.fore_color.rgb = rgb(theme["accent"])
     bar.line.fill.background()
-    tf = textbox(slide, 1.3, 2.35, 10.5, 1.6)
+    tf = textbox(slide, 1.3, 1.8, 10.5, 2.0)
     p = tf.paragraphs[0]
     set_run(p.add_run(), 5, theme["accent"], True)  # 占位，避免空段
     p.runs[0].text = ""
@@ -102,11 +144,13 @@ def build_pptx(spec, out_path):
     r = p.add_run()
     r.text = spec.get("title", "未命名")
     set_run(r, 40, theme["fg"], True)
-    tf2 = textbox(slide, 1.3, 3.55, 10.5, 0.9)
+    fit_text_frame(tf, 10.5, 2.0, 24)
+    tf2 = textbox(slide, 1.3, 4.05, 10.5, 1.0)
     p2 = tf2.paragraphs[0]
     r2 = p2.add_run()
     r2.text = spec.get("subtitle", "")
     set_run(r2, 18, theme["muted"])
+    fit_text_frame(tf2, 10.5, 1.0, 14)
     tf3 = textbox(slide, 1.3, 5.9, 8.0, 0.5)
     p3 = tf3.paragraphs[0]
     r3 = p3.add_run()
@@ -123,8 +167,8 @@ def build_pptx(spec, out_path):
         top_bar.fill.fore_color.rgb = rgb(theme["accent"])
         top_bar.line.fill.background()
 
-        has_img = bool(s.get("image") and os.path.exists(s["image"]))
         chart = s.get("chart") or None
+        has_img = not chart and bool(s.get("image") and os.path.exists(s["image"]))
         cards = s.get("cards") or []
 
         # 卡片版式：一页三到四张「图标 + 标题 + 一句话」
@@ -134,6 +178,7 @@ def build_pptx(spec, out_path):
             r = p.add_run()
             r.text = s.get("title", "")
             set_run(r, 28, theme["fg"], True)
+            fit_text_frame(tf, 11.5, 1.0, 20)
             n = min(len(cards), 4)
             gap = 0.3
             card_w = (12.0 - gap * (n - 1)) / n
@@ -166,6 +211,7 @@ def build_pptx(spec, out_path):
                 tr = tp.add_run()
                 tr.text = str(c.get("title", ""))
                 set_run(tr, 16, theme["fg"], True)
+                fit_text_frame(ttf, card_w - 0.3, 0.5, 12)
 
                 dtf = textbox(slide, x + 0.18, 4.05, card_w - 0.36, 1.9)
                 dp = dtf.paragraphs[0]
@@ -173,6 +219,7 @@ def build_pptx(spec, out_path):
                 dr = dp.add_run()
                 dr.text = str(c.get("text", ""))
                 set_run(dr, 11.5, theme["muted"])
+                fit_text_frame(dtf, card_w - 0.36, 1.9, 11)
         else:
             img_left = has_img and idx % 2 == 0
             if has_img and img_left:
@@ -183,24 +230,27 @@ def build_pptx(spec, out_path):
                 # 图在右：文字 0.8~8.0，图从 8.35 开始，互不重叠
                 text_left, text_w = 0.8, 7.1
                 pic_x, pic_w = 8.35, 4.25
+            elif chart:
+                text_left, text_w = 0.9, 6.7
+                pic_x, pic_w = 0, 0
             else:
                 text_left, text_w = 0.9, 11.3
                 pic_x, pic_w = 0, 0
 
-            tf = textbox(slide, text_left, 0.7, text_w, 1.05)
+            title_w = 11.3 if chart else text_w
+            tf = textbox(slide, text_left, 0.7, title_w, 1.05)
             p = tf.paragraphs[0]
             r = p.add_run()
             r.text = s.get("title", "")
             set_run(r, 26 if (has_img or chart) else 28, theme["fg"], True)
+            fit_text_frame(tf, title_w, 1.05, 18)
 
             body_top = 1.9
             body = textbox(slide, text_left, body_top, text_w, 4.95)
             bullets = s.get("bullets") or []
             symbols = ["◆", "●", "▸", "✦", "■", "▲"]
             total_chars = sum(len(str(b)) for b in bullets)
-            body_size = 15 if total_chars <= 150 else (13.5 if total_chars <= 220 else 12)
-            if not (has_img or chart):
-                body_size = 16
+            body_size = 18 if (has_img or chart) else 20
             for i, b in enumerate(bullets):
                 p = body.paragraphs[0] if i == 0 else body.add_paragraph()
                 p.space_after = Pt(8)
@@ -211,6 +261,7 @@ def build_pptx(spec, out_path):
                 rr = p.add_run()
                 rr.text = str(b)
                 set_run(rr, body_size, theme["fg"])
+            fit_text_frame(body, text_w, 4.95, 14)
 
             if has_img:
                 pic = slide.shapes.add_picture(s["image"], Inches(pic_x), Inches(1.95), width=Inches(pic_w))
@@ -295,13 +346,14 @@ def build_pptx(spec, out_path):
     r2 = p2.add_run()
     r2.text = spec.get("subtitle", "")
     set_run(r2, 14, "F0E6D8")
+    fit_text_frame(tf2, 13.333, 0.6, 12)
 
     prs.save(out_path)
     return out_path
 
 
 def _width(text):
-    s = str(text or "")
+    s = str(text if text is not None else "")
     return sum(2 if ord(ch) > 127 else 1 for ch in s)
 
 
@@ -322,15 +374,15 @@ def build_xlsx(spec, out_path):
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=span)
             cell = ws.cell(row=1, column=1, value=str(spec["title"])[:60])
             cell.font = XFont(name=FONT, size=14, bold=True)
-            cell.alignment = XAlign(horizontal="center", vertical="center")
-            ws.row_dimensions[1].height = 26
+            cell.alignment = XAlign(horizontal="center", vertical="center", wrap_text=True)
+            ws.row_dimensions[1].height = max(28, 18 * math.ceil(_width(spec['title']) / max(20, len(cols) * 16)))
             row = 2
 
         for j, c in enumerate(cols, 1):
             cell = ws.cell(row=row, column=j, value=c)
             cell.font = XFont(name=FONT, bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor=theme["accent"])
-            cell.alignment = XAlign(horizontal="center", vertical="center")
+            cell.alignment = XAlign(horizontal="center", vertical="center", wrap_text=True)
             cell.border = border
         ws.row_dimensions[row].height = 22
 
@@ -348,6 +400,20 @@ def build_xlsx(spec, out_path):
             ws.column_dimensions[get_column_letter(j)].width = min(42, max(10, longest + 4))
 
         ws.freeze_panes = ws.cell(row=row + 1, column=1)
+        for i in range(row, ws.max_row + 1):
+            lines = max((sum(max(1, math.ceil(_width(line) / max(6, ws.column_dimensions[get_column_letter(j)].width - 3))) for line in str(ws.cell(i, j).value or '').split('\n')) for j in range(1, len(cols) + 1)), default=1)
+            height = max(22, lines * 16 + 8)
+            if height > 400:
+                raise ValueError('单元格内容过长，无法保持可读行高；请拆分记录')
+            ws.row_dimensions[i].height = height
+        ws.auto_filter.ref = f"A{row}:{get_column_letter(max(1,len(cols)))}{ws.max_row}"
+        ws.print_title_rows = f"1:{row}"
+        ws.print_area = f"A1:{get_column_letter(max(1,len(cols)))}{ws.max_row}"
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_setup.orientation = 'landscape' if sum(ws.column_dimensions[get_column_letter(j)].width for j in range(1,len(cols)+1)) > 80 else 'portrait'
+        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
 
     if not wb.sheetnames:
         wb.create_sheet(title="Sheet1")
@@ -358,10 +424,28 @@ def build_xlsx(spec, out_path):
 def build_docx(spec, out_path):
     theme = THEMES.get(spec.get("theme", "business"), THEMES["business"])
     doc = Document()
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    section = doc.sections[0]
+    section.page_width, section.page_height = DocInches(8.27), DocInches(11.69)
+    section.top_margin = section.bottom_margin = DocInches(0.75)
+    section.left_margin = section.right_margin = DocInches(0.85)
     style = doc.styles["Normal"]
     style.font.name = FONT
     style.font.size = DocPt(11)
     style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.widow_control = True
+    for style_name in ['Normal', 'Title', 'Subtitle', 'Heading 1', 'List Bullet']:
+        st = doc.styles[style_name]
+        st.font.name = FONT
+        st.element.get_or_add_rPr().get_or_add_rFonts().set(qn('w:eastAsia'), FONT)
+    doc.styles['Heading 1'].paragraph_format.keep_with_next = True
+    doc.styles['Heading 1'].paragraph_format.keep_together = True
+    footer = section.footer.paragraphs[0]
+    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    field = OxmlElement('w:fldSimple')
+    field.set(qn('w:instr'), 'PAGE')
+    footer._p.append(field)
 
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER

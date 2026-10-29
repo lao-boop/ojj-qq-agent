@@ -1,0 +1,56 @@
+{
+  "scope": "real model; isolated memory; document jobs queued only; no real QQ or artifact generation",
+  "runs": [
+    {
+      "name": "before",
+      "counts": {
+        "satisfactory": 11,
+        "needs_work": 5,
+        "service_error": 0,
+        "unreviewed": 0
+      },
+      "turns": 24,
+      "suiteHash": "de7286ec2c51400358c8bf61bd87627cc439f66efdf9b510af14558fcee729c9",
+      "usage": {
+        "calls": 43,
+        "promptTokens": 133506,
+        "completionTokens": 18494,
+        "failures": 0
+      }
+    },
+    {
+      "name": "after",
+      "counts": {
+        "satisfactory": 15,
+        "needs_work": 1,
+        "service_error": 0,
+        "unreviewed": 0
+      },
+      "turns": 24,
+      "suiteHash": "de7286ec2c51400358c8bf61bd87627cc439f66efdf9b510af14558fcee729c9",
+      "usage": {
+        "calls": 41,
+        "promptTokens": 121110,
+        "completionTokens": 8759,
+        "failures": 0
+      }
+    },
+    {
+      "name": "reserve",
+      "counts": {
+        "satisfactory": 9,
+        "needs_work": 1,
+        "service_error": 0,
+        "unreviewed": 0
+      },
+      "turns": 16,
+      "suiteHash": "ea8c51b7644b3ce3baacaf57e8792eb470d11cb846b4b3fdc18c121c78d7f9e7",
+      "usage": {
+        "calls": 27,
+        "promptTokens": 82712,
+        "completionTokens": 4674,
+        "failures": 0
+      }
+    }
+  ]
+}

@@ -79,7 +79,7 @@ for (const enabled of [false, true]) test(`published fact reaches actual chat mo
   const brain = new Brain({ cfg: { agents: { enabled } }, llm, logger, tools: { specs: [], run() { throw new Error('Query must not post'); } }, memory: { context: () => ({ notes: [], turns: [] }), append() {}, maybeSummarize: async () => {} }, selfState: chatKey => selfContext({ chatKey, cfg, journal }) });
   const result = await brain.respond({ chatKey: 'private:1', userText: '你刚刚发什么动态了？', meta: { scene: '私聊' } });
   assert.ok(result.bubbles.length);
-  assert.equal(requests.length, enabled ? 3 : 1);
+  assert.equal(requests.length, enabled ? 2 : 1);
   for (const request of requests) {
     assert.ok(JSON.stringify(request).includes('刚刚发布的真实正文'));
     assert.ok(JSON.stringify(request).includes('scheduler'));

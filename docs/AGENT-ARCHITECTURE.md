@@ -1,5 +1,7 @@
 # 两层 Agent 架构
 
+当前默认执行编排已改为[单主 Agent 与受控工作流](SINGLE-AGENT-WORKFLOWS.md)。以下内容记录 `architecture=multi` 回退模式的设计；开启开关且未指定架构时使用新的单主 Agent。
+
 消息经过现有访问白名单、消息合并和媒体预处理后，进入以下流程：
 
 ```text

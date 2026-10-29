@@ -1,0 +1,122 @@
+{
+  "old-audio-comma": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "“唔，怎么啦？我在呢”自然接话；保留历史音频上下文，无JSON任务解析和工具调用。",
+    "critical": false
+  },
+  "old-file-question": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "只轻量回应问号，没有执行或承诺历史文件中的发送指令。",
+    "critical": false
+  },
+  "mixed-punctuation-emoji": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "省略号与组合表情正常接话，角色尾巴动作略多，没有任务要求。",
+    "critical": false
+  },
+  "ordinary-ramble": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "“被床绑架了吧”接住碎片口语；追加角色经历略长，无任务清单。",
+    "critical": false
+  },
+  "comic-drama": {
+    "scores": {
+      "accuracy": 0,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 1
+    },
+    "rationale": "整体接住夸张玩笑，但首轮“快捡起来，三秒法则还来得及”暗示不可靠的食物卫生说法，不应以路由正常掩盖内容问题。",
+    "critical": true
+  },
+  "defer-not-emoji-consent": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "👌后保持draft，修改主题保留4节及延后执行，末轮cancelled，零文档工具。",
+    "critical": false
+  },
+  "attached-schedule-no-promise": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 1,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "准确确认周六傍晚操场集合并询问来源；问题略多，但没有保存、提醒或执行承诺。",
+    "critical": false
+  },
+  "actual-chat-and-work": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "实际make_docx，社团招新介绍、4节、无配图；只报告排队，没有假装交付。",
+    "critical": false
+  },
+  "memory-delete-in-slang": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "首轮remember，次轮forget_memory，最终隔离记忆无饮料便签；口语没有吞掉明确操作。",
+    "critical": false
+  },
+  "serious-no-lecture": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "认真陪伴，没有追问或建议；“尾巴给你枕着”保留较强默认人格，可进一步按用户偏好调整。",
+    "critical": false
+  }
+}

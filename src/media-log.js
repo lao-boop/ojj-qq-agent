@@ -22,12 +22,13 @@ function save(list) {
 }
 
 /** 记一条收发记录：direction = in / out，kind = audio/doc/image。 */
-export function logMedia({ chatKey, direction, kind, name, title = '', path: filePath = '', detail = '', snippet = '', at = 0 }) {
+export function logMedia({ chatKey, actorId = '', direction, kind, name, title = '', path: filePath = '', detail = '', snippet = '', at = 0 }) {
   if (!chatKey) return;
   const list = load();
   list.push({
     at: at || Date.now(),
     chatKey,
+    actorId: String(actorId),
     direction,
     kind,
     name: String(name || '').slice(0, 120),
@@ -40,19 +41,20 @@ export function logMedia({ chatKey, direction, kind, name, title = '', path: fil
 }
 
 /** 某个会话最近的文件往来。 */
-export function recentMedia(chatKey, limit = 8) {
+export function recentMedia(chatKey, limit = 8, actorId) {
   return load()
-    .filter((m) => m.chatKey === chatKey)
+    .filter((m) => m.chatKey === chatKey && (actorId === undefined || !String(chatKey).startsWith('group:') || m.actorId===String(actorId)))
     .slice(-limit);
 }
 
 /** 按关键词找（给工具用）。 */
-export function searchMedia(keyword, chatKey, limit = 10) {
+export function searchMedia(keyword, chatKey, limit = 10, actorId) {
   const q = String(keyword || '').toLowerCase();
   return load()
     .filter(
       (m) =>
         (!chatKey || m.chatKey === chatKey) &&
+        (actorId === undefined || !String(chatKey).startsWith('group:') || m.actorId===String(actorId)) &&
         (!q || `${m.name} ${m.title} ${m.detail} ${m.snippet || ''}`.toLowerCase().includes(q)),
     )
     .slice(-limit);
@@ -63,8 +65,8 @@ function hhmm(ts) {
 }
 
 /** 注入提示词用的一段摘要。 */
-export function formatMediaDigest(chatKey, limit = 10) {
-  const items = recentMedia(chatKey, limit);
+export function formatMediaDigest(chatKey, limit = 10, actorId) {
+  const items = recentMedia(chatKey, limit, actorId);
   if (!items.length) return '';
   const lines = items.map((m) => {
     const who = m.direction === 'in' ? '对方发来' : '我发出去';

@@ -7,6 +7,8 @@ import { lookupPart } from './parts.js';
 import { addGlobalFact, isOwner, loadGlobal } from './global.js';
 import { addRelay, canRelay, findContact, markDelivered, peekPending } from './relay.js';
 import { formatMediaList, searchMedia } from './media-log.js';
+import { memoryRecordsForModel, resolveMemoryId } from './memory-handles.js';
+import { NUMBER_TOOL, verifyNumbers } from './numbers.js';
 
 const STICKER_DIR = path.join(DATA_DIR, 'stickers');
 const STICKER_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
@@ -78,6 +80,7 @@ export function scanStickers() {
 }
 
 export const SPECS = {
+  verify_numbers: NUMBER_TOOL,
   draw_image: {
     type: 'function',
     function: {
@@ -112,14 +115,16 @@ export const SPECS = {
     function: {
       name: 'remember',
       description:
-        '把对方的重要信息长期记住，比如名字、生日、正在忙的事、喜好、约定。只记真正值得记的，不要记闲聊。',
+        '仅在用户要求保存时记住新信息。长期用permanent；有明确期限用temporary并提供带时区expiresAt；仅今天/本次参考且不要求保存时不调用。不同主题分开记录。已有信息更正用update_memory，删除用forget_memory，不追加矛盾旧事实。',
       parameters: {
         type: 'object',
-        properties: { text: { type: 'string', description: '一条简短的事实，不超过 50 字' } },
+        properties: { text: { type: 'string', description: '准确事实，不能删改未更正的信息' }, scope:{type:'string',enum:['permanent','temporary']}, expiresAt:{type:'string',description:'临时记录的明确截止时间，ISO 8601含时区'} },
         required: ['text'],
       },
     },
   },
+  update_memory: { type:'function', function:{ name:'update_memory', description:'更正当前用户已有记忆。id取自有效记忆记录；替换整条text时必须保留同一条内未被用户更正的其他事实。不同项目/人物的相似属性不能互相覆盖。', parameters:{type:'object',properties:{id:{type:'string'},text:{type:'string'},scope:{type:'string',enum:['permanent','temporary']},expiresAt:{type:'string'}},required:['id','text']} } },
+  forget_memory: { type:'function', function:{ name:'forget_memory', description:'用户明确要求忘掉或删除一条已保存记忆时使用，id必须取自当前用户的有效记录。不能删除其他事实；一条含多个事实时用update_memory保留其余。',parameters:{type:'object',properties:{id:{type:'string'}},required:['id']} } },
   send_voice: {
     type: 'function',
     function: {
@@ -193,7 +198,7 @@ export const SPECS = {
         type: 'object',
         properties: {
           topic: { type: 'string', description: '主题，尽量具体，比如“朱元璋生平：从乞丐到开国皇帝”' },
-          pages: { type: 'number', description: '正文页数，默认 12，范围 5~20' },
+          pages: { type: 'number', description: '总页数（包含封面和结束页），默认 12，范围 5~20' },
           theme: { type: 'string', enum: ['history', 'business', 'fresh'], description: '配色主题，历史/商务/清新' },
         },
         required: ['topic'],
@@ -214,6 +219,9 @@ export const SPECS = {
         required: ['topic'],
       },
     },
+  },
+  search_memory: {
+    type:'function', function:{name:'search_memory',description:'搜索当前用户全部有效保存记忆（包括未放入上下文的旧便签），返回完整事实和可更新的ID。query为空时分页列出。不能用来搜索已删除或过期记录。',parameters:{type:'object',properties:{query:{type:'string'},offset:{type:'integer',minimum:0}},required:['query']}},
   },
   search_history: {
     type: 'function',
@@ -398,7 +406,7 @@ const QUALITY_SUFFIX =
 export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, relayNotify, friendNotify, jobTracker, logger }) {
   const stickers = scanStickers();
   const stickerCats = Object.keys(stickers);
-  const specs = [SPECS.draw_image, SPECS.get_time, SPECS.remember, SPECS.sing, SPECS.search_history, SPECS.search_web];
+  const specs = [SPECS.verify_numbers, SPECS.draw_image, SPECS.get_time, SPECS.remember, SPECS.update_memory, SPECS.forget_memory, SPECS.sing, SPECS.search_history, SPECS.search_web];
   if (cfg.tts?.enabled && tts) specs.push(SPECS.send_voice);
   if (songGen?.enabled) specs.push(SPECS.sing_song);
   if (qzone?.enabled) specs.push(SPECS.post_qzone);
@@ -436,6 +444,7 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, r
     const t0 = Date.now();
     try {
       switch (name) {
+        case 'verify_numbers': return JSON.stringify(verifyNumbers(args));
         case 'draw_image': {
           if (!cfg.image.enabled) return '出图功能现在是关的，画不了。';
           const key = ctx.chatKey;
@@ -494,7 +503,7 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, r
             pages,
             theme: String(args.theme || cfg.office?.theme || 'history'),
           });
-          return `PPT 安排上了（约 ${pages} 页），一两分钟做好我直接发文件。回复里说一声“在做”就行。`;
+          return `PPT 已排队（共 ${pages} 页，包含封面和结束页）；尚未生成或交付文件。`;
         }
         case 'make_docx': {
           if (!office) return '文档功能没开。';
@@ -574,7 +583,7 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, r
           return `已经直接发给 ${c.name}（${c.uin}）了。回复里说一句“发过去了”就行。`;
         }
         case 'find_media': {
-          const items = searchMedia(args.keyword || '', ctx.chatKey, 10);
+          const items = searchMedia(args.keyword || '', ctx.chatKey, 10, ctx.actorId || '');
           if (!items.length) return '文件记忆里没有匹配的记录。';
           return `文件记忆里找到这些：\n${formatMediaList(items)}\n回复时用口语说，不要报路径。`;
         }
@@ -608,14 +617,25 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, r
           return `歌已经交给编曲了：大约 ${seconds} 秒，1~2 分钟出结果，好了会直接发文件。回复里跟对方说一声“正在写”就行，别说已经唱完了。`;
         }
         case 'remember': {
-          const ok = ctx.memory.addNote(ctx.chatKey, args.text);
-          return ok ? `记住了：${args.text}` : '这条已经记过了。';
+          const ok = ctx.memory.addNote(ctx.memoryKey || ctx.chatKey, args.text, undefined, {scope:args.scope,expiresAt:args.expiresAt,requestId:ctx.requestId});
+          return ok ? `已保存${args.scope === 'temporary' ? `临时记忆（截止${args.expiresAt}）` : '长期记忆'}：${args.text}` : '这条已经记过了。';
+        }
+        case 'update_memory':
+          ctx.memory.updateNote(ctx.memoryKey || ctx.chatKey, resolveMemoryId(ctx,args.id), args.text, {scope:args.scope,expiresAt:args.expiresAt,requestId:ctx.requestId});
+          return `已更正保存的记忆：${args.text}。被替换的旧记录不再用于回答。`;
+        case 'forget_memory':
+          ctx.memory.forgetNote(ctx.memoryKey || ctx.chatKey, resolveMemoryId(ctx,args.id), {requestId:ctx.requestId});
+          return '已删除这条保存的记忆，相关旧记录不再用于自动回忆或历史检索。';
+        case 'search_memory': {
+          const result=ctx.memory.searchNotes(ctx.memoryKey || ctx.chatKey,String(args.query || ''),{offset:Math.max(0,Math.floor(Number(args.offset)||0))});
+          if(ctx.memoryHandles)result.records=memoryRecordsForModel(result.records,ctx.memoryHandles);
+          return JSON.stringify(result);
         }
         case 'search_history': {
           const q = String(args.query || '').trim();
           if (!q) return '要搜什么关键词？';
           const limit = Math.min(Math.max(Number(args.limit) || 8, 1), 12);
-          const hits = await ctx.memory.search(ctx.chatKey, q, { limit });
+          const hits = await ctx.memory.search(ctx.memoryKey || ctx.chatKey, q, { limit });
           if (!hits.length) return `没搜到和「${q}」相关的旧对话。回复里可以说记不清了，别编。`;
           const lines = hits.map(
             (h) => `${h.role === 'user' ? '对方' : h.role === 'assistant' ? '你' : '笔记'}：${h.content.slice(0, 80)}`,

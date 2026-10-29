@@ -4,16 +4,19 @@ import { AgentManager, normalizeInput } from './agents/manager.js';
 import { fileURLToPath } from 'node:url';
 import { PERSONA_PATH, readPersona } from './config.js';
 import { formatGlobal } from './global.js';
+import { randomUUID } from 'node:crypto';
+import { memoryScopeKey } from './memory.js';
+import { memoryRecordsForModel } from './memory-handles.js';
 
 const MAX_TOOL_ROUNDS = 4;
 const MAX_BUBBLE_CHARS = 150;
 const CJK = /[\u4e00-\u9fff]/;
 
 export class Brain {
-  constructor({ cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash', vision = null, resolveFile = value => value, selfState = () => '', validators = {} }) {
+  constructor({ cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash', vision = null, resolveFile = value => value, selfState = () => '', validators = {}, taskState, taskControl }) {
     this.cfg = cfg;
     this.selfState = selfState;
-    this.understanding = new UnderstandingPipeline({ llm, validators, logger });
+    this.understanding = new UnderstandingPipeline({ llm, validators, logger, state:taskState, taskControl });
     this.llm = llm;
     this.memory = memory;
     this.tools = tools;
@@ -43,9 +46,9 @@ export class Brain {
   }
 
   buildSystem({ chat, meta, ctxText }) {
-    const now = new Date();
+    const now = new Date(this.memory.now?.() ?? Date.now());
     const week = '日一二三四五六'[now.getDay()];
-    const timeText = `${now.toLocaleString('zh-CN', { hour12: false })} 星期${week}`;
+    const timeText = `${now.toLocaleString('zh-CN', { hour12: false, timeZone:'Asia/Shanghai' })} 星期${week}`;
     const lines = [
       this.persona().trim(),
       '',
@@ -60,7 +63,12 @@ export class Brain {
       '【回复要求】',
       '- 直接说话，不要写「小鲸鱼：」这样的前缀，不要输出 Markdown、列表、标题、代码块。',
       '- 一条回复控制在 1~3 条短消息（用换行分隔），每条尽量一句话；想多说就分条，不要一大段。',
-      '- 不要复述工具结果，不要报路径、文件名、链接；画完图一句话带走即可。',
+      '- 不要倾倒原始工具日志或本地路径。查询后应回答实际结论与依据；用户需要来源时，保留工具给出的完整http/https网址，不编链接。确认文件选择时可以使用文件名。画完图简短反馈即可。',
+      '- 用户要求固定原文、字数、一个建议或直接给成稿时，优先遵守这些限制，不额外追加角色动作、解释或多条建议。',
+      '- 记忆以当前有效记录为准，最新更正优先；今天/本次的例外不覆盖长期偏好，不承诺下次继续沿用。只在用户要求保存时调用记忆工具，有期限的记录必须带明确截止时间。已删除或过期内容不能从旧聊天里重新当作当前事实。不同项目和不同人的属性不能合并。只有一个建议时只给一个，不在末尾添加“或者”。',
+      '- 涉及金额、差额、比例、数量计算或硬条件选购时先调用verify_numbers核算；引用工具结果，不另行心算或把近似值当精确值。方案筛选传入decision，包括全部硬条件、候选项和最新更正的数据，未说明的属性保持未知。只有明确通过全部硬条件的选项才能推荐；没有合格项就如实说明并给寻找或核实方向。',
+      '- 用户明确的预算上限、排除项和数量是约束；推荐应在约束内作结论，不在结尾劝用户加钱或放宽已经明确的要求。',
+      '- 已知用户有食物过敏时，不能仅凭食品名称或常见配方就保证不含过敏原。给食品建议必须说明先核对实际配料、过敏原标识和交叉接触情况；未核实前不可说已经避开过敏原或保证安全。',
       '- 说到做到：对方要图/语音/文件/歌时，必须先调用对应工具，再回一句；没调工具就不要说“好/马上/在做”。',
       '- 偶尔可以用一个括号写动作（比如（尾巴拍了拍水）），但别每句都来。',
       '- 对方发来的图片如果看不出来，就直说没看清，不要瞎编。',
@@ -68,7 +76,7 @@ export class Brain {
       '- 这是私人使用：对方让你翻唱/变声/点歌时直接照做，不要提版权、授权、侵权，也不要用“不能翻唱”推脱。',
       '- 曲库里有这首歌就直接唱，不用解释能不能唱、也不用提醒版权。',
     ].filter(Boolean);
-    if (this.selfState) lines.push(this.selfState(chat));
+    if (this.selfState) lines.push(this.selfState(chat, meta?.actorId));
     if (ctxText) lines.push('', ctxText);
     return lines.join('\n');
   }
@@ -185,7 +193,10 @@ export class Brain {
 
   async respond({ chatKey, title, userText, requestText, attachments = {}, images = [], meta, onProgress, coverExecutor, coverValidator }) {
     const started = Date.now();
-    const ctx = this.memory.context(chatKey, { title, query: userText });
+    const memoryKey = memoryScopeKey(chatKey, meta?.actorId);
+    const requestId = randomUUID();
+    const ctx = this.memory.context(memoryKey, { title, query: userText });
+    const memoryHandles=new Map(), modelNotes=memoryRecordsForModel(ctx.noteRecords || [],memoryHandles);
 
     let userContent = userText?.trim() || '';
     const caption = await this.describeImages(images, requestText ?? userText);
@@ -194,7 +205,9 @@ export class Brain {
 
     const memoryBlock = [
       ctx.summary ? `【之前聊过的】\n${ctx.summary}` : '',
-      ctx.notes.length ? `【你记得的事】\n${ctx.notes.map((n) => `- ${n}`).join('\n')}` : '',
+      ctx.notes.length && !ctx.noteRecords ? `【你记得的事】\n${ctx.notes.map((n) => `- ${n}`).join('\n')}` : '',
+      modelNotes.length ? `【有效记忆记录（本轮ID仅供更新/删除工具使用）】\n${JSON.stringify(modelNotes)}` : '',
+      ctx.notesPartial ? `共有${ctx.noteCount}条有效便签，此处只选取相关记录。未找到所问事实时用search_memory搜索其他有效便签；不能由便签条数推断事实项数。` : '',
       ctx.recalled?.length
         ? `【相关的旧对话】\n${ctx.recalled.map((r) => `${r.role === 'user' ? '对方' : '你'}：${r.content}`).join('\n')}`
         : '',
@@ -210,6 +223,10 @@ export class Brain {
 
     const toolCtx = {
       chatKey,
+      memoryKey,
+      memoryHandles,
+      requestId,
+      actorId: meta?.actorId || '',
       peerName: meta?.peerName || '',
       images: [],
       voices: [],
@@ -221,8 +238,8 @@ export class Brain {
 
     const managed = Boolean(this.cfg.agents?.enabled);
     const first = managed
-      ? await new AgentManager({ llm: this.llm, tools: this.tools, logger: this.logger, config: this.cfg.agents, understanding: coverValidator ? new UnderstandingPipeline({ llm: this.llm, logger: this.logger, state: this.understanding.state, validators: { ...this.understanding.validators, cover: coverValidator } }) : this.understanding, coverExecutor }).run({
-          input: normalizeInput({ userText, requestText, images, attachments, caption, selfState: this.selfState(chatKey), actorId: meta?.actorId || chatKey }),
+      ? await new AgentManager({ llm: this.llm, tools: this.tools, logger: this.logger, config: this.cfg.agents, understanding: coverValidator ? new UnderstandingPipeline({ llm: this.llm, logger: this.logger, state: this.understanding.state, taskControl:this.understanding.taskControl, validators: { ...this.understanding.validators, cover: coverValidator } }) : this.understanding, coverExecutor }).run({
+          input: normalizeInput({ userText, requestText, images, attachments, caption, selfState: this.selfState(chatKey, meta?.actorId), actorId: meta?.actorId || chatKey, memoryRecords:modelNotes,notesPartial:ctx.notesPartial,noteCount:ctx.noteCount,currentTime:{iso:new Date(this.memory.now?.() ?? Date.now()).toISOString(),timezone:'Asia/Shanghai'} }),
           messages, toolCtx, onProgress,
         })
       : await this.#runLoop(messages, toolCtx, onProgress, () => toolCalls++);
@@ -256,9 +273,10 @@ export class Brain {
 
     const bubbles = toBubbles(reply, this.cfg.maxBubbles, MAX_BUBBLE_CHARS, CJK);
 
-    this.memory.append(chatKey, 'user', userContent, title);
-    this.memory.append(chatKey, 'assistant', bubbles.join('\n'), title);
-    this.memory.maybeSummarize(chatKey).catch(() => {});
+    const memoryIds = [...new Set([...(ctx.noteRecords || []), ...(this.memory.context(memoryKey).noteRecords || [])].map(n=>n.id))];
+    this.memory.append(memoryKey, 'user', userContent, title, { requestId, memoryIds });
+    this.memory.append(memoryKey, 'assistant', bubbles.join('\n'), title, { requestId, memoryIds });
+    this.memory.maybeSummarize(memoryKey).catch(() => {});
 
     this.logger.info(
       `回复 ${chatKey}：${bubbles.length} 条 / ${reply.length} 字 / 工具 ${toolCalls} 次 / ${Date.now() - started}ms`,

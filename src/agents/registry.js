@@ -1,6 +1,6 @@
 /** Stable capability boundary. New upstream tools must be assigned explicitly. */
 export const AGENTS = Object.freeze({
-  conversation: { description: '日常对话、时间和会话记忆', tools: ['get_time', 'search_history', 'find_media', 'remember', 'remember_global', 'send_sticker'] },
+  conversation: { description: '日常对话、精确核算、时间和会话记忆', tools: ['verify_numbers', 'get_time', 'search_memory', 'search_history', 'find_media', 'remember', 'update_memory', 'forget_memory', 'remember_global', 'send_sticker'] },
   research: { description: '检索资料，区分事实和不确定信息', tools: ['search_web', 'search_history', 'find_media'] },
   automotive: { description: '汽修配件识别；缺车型/OE/位置时追问，不承诺适配', tools: ['lookup_part', 'search_web'] },
   document: { description: '结合上游结果制作 PPT、Word、Excel；排队不等于完成', tools: ['make_ppt', 'make_docx', 'make_excel'] },

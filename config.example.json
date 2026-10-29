@@ -19,7 +19,8 @@
   },
   "chat": {
     "agents": {
-      "enabled": false,
+      "enabled": true,
+      "architecture": "single",
       "maxSteps": 4,
       "maxToolCalls": 8,
       "maxRounds": 3,
@@ -151,7 +152,7 @@
   "office": {
     "pythonPath": "",
     "theme": "history",
-    "model": "deepseek-flash",
+    "model": "deepseek-v4-pro",
     "maxImages": 8,
     "imagesPerDeck": 0,
     "imageDelayMs": 15000

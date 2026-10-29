@@ -4,7 +4,7 @@ import { AgentManager, normalizeInput } from '../src/agents/manager.js';
 import { UnderstandingPipeline } from '../src/agents/understanding.js';
 import { completeExplicitTopic } from '../src/agents/intent-fields.js';
 import { allowedTools } from '../src/agents/capabilities.js';
-import { assess, sandboxTools } from '../scripts/architecture-eval-core.mjs';
+import { assess, evaluateScenario, sandboxTools } from '../scripts/architecture-eval-core.mjs';
 import { SCENARIOS } from '../scripts/architecture-cases.mjs';
 
 const I = (operations, slots = {}, patch = {}) => ({ act: 'create', targetId: '', kind: 'general', goal: '用户任务', agents: ['conversation'], operations, forbiddenOperations: [], slots, exclude: [], missing: [], clarification: '', ...patch });
@@ -65,7 +65,6 @@ for (const op of ['research.search', 'automotive.identify', 'memory.read', 'time
 test('research with no execution blocks dependent document creation', async () => {
   const f = manager([
     json(I(['research.search', 'document.create'], { query: '太阳能', topic: '太阳能', format: 'docx' })),
-    json({ steps: [{ id: 'r', agent: 'research', task: '查资料', dependsOn: [] }, { id: 'd', agent: 'document', task: '生成报告', dependsOn: ['r'] }] }),
     { content: '查好了，但只是文字' }, { content: '没有执行' },
   ]);
   const r = await f.run('先查资料再制作报告');
@@ -101,4 +100,36 @@ for (const repaired of [true, false]) test(`fitment-only prohibition receives on
   assert.equal(calls, 2);
   if (repaired) { assert.ok(r.intent); assert.deepEqual(r.intent.exclude, ['车型适配结论']); }
   else { assert.equal(r.intent, undefined); assert.match(r.reply, /避免做反/); assert.equal(p.state.list('test').length, 0); }
+});
+
+// First-layer outputs captured in architecture-results (2).json at 6bf9819.
+// Replay through the production pipeline and evaluator; no live model or real delivery.
+const reportIntents = {
+  speech: I(['speech.synthesize'], { text: '明天上午九点开会' }),
+  part: I(['automotive.identify'], { topic: '汽车刹车片的作用和常见外观' }, { exclude: ['具体车型适配判断'] }),
+  'research-document': I(['research.search', 'document.create'], { topic: '太阳能发电的基本原理', format: 'docx' }),
+};
+for (const [id, intent] of Object.entries(reportIntents)) test(`report regression reaches the correct tools with original constraints: ${id}`, async () => {
+  const result = await evaluateScenario(SCENARIOS.find(s => s.id === id), { async chat(args) {
+    const system = args.messages[0].content;
+    if (system.includes('第一层多模态')) return json(intent);
+    if (system.includes('第二层 Agent Manager')) return json({ steps: [
+      { id: 'r', agent: 'research', task: '查询原理', dependsOn: [] },
+      { id: 'd', agent: 'document', task: '根据检索结果制作Word', dependsOn: ['r'] },
+    ] });
+    const used = new Set(args.messages.flatMap(m => (m.tool_calls || []).map(c => c.function.name)));
+    const next = args.tools?.find(s => (id === 'part' ? s.function.name === 'lookup_part' : ['send_voice', 'search_web', 'make_docx'].includes(s.function.name)) && !used.has(s.function.name));
+    if (next) {
+      const name = next.function.name;
+      // The adapter must replace the specialist's conflicting parameters.
+      return { content: '', toolCalls: [{ id: 'replay', function: { name, arguments: JSON.stringify({ text: '被改写的文本', query: '错误对象', topic: '错误主题' }) } }] };
+    }
+    return { content: '已取得模拟工具结果；文档任务仅排队。' };
+  } });
+  assert.equal(result.status, 'pass', JSON.stringify(result));
+  const actual = result.turns[0].actual;
+  if (id === 'speech') assert.equal(actual.calls[0].args.text, '明天上午九点开会。');
+  else assert.equal(actual.calls[0].args.query, intent.slots.topic);
+  assert.deepEqual(actual.intent.exclude, intent.exclude);
+  assert.deepEqual(actual.intent.forbiddenOperations, intent.forbiddenOperations);
 });

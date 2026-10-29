@@ -36,7 +36,7 @@ export class OneBot extends EventEmitter {
       /* ignore */
     }
     this.connected = false;
-    for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(new Error('连接已关闭，发送结果未确认')); }
+    for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(Object.assign(new Error('连接已关闭，发送结果未确认'),{deliveryState:'unknown'})); }
     this.pending.clear();
   }
 
@@ -93,7 +93,7 @@ export class OneBot extends EventEmitter {
         this.pending.delete(String(data.echo));
         clearTimeout(p.timer);
         if (data.status === 'ok' || data.retcode === 0) p.resolve(data.data ?? {});
-        else p.reject(new Error(`${data.wording || data.message || 'OneBot 调用失败'}（retcode=${data.retcode}）`));
+        else p.reject(Object.assign(new Error(`${data.wording || data.message || 'OneBot 调用失败'}（retcode=${data.retcode}）`),{deliveryState:'rejected',retcode:data.retcode}));
         return;
       }
       this.#onEvent(data);
@@ -101,7 +101,7 @@ export class OneBot extends EventEmitter {
 
     ws.on('close', (code, reason) => {
       if (this.ws !== ws) return;
-      for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(new Error('OneBot 连接断开，调用结果未确认')); }
+      for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(Object.assign(new Error('OneBot 连接断开，调用结果未确认'),{deliveryState:'unknown'})); }
       this.pending.clear();
       const wasConnected = this.connected;
       this.connected = false;
@@ -147,13 +147,13 @@ export class OneBot extends EventEmitter {
   call(action, params = {}, timeout = API_TIMEOUT) {
     return new Promise((resolve, reject) => {
       if (this.ws?.readyState !== WebSocket.OPEN) {
-        reject(new Error('OneBot 未连接'));
+        reject(Object.assign(new Error('OneBot 未连接'),{deliveryState:'not_sent'}));
         return;
       }
       const echo = `c${++this.echoSeq}`;
       const timer = setTimeout(() => {
         this.pending.delete(echo);
-        reject(new Error(`OneBot 调用超时：${action}`));
+        reject(Object.assign(new Error(`OneBot 调用超时：${action}`),{deliveryState:'unknown'}));
       }, timeout);
       this.pending.set(echo, { resolve, reject, timer });
       try {

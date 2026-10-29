@@ -36,7 +36,8 @@ test('附件失败、缺失与多文件歧义都阻止执行',()=>{
  assert.match(validateCapabilities(I(['image.inspect']),input({imageCount:1,imageReadFailed:true})),/读取/);
 });
 test('页数、行数等超出执行能力不得静默夹取；未知操作拒绝',()=>{
- for(const slots of [{pages:100},{rows:2},{columns:30},{size:'guess'}]) assert.throws(()=>validateIntent(I(['document.create'],slots)));
+ for(const slots of [{pages:100},{rows:2},{columns:30}]) { const parsed=validateIntent(I(['document.create'],slots)); assert.match(validateCapabilities(parsed,input()),/当前支持/); }
+ assert.throws(()=>validateIntent(I(['document.create'],{size:'guess'})));
  assert.throws(()=>validateIntent(I(['delete.everything'])));
 });
 test('确认参数绑定到执行参数，模型不能改成另一主题或念另一句话',()=>{

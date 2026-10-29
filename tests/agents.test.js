@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentManager, validatePlan, normalizeInput } from '../src/agents/manager.js';
+import { AgentManager, validatePlan, normalizeInput } from '../src/agents/multi-agent.js';
 import { toolAdapter } from '../src/agents/registry.js';
 import { IntentRecognizer } from '../src/agents/intent.js';
 

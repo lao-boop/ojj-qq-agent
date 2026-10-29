@@ -1,0 +1,38 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {judgeReview} from './response-quality-report.mjs';
+const directories=['tmp/task-reliability-live','tmp/task-reliability-reserve'];
+const runs=directories.map(dir=>({dir,report:JSON.parse(fs.readFileSync(`${dir}/results.json`)),reviews:JSON.parse(fs.readFileSync(`${dir}/reviews.json`))}));
+for(const run of runs)if(!run.report.completed)throw new Error('An evaluation is incomplete');
+const firstInputs=new Set(runs[0].report.cases.flatMap(c=>c.turns.map(t=>t.text)));
+const historicalInputs=new Set(['response-quality-after','holdout-final','delivery-memory-live','delivery-memory-reserve'].flatMap(dir=>JSON.parse(fs.readFileSync(`tmp/${dir}/results.json`)).cases.flatMap(c=>c.turns.map(t=>t.text))));
+for(const [i,run] of runs.entries())for(const c of run.report.cases)for(const t of c.turns)if(historicalInputs.has(t.text)||(i===1&&firstInputs.has(t.text)))throw new Error('Inputs reused from a previous suite');
+const last=runs[1],report=last.report;
+for(const [file,expected] of Object.entries(report.manifest.sourceHashes))if(createHash('sha256').update(fs.readFileSync(path.join('src',file))).digest('hex')!==expected)throw new Error(`Production code differs from final evaluation: ${file}`);
+const totals=runs.map(run=>{
+ const grades=run.report.results.map(r=>({...judgeReview(r,run.reviews[r.id]),id:r.id}));
+ if(grades.some(g=>g.status==='unreviewed'))throw new Error('Missing review');
+ const stages=run.report.results.flatMap(r=>r.turns.flatMap(t=>t.trace?.timings||[]));
+ const times=Object.fromEntries([...new Set(stages.map(s=>s.stage))].map(stage=>{
+   const values=stages.filter(s=>s.stage===stage).map(s=>s.ms).sort((a,b)=>a-b);
+   return [stage,{calls:values.length,medianMs:values[Math.floor(values.length/2)],maxMs:values.at(-1)}];
+ }));
+ const artifacts=run.report.results.flatMap(r=>r.artifacts);
+ return {cases:run.report.cases.length,turns:run.report.cases.flatMap(c=>c.turns).length,passed:grades.filter(g=>g.status==='satisfactory').length,needsWork:grades.filter(g=>g.status==='needs_work').length,serviceErrors:grades.filter(g=>g.status==='service_error').length,artifacts:artifacts.length,pages:artifacts.reduce((n,a)=>n+(a.rendered?.pageCount||0),0),grades,times,usage:run.report.usage};
+});
+const tests=fs.readFileSync('tmp/task-reliability-final-tests.log','utf8'),testsCount=Number(/ℹ pass (\d+)/.exec(tests)?.[1]);
+if(!testsCount||!/ℹ fail 0\b/.test(tests))throw new Error('Final test run did not pass');
+const mechanism=JSON.parse(fs.readFileSync('tmp/task-reliability-mechanism-comparison.json'));
+const t=totals[1],first=totals[0],labels={satisfactory:'达标',needs_work:'需改进',service_error:'服务异常'},e=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const headline=`最终使用另一套${t.cases}个新场景、${t.turns}轮输入：${t.passed}/${t.cases}达标，${t.needsWork}项低于达标线，${t.serviceErrors}项模型服务异常。本地${testsCount}项测试全部通过。`;
+const method='新题在取到该批模型答案前固定，最终验收期间生产代码不变。第一批失败完整保留，修复通用机制后换第二批新题验收，没有重刷原题替换成绩。不同题库的比例不能直接用来估算能力提升幅度。评分由Codex按完整对话、实际存储状态、回执及文件检查给出，不是独立用户满意度调查。模型为真实deepseek-v4-pro；QQ为本地模拟服务，没有向真实联系人发送测试消息。部分容量场景预置大量便签，不等同于自然语言写入这些便签的测试。';
+const changes=['群聊文件按会话和发送者合并，保留@与引用；自动文件摘要和检索同样按成员区分。','长期便签不再因超过40条被删除；按相关性选取上下文，失效来源标记持久保留。记忆工具使用本轮短编号映射，完整存储ID仍用于来源追踪。','任务参数、草稿、取消和文件状态持久化；文件队列支持取消未开始任务、重启后明确继续、上传明确失败后使用原文件重发。结果未知禁止重复上传。','更换文件格式只清除不适用的旧结构参数；工具名称被写成正文时要求格式修复；意图识别获得真实当前时间。','新配置默认启用单主Agent，Office与对话默认模型一致；增加分阶段耗时与只读配置检查。'];
+let md=`# 任务可靠性：新题验收报告\n\n${headline}\n\n${method}\n\n## 完成的改动\n\n${changes.map(s=>`- ${s}`).join('\n')}\n\n## 同一故障的代码前后复现\n\n| 检查 | 修改前 | 修改后 |\n| --- | --- | --- |\n| 不同群成员的文件各归其主 | 失败，混为后一人请求 | 通过 |\n| 到期信息在大量新增便签后仍失效 | 失败，旧聊天重新出现 | 通过 |\n| 草稿在重启后保留 | 失败，内存状态丢失 | 通过 |\n\n以上是相同输入对真实旧/新代码的确定性复现，不是模型能力提升百分比。\n\n## 两批实际模型结果\n\n| 批次 | 新场景 | 达标 | 内容需改进 | 服务异常 |\n| --- | ---: | ---: | ---: | ---: |\n| 第一批，发现新问题 | ${first.cases} | ${first.passed} | ${first.needsWork} | ${first.serviceErrors} |\n| 第二批，修复后换题验收 | ${t.cases} | ${t.passed} | ${t.needsWork} | ${t.serviceErrors} |\n\n第一批四项失败是：工具名称当正文、记忆编号抄错、临时保存结构化输出截断，以及跨格式修改保留旧页数。原始失败不会被第二批结果覆盖。\n\n## 最终逐题结果\n\n| 场景 | 结果 | 分数 |\n| --- | --- | ---: |\n`;
+for(const g of t.grades)md+=`| ${g.id} | ${labels[g.status]} | ${g.total??'—'}/12 |\n`;
+md+='\n';
+for(const r of report.results)md+=`### ${r.id}\n\n${last.reviews[r.id]?.rationale||'模型服务异常，完整输出保留，整场不计内容分。'}\n\n`;
+md+=`## 验证与使用\n\n最终生成${t.artifacts}份真实文件、渲染${t.pages}页；文件与PDF、图片可从逐题报告下载。\n\n本地测试还实际启动机器人子进程，经过本地OneBot WebSocket注入两位群成员的交错文件和任务命令，再停止和重启进程验证取消状态。没有使用真实QQ账户。\n\n发送 \`/tasks\` 查看任务编号；\`/task 编号\` 查进度；\`/cancel 编号\` 取消草稿或未开始的文件；\`/resume 编号\` 继续中断文件步骤；\`/retry 编号\` 重发明确上传失败的原文件。群聊只操作本人的任务。\n\n## 限制\n\n仍有少量人格闲聊、Excel打印表格偏小和Word末行单字换行；这些场景达到本轮门槛，仍有体验优化空间。\n\n- 文档支持受控恢复；歌曲、翻唱等中断后标为未确认，不会自动恢复。运行中的生成和上传不支持强制取消。\n- 当前数据目录由单进程持有，JSON日志不支持多进程并发写。\n- 默认配置已与验收路径一致，已有配置中的明确覆盖仍保留；没有修改或重启外部QQ部署。\n- 测试覆盖和真实模型小样本不能证明所有口语、所有客户端或真实QQ链路均无问题。\n\n最终模型调用${t.usage.calls}次，输入${t.usage.promptTokens} tokens、输出${t.usage.completionTokens} tokens。分阶段耗时保存在JSON中；两套题不同，不将耗时差当作严格性能提升。\n\n[最终逐题报告](task-reliability-reserve/report.html) · [第一批失败记录](task-reliability-live/report.html) · [最终原始结果](task-reliability-reserve/results.json) · [机制前后复现](task-reliability-mechanism-comparison.json)\n\n分支：fix/architecture-routing-report；main未改，未提交、推送或部署。\n`;
+const cards=report.results.map(r=>{const g=t.grades.find(g=>g.id===r.id);return `<article><h2>${e(r.id)} · ${labels[g.status]} · ${g.total??'—'}/12</h2>${r.turns.map(turn=>`<p class="input">${e(turn.input)}</p><pre>${e(turn.reply)}</pre>`).join('')}<p>${e(last.reviews[r.id]?.rationale||'模型服务异常，本场景不计内容分。')}</p>${r.artifacts.map(a=>`<p><a href="task-reliability-reserve/${e(a.file)}">下载实际文件</a> · <a href="task-reliability-reserve/${e(a.pdf)}">PDF预览</a></p><img src="task-reliability-reserve/${e(a.preview)}" alt="实际文件渲染">`).join('')}</article>`;}).join('');
+const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>任务可靠性新题报告</title><style>body{max-width:1100px;margin:30px auto;padding:0 22px;font:16px/1.7 system-ui;background:#f4f7fb;color:#172235}section,article{background:white;border:1px solid #dce3ee;border-radius:10px;padding:22px;margin:20px 0}h1{font-size:28px}h2{font-size:19px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;background:#edf6f1;padding:12px}.input{font-weight:600}img{max-width:100%;height:auto}a{color:#245baf}</style><h1>任务可靠性：新题验收</h1><p>${e(headline)}</p><section><p>${e(method)}</p><ul>${changes.map(s=>`<li>${e(s)}</li>`).join('')}</ul><p><a href="task-reliability-summary.md">完整说明与限制</a> · <a href="task-reliability-live/report.html">第一批12题及4项失败</a> · <a href="task-reliability-reserve/report.html">最终评分明细</a></p><p>使用：/tasks · /task 编号 · /cancel 编号 · /resume 编号 · /retry 编号。</p></section>${cards}</html>`;
+fs.writeFileSync('tmp/task-reliability-summary.md',md);fs.writeFileSync('tmp/task-reliability-summary.html',html);fs.writeFileSync('tmp/task-reliability-summary.json',JSON.stringify({headline,method,testsCount,totals,mechanism},null,2));console.log(headline);

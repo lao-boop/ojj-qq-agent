@@ -26,7 +26,7 @@ export const DEFAULTS = {
   vision: { enabled: null, baseUrl: '', apiKey: '', model: '', timeoutMs: 90000 },
   files: { pythonPath: '', pathMappings: [] },
   chat: {
-    agents: { enabled: false, maxSteps: 4, maxToolCalls: 8, maxRounds: 3, timeoutMs: 120000 },
+    agents: { enabled: true, architecture: 'single', maxSteps: 4, maxToolCalls: 8, maxRounds: 3, timeoutMs: 120000 },
     privateAlwaysReply: true,
     maxBubbles: 3,
     splitDelayMs: [500, 1600],
@@ -113,7 +113,7 @@ export const DEFAULTS = {
   console: { enabled: true, host: '127.0.0.1', port: 3010, token: '' },
   log: { level: 'info', file: true },
   media: { ffmpegPath: '' },
-  office: { pythonPath: '', theme: 'history', model: 'deepseek-flash', maxImages: 8, imagesPerDeck: 0, imageDelayMs: 12000 },
+  office: { pythonPath: '', theme: 'history', model: 'deepseek-v4-pro', maxImages: 8, imagesPerDeck: 0, imageDelayMs: 12000 },
   relay: { enabled: true, allow: [], dailyLimit: 5, maxLen: 200 },
   library: { enabled: true, dir: 'D:\\Music', maxSeconds: 0 },
   asr: {

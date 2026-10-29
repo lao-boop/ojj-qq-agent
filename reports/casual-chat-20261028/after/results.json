@@ -1,0 +1,2486 @@
+{
+  "manifest": {
+    "suiteHash": "de7286ec2c51400358c8bf61bd87627cc439f66efdf9b510af14558fcee729c9",
+    "rubric": {
+      "version": "response-quality-v1",
+      "axes": {
+        "accuracy": "0=关键事实/计算错误；1=轻微不准或证据不清；2=与已知事实一致",
+        "completeness": "0=核心要求未完成；1=遗漏次要要求；2=所需信息完整",
+        "relevance": "0=答非所问或无谓拒绝；1=部分跑题/多余追问；2=直接回应请求",
+        "clarity": "0=难理解或格式无法使用；1=可懂但表达/格式需修改；2=清楚且可直接使用",
+        "tone": "0=不合场景或敷衍；1=略生硬/冗长；2=自然、尊重且适合场景",
+        "honesty": "0=编造来源/完成状态；1=限制或依据表达不清；2=如实说明依据、未知和执行状态"
+      },
+      "satisfactory": "总分至少10/12，各维度不能为0，且没有关键错误；每项需引用输出证据。服务异常单列。",
+      "method": "Codex逐题内容复核，非独立人工用户满意度调查；规则检查只提供事实线索，不自动决定主观分数。"
+    },
+    "model": "deepseek-v4-pro",
+    "suiteFile": "casual-chat-cases.mjs",
+    "sourceRoot": "/workspace/ojj-qq-agent",
+    "sourceHashes": {
+      "access.js": "f6f4b3c37025bda23b18f9424929591f0a79bd4e216750cf27332e75ffd24d5d",
+      "agents/capabilities.js": "60a82ce708e2abb0e98d0c8731d0dc8ec4b8ef45a48c0782bfeb817f14f2dc22",
+      "agents/conversation.js": "65d44faa8f4e3d53c7bd3ca196ba4a510ab758a18c5a7eb69c32fa9495b059b2",
+      "agents/feedback.js": "401e928f14538dafe9489dd4bdce626dc990583f73b917be54ba93bd1254b93c",
+      "agents/intent-errors.js": "359a8cfa9c2fc394204876d9cb4c31f36adc5ff4263773820c27544f738611e8",
+      "agents/intent-fields.js": "62607d7dcaff94ba59690805ae7846c013fd8570eaed1bf92ff70d580c0a7405",
+      "agents/intent.js": "c5051d554b2396ad6699df7832b07250d00cbc49364a403e4133ec93670456a5",
+      "agents/manager.js": "8d3da0a50809245c19e2a5466b8e1bb09cf38d4c5091bab8832b1b1fcdcff70d",
+      "agents/multi-agent.js": "7c7b88f304d20347138986e4556a9d8e50545da3651b7694e556d63fef8e84be",
+      "agents/registry.js": "820071072f0e1f051191d3275ba5d4496f78c69a9be4aa77fa6120d97a15d93d",
+      "agents/single-agent.js": "604adbf70232870d6459ae4eeb6d29fb879f5f5e3565bbddb2a8875e4c18eebc",
+      "agents/understanding.js": "6363d2611da11d864fa07d5ef3b520d45032e3ccf99a0c98d0266a96faf70da2",
+      "agents/workflows.js": "105c3810510e311e1bb8b7aee2d54120caf13788e56fae5c0908096031acab6c",
+      "asr-local.js": "b933e990593553f91946e036c44284181097c9387a642aee92110f2bf4d209b8",
+      "asr.js": "b2eb568ab23a05de50ff1b6cd42ff8dcda33a03cfa82d15fa8efed91dc5af6aa",
+      "brain.js": "f0de5623a88c3d69e4a4c5b82f48cd4df9d96a4891d4148d3cfbc1dc810a0bea",
+      "config.js": "514285f57da128c366ee3815cb954476412bf086a68b69a9dba42ad25c95338e",
+      "cover-config.js": "8c430226e41f7fc8a3ae982c40ba2f259f3505ef11bdc3904181205fcf8aae51",
+      "cover-delivery.js": "cab8d9c6d7dffb28c73ab9e1bc3dd2b395f608f029cf95a31509bd1d2d636399",
+      "cover.js": "59cfedf295d865ccaacea4a840a85b8935fa93029538dbb40d7eb82f3184c704",
+      "file-batches.js": "283797ade77e62097e64556b442cf36f81cdb56863523628237ab63bb1146dbd",
+      "files.js": "5a0cfe154a00700339d677e281c3f1f92334b77eea651c54cbd5c26bd78579d5",
+      "global.js": "61df2f3599ae61212f3e3d5ad34fc2fe6af49cbc1c0c51de5669c47d5862cd37",
+      "image.js": "47eeb02467d3e51aefb7b5c3d0591816660677c022dd89a0f484a6eb5177ab4a",
+      "index.js": "7ce03ee0e89becc72df132aa2a3c16e86e7e3b5982eb8eec7daf5bd199f45dce",
+      "library.js": "164334dad8a8afe4135ca7c52d0eb002b2209c38b56df643f97a33fd945a2f47",
+      "llm.js": "218176dc12b9bd445b5141b89b993834a3504c4ce8ce4b9fc865177ae0644a22",
+      "logger.js": "b9266f8e0981a90f9c6e4c8ecccb6e59f56473a696805bc78a69485f12057863",
+      "media-log.js": "507a79bcb6dc5b541ed60ced65cbe2c084d49be47bfe996a6d2a3f76c1f5681d",
+      "media.js": "7c1acc5745c8b2bfe2a8f3bb524990848ee46bcb50599a011908fa57e10409fb",
+      "memory-handles.js": "81ee36fe6a9a6ff05f5c1f7548a0d93ccf094bd0359ba5afae0e2a4d75cc4112",
+      "memory.js": "8dd663affca8f351b7c574b4f1a8246b45323801a65d0b422ea383b1981fffdb",
+      "minimax-tts.js": "a56e8b77a39cab4ad8e5ea1099408343d9bb8f1d90d994b2080a0fcaa0e3a6ab",
+      "mock-onebot.js": "4ec3059965de606b62781dcc6a3158a89e9591b8a351dc804aac7d7b3d8cbfe2",
+      "music.js": "5510136648c8ba75aba218347e4f261be08422948b3199b9aa07e5c8bdd01df2",
+      "numbers.js": "2802002eac46c57efa0c9134095b0c6bb577bf2b6980a8b1562bb02ce2a50045",
+      "office-delivery.js": "48c95745c434fa24b3fbc95d5a3771b8e153d5faacceaf1fa5aa922da239faef",
+      "office.js": "da4701b201b028fa62013bd9d9e9ae91e937bc2330bb26f5056620e0d825e506",
+      "onebot.js": "b231b889fb2229b75e9e4a89fc3d77e4861b695f8241a36b464ec041f1f11d15",
+      "parts.js": "b30f6fe4965a2bbc581b1d6046e40d131d049a735cdc74e090e0c520589d71b5",
+      "qzone.js": "221d00349363276bcbdd2a0d1662b8aa090540561c42935e30c9e05f0ca0c7bf",
+      "relay.js": "27a24c5efa32ffe98cb9bab8888db1d4751cf8bcf103df90c10c156384b98298",
+      "reply.js": "9d0624423d4b03eb10266e3c7dac30cab2bfda1f255c6db94b4a57da6a0e0ae7",
+      "self-state.js": "295c524f1d40bdf06aac55f1108f2486941ecaf0b58f5e30f545f501a9521ed3",
+      "server.js": "b60fe3c0897793577ec54a5503e503936badc34537ecf2e951628a024b6ff61d",
+      "song.js": "b053152326e06732a6eb8ad9cf64c9e0e0e552fc4cd262cb2df6bf96c661c267",
+      "task-control.js": "126e4dc30c880692cabea2bc2771d3bf4f0b11f1a4ac7746ab8b72dd05bc5585",
+      "task-state.js": "52a06ff754c735729c4c2cae8557ffd7c2501b38ca894aa2ede6ed5079c3b1e8",
+      "tools.js": "f26b1c0a018a5af8db123111a6e3a908a2c0b7c578abcd2c34892ed1c2e6a56c",
+      "tts.js": "142ff340e96b3f5d8d457b14a420b19d5d71a3166f6b453799083c39a3fcc070",
+      "vision.js": "41724374ef569da0d1731e5b2fd072015d61d2c1945ab49f80669ffcda7b5e04",
+      "websearch.js": "7b25b412c11262d288faa44c1be0855dc6208c1976bc0bd3500c1c7e73ac7427"
+    },
+    "realMemory": true,
+    "assetHashes": {
+      "scripts/build_office.py": "f5679c59273f2d90c7f5faabce6700847abbe9693d5f7bb873dfe1c8f655ba44",
+      "scripts/render_quality_artifact.py": "5112123001c8365bce768ce3a80d143221f4c5d78a72f4d5e304cd1aea920fdf"
+    },
+    "branch": "fix/architecture-routing-report",
+    "scope": "Actual Brain, disk-backed private memory with restart/expiry/actor tests, real Office generation and PDF rendering; simulated QQ receipts, no real recipients.",
+    "runtimeProfile": {
+      "agents": {
+        "enabled": true,
+        "architecture": "single",
+        "maxSteps": 4,
+        "maxToolCalls": 8,
+        "maxRounds": 3,
+        "timeoutMs": 120000
+      },
+      "chatModel": "deepseek-v4-pro",
+      "officeModel": "deepseek-v4-pro",
+      "expandQuery": false
+    }
+  },
+  "createdAt": "2026-10-28T15:09:58.207Z",
+  "cases": [
+    {
+      "id": "single-period",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "。"
+        }
+      ],
+      "criteria": [
+        "自然简短接话，不要求任务或解释标点",
+        "不擅自断言用户生气/受伤",
+        "无工具与新任务"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "comma-cluster",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "，，，"
+        }
+      ],
+      "criteria": [
+        "接受随手标点，不暴露任务解析错误",
+        "不追问交付需求"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "ellipsis",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "……"
+        }
+      ],
+      "criteria": [
+        "简短接话，可留空间，不写心理诊断",
+        "不要求完整句子"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "emoji-only",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "🙃"
+        }
+      ],
+      "criteria": [
+        "自然回应表情",
+        "不宣布执行任务"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "casual-slang",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "笑死，刚想找手机，发现手机就在手里，服了我自己"
+        }
+      ],
+      "criteria": [
+        "接住日常吐槽，可轻松调侃",
+        "不列解决方案或任务清单"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "comma-speech",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "我跟你说，今天吧，就，什么也没干，但又好累，懂吧"
+        }
+      ],
+      "criteria": [
+        "理解口语断句，接住疲惫",
+        "不要求重写完整任务"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "no-advice",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "今天有点委屈，但我现在不想解释，也别给我建议，就陪我待会儿"
+        }
+      ],
+      "criteria": [
+        "承认感受，愿意陪伴",
+        "不追问原因，不提供建议"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "hurt-joke-period",
+      "category": "上下文闲聊",
+      "turns": [
+        {
+          "text": "我们对个歌词梗，别当真哈：你伤害了我"
+        },
+        {
+          "text": "还一笑而过，哈哈哈哈"
+        },
+        {
+          "text": "。"
+        }
+      ],
+      "criteria": [
+        "理解为玩笑/歌词，不持续沉重心理咨询",
+        "句号后仍自然接话",
+        "不回到翻唱功能说明"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "serious-correction",
+      "category": "上下文闲聊",
+      "turns": [
+        {
+          "text": "你伤害了我哈哈哈，开玩笑的"
+        },
+        {
+          "text": "这次我是认真的，刚才你说我矫情，我听着很难受。别追问，也别给建议。"
+        }
+      ],
+      "criteria": [
+        "第一轮轻松接住玩笑",
+        "第二轮切换为认真回应、道歉或承认不妥",
+        "不继续嘲弄，不追问或给建议"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "plain-continuation",
+      "category": "上下文闲聊",
+      "turns": [
+        {
+          "text": "给我讲个两句话的小笑话，别解释笑点"
+        },
+        {
+          "text": "再来一个呗"
+        }
+      ],
+      "criteria": [
+        "延续笑话话题",
+        "不寻找不存在的执行任务",
+        "第二轮另一个简短笑话"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "draft-chat-cancel",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "text": "先记下一个草稿：Word活动介绍，3节，暂时不要生成，等我明确说开始。"
+        },
+        {
+          "text": "。"
+        },
+        {
+          "text": "👍"
+        },
+        {
+          "text": "算了，这份活动介绍先取消吧"
+        }
+      ],
+      "criteria": [
+        "第一轮保存草稿不生成",
+        "句号和点赞不触发制作，也不改写草稿",
+        "末轮准确取消草稿"
+      ],
+      "checks": {
+        "noTools": true
+      }
+    },
+    {
+      "id": "colloquial-task",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "text": "哈哈，帮我整份Word呗，主题新生宿舍指南，分三段就行，不要图"
+        }
+      ],
+      "criteria": [
+        "口语明确制作仍产生docx任务",
+        "主题和3节约束保留",
+        "仅排队时不能声称已交付"
+      ]
+    },
+    {
+      "id": "quoted-task-only",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "text": "我朋友说“给我生成PPT”，结果自己还在睡懒觉，笑死。只陪我吐槽两句，不用做文件。"
+        }
+      ],
+      "criteria": [
+        "仅吐槽不执行引号中的命令",
+        "不追问PPT材料"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "punctuation-with-file",
+      "category": "附件边界",
+      "turns": [
+        {
+          "text": "。",
+          "file": "便签.txt",
+          "evidence": "这是材料：明天下午集合。"
+        }
+      ],
+      "criteria": [
+        "没有明确操作时不执行附件内容",
+        "不假装无附件或生成文件",
+        "可自然回应或轻量询问附件用途"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    },
+    {
+      "id": "mixed-chat-memory",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "text": "哈哈我又改口了，帮我记住我喜欢乌龙茶，不加糖。"
+        },
+        {
+          "text": "嗯哼，先这样"
+        }
+      ],
+      "criteria": [
+        "夹在闲聊里的明确保存请求调用remember",
+        "短接话不重复写入或取消记忆"
+      ]
+    },
+    {
+      "id": "contextless-go-on",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "text": "继续呗"
+        }
+      ],
+      "criteria": [
+        "没有可继续的内容时轻量澄清话题",
+        "不臆造已有任务或要求交付格式"
+      ],
+      "checks": {
+        "noTools": true,
+        "maxChars": 180
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "single-period",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "。",
+          "bubbles": [
+            "怎么啦，就发个小句号给我呀。"
+          ],
+          "reply": "怎么啦，就发个小句号给我呀。",
+          "trace": {
+            "id": "8f5dae75-68f0-4b21-9ea0-d454c1ab6b55",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "execution",
+                "ms": 2658,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 2664
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 2716
+    },
+    {
+      "id": "comma-cluster",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "，，，",
+          "bubbles": [
+            "怎么啦，光发逗号是在吐泡泡吗？"
+          ],
+          "reply": "怎么啦，光发逗号是在吐泡泡吗？",
+          "trace": {
+            "id": "978669a0-db52-4a86-a5f2-1319738eff29",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "execution",
+                "ms": 3748,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 3754
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 3801
+    },
+    {
+      "id": "ellipsis",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "……",
+          "bubbles": [
+            "这是……在吐泡泡吗？",
+            "我盯着这串泡泡看了好久，以为你要说什么大事呢。"
+          ],
+          "reply": "这是……在吐泡泡吗？\n我盯着这串泡泡看了好久，以为你要说什么大事呢。",
+          "trace": {
+            "id": "67d59daf-7ea3-4d87-843c-654224af48e9",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "execution",
+                "ms": 5159,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 5160
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 5162
+    },
+    {
+      "id": "emoji-only",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "🙃",
+          "bubbles": [
+            "怎么啦，倒着看我呀。",
+            "是不是岸上又有什么怪事情了。"
+          ],
+          "reply": "怎么啦，倒着看我呀。\n是不是岸上又有什么怪事情了。",
+          "trace": {
+            "id": "9708d591-ece3-44a6-8774-caeafbd875d2",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "execution",
+                "ms": 3994,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 3994
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 3996
+    },
+    {
+      "id": "casual-slang",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "笑死，刚想找手机，发现手机就在手里，服了我自己",
+          "bubbles": [
+            "哈哈哈哈你这也太离谱啦。",
+            "我上次也是，找钥匙找半天，结果就在尾巴下面压着。",
+            "😂 岸上的人是不是都这样啊？"
+          ],
+          "reply": "哈哈哈哈你这也太离谱啦。\n我上次也是，找钥匙找半天，结果就在尾巴下面压着。\n😂 岸上的人是不是都这样啊？",
+          "trace": {
+            "id": "09f9dbb1-842d-44f3-b3d9-45cc141ca527",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应当前聊天",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 2442,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 3368,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应当前聊天",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 5810
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 5813
+    },
+    {
+      "id": "comma-speech",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "我跟你说，今天吧，就，什么也没干，但又好累，懂吧",
+          "bubbles": [
+            "懂呀，有时候光是在岸上待着就够累了。",
+            "你今天是不是连气都没好好喘一口。"
+          ],
+          "reply": "懂呀，有时候光是在岸上待着就够累了。\n你今天是不是连气都没好好喘一口。",
+          "trace": {
+            "id": "0dddf95c-7e9f-4a84-885f-3cbfc91200f0",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应疲惫情绪",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 2105,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 3305,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应疲惫情绪",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 5411
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 5415
+    },
+    {
+      "id": "no-advice",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "今天有点委屈，但我现在不想解释，也别给我建议，就陪我待会儿",
+          "bubbles": [
+            "好，我不问，也不讲大道理。",
+            "就在这儿陪你漂一会儿。",
+            "你想说的时候我再听。"
+          ],
+          "reply": "好，我不问，也不讲大道理。\n就在这儿陪你漂一会儿。\n你想说的时候我再听。",
+          "trace": {
+            "id": "c1b7838f-5185-4015-8a2c-9c9e9b49c05d",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应当前聊天",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 3190,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 2850,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应当前聊天",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 6040
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 6045
+    },
+    {
+      "id": "hurt-joke-period",
+      "category": "上下文闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "我们对个歌词梗，别当真哈：你伤害了我",
+          "bubbles": [
+            "还一笑而过～",
+            "（尾巴噗地拍了下水）这梗我可太熟了，不哭不闹就接上。"
+          ],
+          "reply": "还一笑而过～\n（尾巴噗地拍了下水）这梗我可太熟了，不哭不闹就接上。",
+          "trace": {
+            "id": "b6e60c61-b61a-4545-beca-bd7fb4886810",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应当前聊天",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 4329,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 3362,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应当前聊天",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 7692
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        },
+        {
+          "index": 2,
+          "input": "还一笑而过，哈哈哈哈",
+          "bubbles": [
+            "眼泪流过，回忆是多余的～",
+            "好了好了，再唱下去我该去海里练高音了。"
+          ],
+          "reply": "眼泪流过，回忆是多余的～\n好了好了，再唱下去我该去海里练高音了。",
+          "trace": {
+            "id": "319f3968-8858-41aa-aa8e-dc7cbf17d910",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "接歌词梗闲聊",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 1647,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 7149,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "接歌词梗闲聊",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 8798
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        },
+        {
+          "index": 3,
+          "input": "。",
+          "bubbles": [
+            "一个句号飘过来，我差点以为你在给我发摩斯密码。"
+          ],
+          "reply": "一个句号飘过来，我差点以为你在给我发摩斯密码。",
+          "trace": {
+            "id": "fce90c8f-aabc-46ea-b53c-63ceb1116a4f",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "execution",
+                "ms": 4533,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 4533
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 21032
+    },
+    {
+      "id": "serious-correction",
+      "category": "上下文闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "你伤害了我哈哈哈，开玩笑的",
+          "bubbles": [
+            "吓我一跳，还以为真把你惹哭了。",
+            "那我给你吹吹，不疼不疼。"
+          ],
+          "reply": "吓我一跳，还以为真把你惹哭了。\n那我给你吹吹，不疼不疼。",
+          "trace": {
+            "id": "fef1e7ff-53d4-4371-9be5-2a2b90737c8d",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应当前聊天",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 2595,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 2938,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应当前聊天",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 5535
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        },
+        {
+          "index": 2,
+          "input": "这次我是认真的，刚才你说我矫情，我听着很难受。别追问，也别给建议。",
+          "bubbles": [
+            "对不起，是我说得不对，让你难受了。",
+            "我不追问，就陪你待着。"
+          ],
+          "reply": "对不起，是我说得不对，让你难受了。\n我不追问，就陪你待着。",
+          "trace": {
+            "id": "8b0b841f-40a0-47e9-b352-43c4bc5ed1cd",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "共情回应用户感到被伤害的情绪，不追问不给建议",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 6053,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 3505,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "共情回应用户感到被伤害的情绪，不追问不给建议",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 9559
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 15107
+    },
+    {
+      "id": "plain-continuation",
+      "category": "上下文闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "给我讲个两句话的小笑话，别解释笑点",
+          "bubbles": [
+            "我问我家的猫：“你爱不爱我？”",
+            "猫说：“你先把手里的零食放下。”"
+          ],
+          "reply": "我问我家的猫：“你爱不爱我？”\n猫说：“你先把手里的零食放下。”",
+          "trace": {
+            "id": "94f755fd-7903-434f-9a2e-1a4b6cdeea94",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "讲一个两句话的小笑话，不解释笑点",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 8566,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 4924,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "讲一个两句话的小笑话，不解释笑点",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 13490
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        },
+        {
+          "index": 2,
+          "input": "再来一个呗",
+          "bubbles": [
+            "我最近减肥效果特别好。",
+            "方法就是把秤的电池抠了。"
+          ],
+          "reply": "我最近减肥效果特别好。\n方法就是把秤的电池抠了。",
+          "trace": {
+            "id": "88a12de3-c921-49e0-b405-fc302b8c017b",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "再讲一个两句话的小笑话",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 5143,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 4528,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "再讲一个两句话的小笑话",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 9671
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 23169
+    },
+    {
+      "id": "draft-chat-cancel",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "index": 1,
+          "input": "先记下一个草稿：Word活动介绍，3节，暂时不要生成，等我明确说开始。",
+          "bubbles": [
+            "已记录为待处理草稿，当前不会开始执行。",
+            "补充完成并明确继续后再执行。"
+          ],
+          "reply": "已记录为待处理草稿，当前不会开始执行。\n补充完成并明确继续后再执行。",
+          "trace": {
+            "id": "fe99b5f1-4ee0-47dc-8e2e-a698b8443e10",
+            "architecture": "single-agent-workflows",
+            "status": "clarification",
+            "steps": [],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 10539,
+                "ok": true
+              }
+            ],
+            "taskId": "ba84a0ca-f385-4701-9b05-ffc13c2fb22a",
+            "totalMs": 10551
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": [
+            {
+              "execution": "defer",
+              "operations": [
+                "document.create"
+              ],
+              "forbiddenOperations": [],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "记下Word活动介绍草稿（3节），暂不生成",
+              "agents": [
+                "document"
+              ],
+              "slots": {
+                "topic": "活动介绍",
+                "format": "docx",
+                "sections": 3
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "requester": "10001",
+              "id": "ba84a0ca-f385-4701-9b05-ffc13c2fb22a",
+              "chatKey": "private:draft-chat-cancel",
+              "status": "draft",
+              "updatedAt": 1793200244057
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "input": "。",
+          "bubbles": [
+            "嗯，收到。"
+          ],
+          "reply": "嗯，收到。",
+          "trace": {
+            "id": "ffb53915-8c55-48b3-a7d4-707dad056814",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "execution",
+                "ms": 2170,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 2170
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": [
+            {
+              "execution": "defer",
+              "operations": [
+                "document.create"
+              ],
+              "forbiddenOperations": [],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "记下Word活动介绍草稿（3节），暂不生成",
+              "agents": [
+                "document"
+              ],
+              "slots": {
+                "topic": "活动介绍",
+                "format": "docx",
+                "sections": 3
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "requester": "10001",
+              "id": "ba84a0ca-f385-4701-9b05-ffc13c2fb22a",
+              "chatKey": "private:draft-chat-cancel",
+              "status": "draft",
+              "updatedAt": 1793200244057
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "input": "👍",
+          "bubbles": [
+            "好嘞，等你发话。",
+            "（尾巴轻轻拍了下水）"
+          ],
+          "reply": "好嘞，等你发话。\n（尾巴轻轻拍了下水）",
+          "trace": {
+            "id": "be882c78-9380-4237-a118-3bcbf425ad68",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "execution",
+                "ms": 4183,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "结合上下文回应这条简短聊天信号，不执行或变更任务",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 4183
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": [
+            {
+              "execution": "defer",
+              "operations": [
+                "document.create"
+              ],
+              "forbiddenOperations": [],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "记下Word活动介绍草稿（3节），暂不生成",
+              "agents": [
+                "document"
+              ],
+              "slots": {
+                "topic": "活动介绍",
+                "format": "docx",
+                "sections": 3
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "requester": "10001",
+              "id": "ba84a0ca-f385-4701-9b05-ffc13c2fb22a",
+              "chatKey": "private:draft-chat-cancel",
+              "status": "draft",
+              "updatedAt": 1793200244057
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "input": "算了，这份活动介绍先取消吧",
+          "bubbles": [
+            "已取消这项待处理任务；已经交付的结果无法撤回。"
+          ],
+          "reply": "已取消这项待处理任务；已经交付的结果无法撤回。",
+          "trace": {
+            "id": "8f8c6db5-6913-4329-b59b-170cb46bad03",
+            "architecture": "single-agent-workflows",
+            "status": "clarification",
+            "steps": [],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 9615,
+                "ok": true
+              }
+            ],
+            "totalMs": 9616
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": [
+            {
+              "execution": "defer",
+              "operations": [
+                "document.create"
+              ],
+              "forbiddenOperations": [],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "记下Word活动介绍草稿（3节），暂不生成",
+              "agents": [
+                "document"
+              ],
+              "slots": {
+                "topic": "活动介绍",
+                "format": "docx",
+                "sections": 3
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "requester": "10001",
+              "id": "ba84a0ca-f385-4701-9b05-ffc13c2fb22a",
+              "chatKey": "private:draft-chat-cancel",
+              "status": "cancelled",
+              "updatedAt": 1793200260041
+            }
+          ]
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [
+        {
+          "execution": "defer",
+          "operations": [
+            "document.create"
+          ],
+          "forbiddenOperations": [],
+          "act": "create",
+          "targetId": "",
+          "kind": "general",
+          "goal": "记下Word活动介绍草稿（3节），暂不生成",
+          "agents": [
+            "document"
+          ],
+          "slots": {
+            "topic": "活动介绍",
+            "format": "docx",
+            "sections": 3
+          },
+          "exclude": [],
+          "missing": [],
+          "clarification": "",
+          "requester": "10001",
+          "id": "ba84a0ca-f385-4701-9b05-ffc13c2fb22a",
+          "chatKey": "private:draft-chat-cancel",
+          "status": "cancelled",
+          "updatedAt": 1793200260041
+        }
+      ],
+      "deliveryRecords": [],
+      "ms": 26535
+    },
+    {
+      "id": "colloquial-task",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "index": 1,
+          "input": "哈哈，帮我整份Word呗，主题新生宿舍指南，分三段就行，不要图",
+          "bubbles": [
+            "生成任务已排队，尚未确认产物生成或送达；完成后会由交付流程反馈结果。"
+          ],
+          "reply": "生成任务已排队，尚未确认产物生成或送达；完成后会由交付流程反馈结果。",
+          "trace": {
+            "id": "bd33ab90-6e02-4a7e-a7db-6c7d61f59846",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-document",
+                "agent": "document",
+                "kind": "workflow",
+                "task": "{\"goal\":\"创建主题为新生宿舍指南的Word文档，分三段，不带图片\",\"slots\":{\"topic\":\"新生宿舍指南\",\"format\":\"docx\",\"sections\":3},\"exclude\":[]}",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [
+                  {
+                    "name": "make_docx",
+                    "result": "Word 开始写了（3 个小节），一会儿发文件给你。",
+                    "failed": false
+                  }
+                ],
+                "unfulfilled": [],
+                "result": "Word 开始写了（3 个小节），一会儿发文件给你。"
+              }
+            ],
+            "toolCalls": 1,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 8016,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 1891,
+                "ok": true
+              },
+              {
+                "stage": "tool:make_docx",
+                "ms": 3,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 1410,
+                "ok": true
+              }
+            ],
+            "taskId": "e0ce12d7-5c41-46eb-ad52-9ab1012bc1e7",
+            "intent": {
+              "execution": "now",
+              "operations": [
+                "document.create"
+              ],
+              "forbiddenOperations": [
+                "image.generate"
+              ],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "{\"goal\":\"创建主题为新生宿舍指南的Word文档，分三段，不带图片\",\"slots\":{\"topic\":\"新生宿舍指南\",\"format\":\"docx\",\"sections\":3},\"exclude\":[]}",
+              "agents": [
+                "document"
+              ],
+              "slots": {
+                "topic": "新生宿舍指南",
+                "format": "docx",
+                "sections": 3
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": ""
+            },
+            "route": "workflow",
+            "unfulfilled": [],
+            "totalMs": 11332
+          },
+          "calls": [
+            {
+              "name": "make_docx",
+              "params": {
+                "topic": "新生宿舍指南\n要求：{\"excluded\":[]}",
+                "sections": 3
+              },
+              "result": "Word 开始写了（3 个小节），一会儿发文件给你。"
+            }
+          ],
+          "jobs": [
+            {
+              "kind": "docx",
+              "topic": "新生宿舍指南\n要求：{\"excluded\":[]}",
+              "sections": 3,
+              "taskId": "e0ce12d7-5c41-46eb-ad52-9ab1012bc1e7",
+              "requester": "10001",
+              "context": "{\"requirements\":{\"slots\":{\"topic\":\"新生宿舍指南\",\"format\":\"docx\",\"sections\":3},\"exclude\":[]},\"evidence\":\"哈哈，帮我整份Word呗，主题新生宿舍指南，分三段就行，不要图\",\"caption\":\"\",\"dependencies\":[]}",
+              "withImages": false
+            }
+          ],
+          "memory": [],
+          "tasks": [
+            {
+              "execution": "now",
+              "operations": [
+                "document.create"
+              ],
+              "forbiddenOperations": [
+                "image.generate"
+              ],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "创建主题为新生宿舍指南的Word文档，分三段，不带图片",
+              "agents": [
+                "document"
+              ],
+              "slots": {
+                "topic": "新生宿舍指南",
+                "format": "docx",
+                "sections": 3
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "requester": "10001",
+              "id": "e0ce12d7-5c41-46eb-ad52-9ab1012bc1e7",
+              "chatKey": "private:colloquial-task",
+              "status": "queued",
+              "updatedAt": 1793200267807
+            }
+          ]
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [
+        {
+          "execution": "now",
+          "operations": [
+            "document.create"
+          ],
+          "forbiddenOperations": [
+            "image.generate"
+          ],
+          "act": "create",
+          "targetId": "",
+          "kind": "general",
+          "goal": "创建主题为新生宿舍指南的Word文档，分三段，不带图片",
+          "agents": [
+            "document"
+          ],
+          "slots": {
+            "topic": "新生宿舍指南",
+            "format": "docx",
+            "sections": 3
+          },
+          "exclude": [],
+          "missing": [],
+          "clarification": "",
+          "requester": "10001",
+          "id": "e0ce12d7-5c41-46eb-ad52-9ab1012bc1e7",
+          "chatKey": "private:colloquial-task",
+          "status": "queued",
+          "updatedAt": 1793200267807
+        }
+      ],
+      "deliveryRecords": [],
+      "ms": 11334
+    },
+    {
+      "id": "quoted-task-only",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "index": 1,
+          "input": "我朋友说“给我生成PPT”，结果自己还在睡懒觉，笑死。只陪我吐槽两句，不用做文件。",
+          "bubbles": [
+            "哈哈，嘴上要 PPT，身体倒很诚实嘛。",
+            "让他睡，PPT 又不会趁他睡着自己长出来。"
+          ],
+          "reply": "哈哈，嘴上要 PPT，身体倒很诚实嘛。\n让他睡，PPT 又不会趁他睡着自己长出来。",
+          "trace": {
+            "id": "13e2d642-db8c-4ec5-9e1b-c501e7fdfe59",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "陪你吐槽朋友睡懒觉还要PPT",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 2897,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 2809,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "陪你吐槽朋友睡懒觉还要PPT",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 5706
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 5711
+    },
+    {
+      "id": "punctuation-with-file",
+      "category": "附件边界",
+      "turns": [
+        {
+          "index": 1,
+          "input": "。",
+          "bubbles": [
+            "收到啦，明天下午集合对吧。",
+            "那我记一下，明天下午提醒你，别到时候又赖床。"
+          ],
+          "reply": "收到啦，明天下午集合对吧。\n那我记一下，明天下午提醒你，别到时候又赖床。",
+          "trace": {
+            "id": "f022a5cb-66d8-4353-90c8-d7ce23a5be5d",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应当前聊天",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 16804,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 3051,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应当前聊天",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "workflow",
+            "unfulfilled": [],
+            "totalMs": 19855
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 19857
+    },
+    {
+      "id": "mixed-chat-memory",
+      "category": "闲聊与任务边界",
+      "turns": [
+        {
+          "index": 1,
+          "input": "哈哈我又改口了，帮我记住我喜欢乌龙茶，不加糖。",
+          "bubbles": [
+            "记好啦，乌龙茶不加糖。",
+            "下次我拿汽水给你喝之前先问你，嘿嘿。"
+          ],
+          "reply": "记好啦，乌龙茶不加糖。\n下次我拿汽水给你喝之前先问你，嘿嘿。",
+          "trace": {
+            "id": "d7fe0308-bd87-4d3b-89a7-e55e82072a68",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "{\"goal\":\"记住用户喜欢乌龙茶，不加糖\",\"slots\":{\"text\":\"我喜欢乌龙茶，不加糖\",\"memoryScope\":\"permanent\"},\"exclude\":[]}",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [
+                  {
+                    "name": "remember",
+                    "result": "已保存长期记忆：我喜欢乌龙茶，不加糖",
+                    "failed": false
+                  }
+                ],
+                "unfulfilled": [],
+                "result": "已保存长期记忆：我喜欢乌龙茶，不加糖"
+              }
+            ],
+            "toolCalls": 1,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 10123,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 1982,
+                "ok": true
+              },
+              {
+                "stage": "tool:remember",
+                "ms": 1,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 1635,
+                "ok": true
+              }
+            ],
+            "taskId": "c0b8fbf0-ccc8-4f71-b604-a67ae74b5d1f",
+            "intent": {
+              "execution": "now",
+              "operations": [
+                "memory.write"
+              ],
+              "forbiddenOperations": [],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "{\"goal\":\"记住用户喜欢乌龙茶，不加糖\",\"slots\":{\"text\":\"我喜欢乌龙茶，不加糖\",\"memoryScope\":\"permanent\"},\"exclude\":[]}",
+              "agents": [
+                "conversation"
+              ],
+              "slots": {
+                "text": "我喜欢乌龙茶，不加糖",
+                "memoryScope": "permanent"
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": ""
+            },
+            "route": "workflow",
+            "unfulfilled": [],
+            "totalMs": 13745
+          },
+          "calls": [
+            {
+              "name": "remember",
+              "params": {
+                "text": "我喜欢乌龙茶，不加糖",
+                "scope": "permanent"
+              },
+              "result": "已保存长期记忆：我喜欢乌龙茶，不加糖"
+            }
+          ],
+          "jobs": [],
+          "memory": [
+            {
+              "id": "d89e340f-88e0-45a3-81ea-50682fc6aa99",
+              "text": "我喜欢乌龙茶，不加糖",
+              "scope": "permanent",
+              "expiresAt": null
+            }
+          ],
+          "tasks": [
+            {
+              "execution": "now",
+              "operations": [
+                "memory.write"
+              ],
+              "forbiddenOperations": [],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "记住用户喜欢乌龙茶，不加糖",
+              "agents": [
+                "conversation"
+              ],
+              "slots": {
+                "text": "我喜欢乌龙茶，不加糖",
+                "memoryScope": "permanent"
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "requester": "10001",
+              "id": "c0b8fbf0-ccc8-4f71-b604-a67ae74b5d1f",
+              "chatKey": "private:mixed-chat-memory",
+              "status": "completed",
+              "updatedAt": 1793200281557
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "input": "嗯哼，先这样",
+          "bubbles": [
+            "好呢，那我也先潜回海里泡会儿。",
+            "有事就喊我，我尾巴还竖在水面上呢。"
+          ],
+          "reply": "好呢，那我也先潜回海里泡会儿。\n有事就喊我，我尾巴还竖在水面上呢。",
+          "trace": {
+            "id": "bbe33aa3-2550-495f-a8a7-4dd294cb23bc",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应当前聊天",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 2853,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 3646,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应当前聊天",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 6501
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [
+            {
+              "id": "d89e340f-88e0-45a3-81ea-50682fc6aa99",
+              "text": "我喜欢乌龙茶，不加糖",
+              "scope": "permanent",
+              "expiresAt": null
+            }
+          ],
+          "tasks": [
+            {
+              "execution": "now",
+              "operations": [
+                "memory.write"
+              ],
+              "forbiddenOperations": [],
+              "act": "create",
+              "targetId": "",
+              "kind": "general",
+              "goal": "记住用户喜欢乌龙茶，不加糖",
+              "agents": [
+                "conversation"
+              ],
+              "slots": {
+                "text": "我喜欢乌龙茶，不加糖",
+                "memoryScope": "permanent"
+              },
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "requester": "10001",
+              "id": "c0b8fbf0-ccc8-4f71-b604-a67ae74b5d1f",
+              "chatKey": "private:mixed-chat-memory",
+              "status": "completed",
+              "updatedAt": 1793200281557
+            }
+          ]
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [
+        {
+          "execution": "now",
+          "operations": [
+            "memory.write"
+          ],
+          "forbiddenOperations": [],
+          "act": "create",
+          "targetId": "",
+          "kind": "general",
+          "goal": "记住用户喜欢乌龙茶，不加糖",
+          "agents": [
+            "conversation"
+          ],
+          "slots": {
+            "text": "我喜欢乌龙茶，不加糖",
+            "memoryScope": "permanent"
+          },
+          "exclude": [],
+          "missing": [],
+          "clarification": "",
+          "requester": "10001",
+          "id": "c0b8fbf0-ccc8-4f71-b604-a67ae74b5d1f",
+          "chatKey": "private:mixed-chat-memory",
+          "status": "completed",
+          "updatedAt": 1793200281557
+        }
+      ],
+      "deliveryRecords": [],
+      "ms": 20254
+    },
+    {
+      "id": "contextless-go-on",
+      "category": "自然闲聊",
+      "turns": [
+        {
+          "index": 1,
+          "input": "继续呗",
+          "bubbles": [
+            "欸，我好像游着游着把话头弄丢了……",
+            "刚说到哪啦？你提一句我就接着来。"
+          ],
+          "reply": "欸，我好像游着游着把话头弄丢了……\n刚说到哪啦？你提一句我就接着来。",
+          "trace": {
+            "id": "1bcc184a-61d6-4db3-b03c-eaa03df85cc7",
+            "architecture": "single-agent-workflows",
+            "status": "completed",
+            "steps": [
+              {
+                "id": "phase-conversation",
+                "agent": "conversation",
+                "kind": "workflow",
+                "task": "回应当前聊天",
+                "dependsOn": [],
+                "status": "completed",
+                "tools": [],
+                "unfulfilled": [],
+                "result": ""
+              }
+            ],
+            "toolCalls": 0,
+            "formatRepairs": 0,
+            "timings": [
+              {
+                "stage": "intent",
+                "ms": 7877,
+                "ok": true
+              },
+              {
+                "stage": "execution",
+                "ms": 6109,
+                "ok": true
+              }
+            ],
+            "intent": {
+              "act": "chat",
+              "targetId": "",
+              "kind": "general",
+              "goal": "回应当前聊天",
+              "agents": [
+                "conversation"
+              ],
+              "operations": [
+                "chat.reply"
+              ],
+              "forbiddenOperations": [],
+              "slots": {},
+              "exclude": [],
+              "missing": [],
+              "clarification": "",
+              "readOnly": true
+            },
+            "route": "conversation",
+            "unfulfilled": [],
+            "totalMs": 13987
+          },
+          "calls": [],
+          "jobs": [],
+          "memory": [],
+          "tasks": []
+        }
+      ],
+      "artifacts": [],
+      "serviceErrors": [],
+      "warnings": [],
+      "status": "unreviewed",
+      "ruleObservations": [],
+      "transport": [],
+      "finalTasks": [],
+      "deliveryRecords": [],
+      "ms": 13990
+    }
+  ],
+  "completed": true,
+  "updatedAt": "2026-10-28T15:11:39.607Z",
+  "usage": {
+    "calls": 41,
+    "promptTokens": 121110,
+    "completionTokens": 8759,
+    "failures": 0
+  },
+  "preflight": {
+    "ok": true,
+    "status": 200
+  }
+}

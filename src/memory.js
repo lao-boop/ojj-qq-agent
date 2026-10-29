@@ -15,7 +15,7 @@ const emptySession = (key, title) => ({
   turns: [],
 });
 
-const fileFor = (key) => path.join(SESSION_DIR, `${crypto.createHash('sha1').update(key).digest('hex')}.json`);
+export const memoryScopeKey = (key, actorId) => String(key).startsWith('group:') ? `${key}:actor:${actorId || 'unknown'}` : key;
 
 /** 中文按字二元组切分，用来做相似度（不依赖外部向量服务）。 */
 function bigrams(text) {
@@ -44,13 +44,17 @@ function cosineSim(a, b) {
 }
 
 export class Memory {
-  constructor({ logger, llm, cfg }) {
+  constructor({ logger, llm, cfg, directory = SESSION_DIR, now = () => Date.now() }) {
     this.logger = logger;
     this.llm = llm;
     this.cfg = cfg;
     this.cache = new Map();
-    fs.mkdirSync(SESSION_DIR, { recursive: true });
+    this.directory = directory;
+    this.now = now;
+    fs.mkdirSync(directory, { recursive: true });
   }
+
+  fileFor(key) { return path.join(this.directory, `${crypto.createHash('sha1').update(key).digest('hex')}.json`); }
 
   updateConfig(cfg) {
     this.cfg = cfg;
@@ -62,7 +66,7 @@ export class Memory {
       if (title) s.title = title;
       return s;
     }
-    const file = fileFor(key);
+    const file = this.fileFor(key);
     let session;
     if (fs.existsSync(file)) {
       try {
@@ -75,19 +79,23 @@ export class Memory {
     }
     session.turns ??= [];
     session.notes ??= [];
+    session.notes = session.notes.map(n => ({ ...n, id: n.id || crypto.randomUUID(), scope: n.scope || 'permanent', expiresAt:n.expiresAt ?? null }));
+    session.hiddenTurns ??= [];
     if (title) session.title = title;
     this.cache.set(key, session);
     return session;
   }
 
   save(session) {
-    session.updatedAt = Date.now();
-    fs.writeFileSync(fileFor(session.key), JSON.stringify(session, null, 2), 'utf8');
+    session.updatedAt = this.now();
+    const file = this.fileFor(session.key), tmp = `${file}.${crypto.randomUUID()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(session, null, 2), { encoding:'utf8', mode:0o600 });
+    fs.renameSync(tmp, file);
   }
 
-  append(key, role, content, title) {
+  append(key, role, content, title, { requestId, memoryIds = [] } = {}) {
     const session = this.get(key, title);
-    session.turns.push({ role, content, ts: Date.now() });
+    session.turns.push({ role, content, ts: this.now(), ...(requestId ? { requestId, memoryIds } : {}) });
     // storeAllTurns=true 时不再丢弃旧对话，全部留在会话文件里
     if (!this.cfg.storeAllTurns) {
       const maxTurns = Math.max(10, (this.cfg.historyTurns || 40) * 2);
@@ -97,30 +105,119 @@ export class Memory {
     return session;
   }
 
-  addNote(key, text, title) {
+  addNote(key, text, title, options = {}) {
     const session = this.get(key, title);
-    const clean = String(text || '').trim().slice(0, 200);
+    const clean = this.noteText(text);
     if (!clean) return false;
-    if (session.notes.some((n) => n.text === clean)) return false;
-    session.notes.push({ text: clean, ts: Date.now() });
-    if (session.notes.length > 40) session.notes = session.notes.slice(-40);
+    const policy = this.notePolicy(options);
+    if (this.activeNotes(session).some(n => n.text === clean && n.scope === policy.scope && n.expiresAt === policy.expiresAt)) return false;
+    session.notes.push({ id:crypto.randomUUID(), text:clean, ts:this.now(), ...policy, requestId:options.requestId || '' });
+    // Storage is not a prompt window: never discard saved facts to bound model input.
     this.save(session);
     return true;
   }
 
+  noteText(text) {
+    const clean = String(text || '').trim();
+    if (clean.length > 600) throw new Error('单条记忆过长，请拆分保存，不会截断内容');
+    return clean;
+  }
+
+  notePolicy({ scope = 'permanent', expiresAt } = {}) {
+    if (!['permanent','temporary'].includes(scope)) throw new Error('记忆类型只能是长期或有期限的临时记录');
+    if (scope === 'temporary') {
+      if (typeof expiresAt !== 'string' || !/(?:Z|[+-]\d\d:\d\d)$/.test(expiresAt) || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= this.now()) throw new Error('临时记忆需要明确且尚未到期的含时区截止时间');
+      return { scope, expiresAt:new Date(expiresAt).toISOString() };
+    }
+    if (expiresAt) throw new Error('长期记忆不应附带过期时间');
+    return { scope, expiresAt:null };
+  }
+
+  activeNotes(session) {
+    this.expireNotes(session);
+    return session.notes;
+  }
+
+  expireNotes(session) {
+    const expired = session.notes.filter(n => n.scope === 'temporary' && Date.parse(n.expiresAt) <= this.now());
+    if (!expired.length) return;
+    for (const note of expired) this.retire(session, note);
+    const ids = new Set(expired.map(n => n.id));
+    session.notes = session.notes.filter(n => !ids.has(n.id));
+    // Tombstones outlive the note itself, including restarts and later capacity changes.
+    this.save(session);
+  }
+
+  selectNotes(session, query = '', limit = 40) {
+    const active = this.activeNotes(session), q = String(query).trim(), vector = bigrams(q);
+    if(!q)return active.slice(-limit);
+    return active.map((note,index) => ({note,index,score:q ? cosineSim(vector,bigrams(note.text)) + (note.text.includes(q) ? 1 : 0) : 0}))
+      .sort((a,b) => b.score-a.score || b.index-a.index).slice(0,limit).map(r=>r.note);
+  }
+
+  searchNotes(key, query, { limit = 20, offset = 0 } = {}) {
+    const session = this.get(key), active = this.activeNotes(session);
+    const matches = query ? this.selectNotes(session,query,active.length).filter(n=>cosineSim(bigrams(query),bigrams(n.text)) > 0 || n.text.includes(query)) : active;
+    return { total:active.length, matches:matches.length, records:matches.slice(offset,offset+limit).map(({id,text,scope,expiresAt})=>({id,text,scope,expiresAt})), nextOffset:offset+limit<matches.length ? offset+limit : null };
+  }
+
+  visibleTurns(session) {
+    this.expireNotes(session);
+    const hidden = new Set(session.hiddenTurns || []);
+    const retired = new Set(session.retiredNoteIds || []);
+    for (const n of session.notes) if (n.scope === 'temporary' && Date.parse(n.expiresAt) <= this.now() && n.requestId) hidden.add(n.requestId);
+    for (const n of session.notes) if (n.scope === 'temporary' && Date.parse(n.expiresAt) <= this.now()) retired.add(n.id);
+    return session.turns.filter(t => !hidden.has(t.requestId) && !(t.memoryIds || []).some(id => retired.has(id)) && (!session.legacyMemoryCutoff || t.ts > session.legacyMemoryCutoff));
+  }
+
+  retire(session, note, requestId) {
+    session.retiredNoteIds = [...new Set([...(session.retiredNoteIds || []), note.id])];
+    session.hiddenTurns ||= [];
+    if (note.requestId) session.hiddenTurns.push(note.requestId);
+    else session.legacyMemoryCutoff = Math.max(session.legacyMemoryCutoff || 0, note.ts || this.now());
+    if (requestId) session.hiddenTurns.push(requestId);
+    session.hiddenTurns = [...new Set(session.hiddenTurns)];
+    session.summary = ''; // A compressed summary has no per-fact provenance.
+  }
+
+  updateNote(key, id, text, options = {}) {
+    const session = this.get(key), note = this.activeNotes(session).find(n => n.id === id);
+    if (!note) throw new Error('没有找到当前用户的这条有效记忆，请先核对要修改的记录');
+    const clean = this.noteText(text);
+    if (!clean) throw new Error('更正后的记忆不能为空');
+    const scope = options.scope || note.scope;
+    const policy = this.notePolicy({ scope, expiresAt:scope === 'permanent' ? undefined : options.expiresAt ?? note.expiresAt });
+    this.retire(session, note);
+    Object.assign(note, { id:crypto.randomUUID(), text:clean, ts:this.now(), ...policy, requestId:options.requestId || '' });
+    this.save(session); return true;
+  }
+
+  forgetNote(key, id, { requestId } = {}) {
+    const session = this.get(key), note = session.notes.find(n => n.id === id);
+    if (!note) throw new Error('没有找到当前用户的这条记忆，不会删除其他记录');
+    this.retire(session, note, requestId);
+    session.notes = session.notes.filter(n => n.id !== id);
+    this.save(session); return true;
+  }
+
   context(key, { title, query } = {}) {
     const session = this.get(key, title);
-    const recent = session.turns.slice(-(this.cfg.historyTurns || 40));
+    const visible = this.visibleTurns(session);
+    const recent = visible.slice(-(this.cfg.historyTurns || 40));
+    const active = this.selectNotes(session, query);
     const result = {
       summary: session.summary,
-      notes: session.notes.map((n) => n.text),
+      notes: active.map((n) => n.text),
+      noteRecords: active.map(({id,text,scope,expiresAt}) => ({id,text,scope,expiresAt})),
+      noteCount: session.notes.length,
+      notesPartial: session.notes.length > active.length,
       turns: recent.map((t) => ({ role: t.role, content: t.content })),
       recalled: [],
     };
 
     // 简单检索：从更早的对话里按关键词捞相关片段，让“所有历史”也能被用到
     if (query && this.cfg.retrieval !== false) {
-      const cutoff = session.turns.length - recent.length;
+      const cutoff = visible.length - recent.length;
       const tokens = String(query)
         .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ')
         .split(/\s+/)
@@ -130,7 +227,7 @@ export class Memory {
         const scored = [];
         const qVec = bigrams(query);
         for (let i = 0; i < cutoff; i++) {
-          const t = session.turns[i];
+          const t = visible[i];
           if (!t?.content) continue;
           let score = 0;
           for (const k of tokens) if (t.content.includes(k)) score += k.length >= 3 ? 2 : 1;
@@ -188,14 +285,14 @@ export class Memory {
     const qVec = bigrams(query);
 
     const hits = [];
-    for (const t of session.turns || []) {
+    for (const t of this.visibleTurns(session)) {
       if (!t?.content) continue;
       let score = 0;
       for (const k of terms) if (t.content.includes(k)) score += k.length >= 3 ? 2 : 1;
       score += cosineSim(qVec, bigrams(t.content)) * 4;
       if (score > 0) hits.push({ score, ts: t.ts || 0, role: t.role, content: String(t.content) });
     }
-    for (const n of session.notes || []) {
+    for (const n of this.activeNotes(session)) {
       if (terms.some((k) => n.text.includes(k))) {
         hits.push({ score: 4, ts: n.ts || 0, role: 'note', content: n.text });
       }
@@ -222,7 +319,7 @@ export class Memory {
   remove(key) {
     this.cache.delete(key);
     try {
-      fs.unlinkSync(fileFor(key));
+      fs.unlinkSync(this.fileFor(key));
     } catch {
       /* ignore */
     }
@@ -230,10 +327,10 @@ export class Memory {
 
   list() {
     const out = [];
-    for (const file of fs.readdirSync(SESSION_DIR)) {
+    for (const file of fs.readdirSync(this.directory)) {
       if (!file.endsWith('.json')) continue;
       try {
-        const s = JSON.parse(fs.readFileSync(path.join(SESSION_DIR, file), 'utf8'));
+        const s = JSON.parse(fs.readFileSync(path.join(this.directory, file), 'utf8'));
         out.push({
           key: s.key,
           title: s.title,
@@ -256,8 +353,11 @@ export class Memory {
     const chars = session.turns.reduce((n, t) => n + t.content.length, 0);
     if (chars < this.cfg.summaryTriggerChars || session.turns.length < 12) return false;
     const keep = 8;
-    const old = session.turns.slice(0, -keep);
-    const recent = session.turns.slice(-keep);
+    const visible = this.visibleTurns(session);
+    // Expiring facts must not outlive their source in a compressed summary.
+    if (session.notes.some(n => n.scope === 'temporary')) return false;
+    const old = visible.slice(0, -keep);
+    const recent = visible.slice(-keep);
     if (old.length < 4) return false;
     const transcript = old.map((t) => `${t.role === 'user' ? '对方' : '小鲸鱼'}：${t.content}`).join('\n');
     try {

@@ -1,6 +1,8 @@
 # ojj · 小鲸鱼 QQ Agent
 
-当前是 **`dev/agent-architecture` 开发分支**，保留意图理解、Agent Manager、多模态和评测改动。`main` 已恢复原始版本；后续更新请跟踪本分支，切换方法见 [分支说明](docs/BRANCHES.md)。
+当前完整开发代码位于 **`fix/architecture-routing-report` 功能分支**，包含已验证的架构、记忆、文件交付、任务管理与闲聊处理修复。本轮不修改 main。交接组织方式见 [交接模板](handover/README.md) 与 [目录对应说明](handover/SOURCE_MAP.md)；更新步骤及各分支区别见 [分支说明](docs/BRANCHES.md)。
+
+标点、表情和口语接话的修复与实测见 [闲聊处理说明](docs/CASUAL-CHAT.md)，包含逐题回复及已知不足。
 
 一个跑在 QQ 上的拟人化 Agent：会聊天、有长期记忆、能发语音、唱歌、翻唱、画图、做 PPT/Word/Excel、发 QQ 空间动态，还带一个汽修配件识别模块。
 
@@ -118,15 +120,21 @@ npm start
 
 支持独立视觉接口、MiniMax 国内/国际语音输出、本地语音识别、扫描 PDF 前 3 页渲染，以及 Mac 与 NapCat Docker 共享附件路径映射。使用本地配置向导，保留现有 QQ 和 DeepSeek 配置：[安装与验证步骤](docs/MAC-MULTIMODAL.md)。
 
-## 多 Agent 与意图理解
+## 单主 Agent 与意图理解
 
-可选的两层流程：多模态语义理解 → 会话任务更新与执行前校验 → Manager 调度专业 Agent。
+可选流程：多模态语义理解 → 会话任务更新与执行前校验 → 单主 Agent 选择工具，程序工作流控制权限、依赖与执行回执。
 支持文档、图像、语音、资料、汽修和记忆操作的权限约束，并对曲库翻唱做准确匹配。
 空间发布记录会提供给有权限的聊天上下文，区分计划、执行中、成功、失败及结果未知。
 
-在实际 `config.json` 的 `chat` 中添加 `"agents": { "enabled": true }` 并重启即可启用；设为 `false` 回退旧流程。默认不开启，更新代码不会自动改变已有运行模式。
+新建配置默认开启单主 Agent，文档与对话默认使用 `deepseek-v4-pro`。已有 `config.json` 若明确配置 `enabled=false` 则仍保持关闭；启用时在 `chat` 中设置 `"agents": { "enabled": true, "architecture": "single" }` 并重启。`architecture="multi"` 保留原多 Agent 编排，`enabled=false` 回退旧 Brain 流程。运行 `node scripts/check_runtime_profile.mjs` 可只读检查实际配置是否与验收默认值一致，QQ `/status` 也显示架构和文档模型。
 
-- [Agent 架构与迁移边界](docs/AGENT-ARCHITECTURE.md)
+任务管理、重启恢复、群聊文件隔离和记忆容量的说明见 [任务可靠性与新题验收](docs/TASK-RELIABILITY.md)。
+
+- [单主 Agent 与受控工作流](docs/SINGLE-AGENT-WORKFLOWS.md)
+- [架构改造实测结果](docs/HYBRID-EVALUATION.md)
+- [精确核算与多轮新题测试](docs/NUMERIC-VERIFICATION.md)
+- [文件交付、记忆生命周期与全新题验收](docs/DELIVERY-MEMORY-QUALITY.md)
+- [旧多 Agent 架构与迁移边界](docs/AGENT-ARCHITECTURE.md)
 - [意图理解与操作约束](docs/INTENT-UNDERSTANDING.md)
 - [身份、能力与行动记录](docs/SELF-STATE.md)
 

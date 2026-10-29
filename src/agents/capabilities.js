@@ -1,9 +1,13 @@
 /** Operations are the execution contract, not merely a routing hint. */
 export const CAPABILITIES = Object.freeze({
+  'numbers.verify': { agent: 'conversation', tools: ['verify_numbers'] },
   'chat.reply': { agent: 'conversation', tools: [] },
   'time.read': { agent: 'conversation', tools: ['get_time'] },
   'memory.read': { agent: 'conversation', tools: ['search_history','find_media'] },
+  'memory.recall': { agent:'conversation', tools:[], optionalTools:['search_memory'] },
   'memory.write': { agent: 'conversation', tools: ['remember'] },
+  'memory.update': { agent:'conversation', tools:['update_memory'], optionalTools:['search_memory'] },
+  'memory.delete': { agent:'conversation', tools:['forget_memory','update_memory'], optionalTools:['search_memory'] },
   'memory.publish': { agent: 'conversation', tools: ['remember_global'] },
   'document.create': { agent: 'document', tools: ['make_ppt','make_docx','make_excel'] },
   'image.generate': { agent: 'image', tools: ['draw_image'] },
@@ -21,6 +25,9 @@ export const CAPABILITIES = Object.freeze({
 
 export function validateCapabilities(intent, input) {
   const s = intent.slots, ops = intent.operations;
+  for (const [key, [min, max, label]] of Object.entries({ seconds:[5,300,'时长（秒）'], pages:[5,20,'PPT页数'], rows:[3,50,'表格行数'], columns:[2,10,'表格列数'], sections:[3,10,'Word小节数'] })) {
+    if (s[key] !== undefined && (s[key] < min || s[key] > max)) return `你要求的${label}为${s[key]}，当前支持${min}～${max}；请确认如何调整，本次不会擅自截断或生成。`;
+  }
   if (s.delivery === 'other_chat' && intent.kind !== 'cover') return '这项任务还不能直接交付到别人的聊天，请先确认是否改为在当前聊天生成；本次没有生成或转发。';
   if (s.delivery === 'unclear' || (s.recipient && !s.delivery)) return intent.kind === 'cover' ? '你提到的对象是歌手/版本，还是要送给某个人听？请同时确认是在当前聊天播放，还是要发给对方。' : '这份结果是在当前聊天交给你，还是需要发送到对方的聊天？请先确认交付位置。';
   if (ops.some(op => intent.forbiddenOperations.includes(op))) return '你要求的操作同时被禁止了，请明确保留哪项操作。';
@@ -61,18 +68,18 @@ export function validateCapabilities(intent, input) {
 /** Every requested lookup/effect needs execution evidence; plain replies and perception do not. */
 export function requiredToolGroups(intent, agent) {
   return intent.operations.filter(op => !agent || CAPABILITIES[op].agent === agent)
-    .filter(op => !['chat.reply', 'image.inspect', 'cover.perform'].includes(op))
+    .filter(op => !['chat.reply', 'memory.recall', 'image.inspect', 'cover.perform'].includes(op))
     .map(op => ({ operation: op, tools: CAPABILITIES[op].tools }));
 }
 
 export function allowedTools(intent) {
-  const names = new Set(intent.operations.flatMap(op => CAPABILITIES[op].tools));
-  for (const op of intent.forbiddenOperations) for (const tool of CAPABILITIES[op].tools) names.delete(tool);
+  const names = new Set(intent.operations.flatMap(op => [...CAPABILITIES[op].tools,...(CAPABILITIES[op].optionalTools || [])]));
+  for (const op of intent.forbiddenOperations) for (const tool of [...CAPABILITIES[op].tools,...(CAPABILITIES[op].optionalTools || [])]) names.delete(tool);
   if (intent.slots.format) {
     const chosen = {ppt:'make_ppt',docx:'make_docx',excel:'make_excel'}[intent.slots.format];
     for (const name of ['make_ppt','make_docx','make_excel']) if (name !== chosen) names.delete(name);
   }
-  if (intent.readOnly) for (const name of names) if (!['get_time','search_history','find_media','search_web','lookup_part'].includes(name)) names.delete(name);
+  if (intent.readOnly) for (const name of names) if (!['verify_numbers','get_time','search_memory','search_history','find_media','search_web','lookup_part'].includes(name)) names.delete(name);
   return names;
 }
 
@@ -93,6 +100,10 @@ export function bindArguments(name, args, intent) {
     out.prompt += `\n要求：${JSON.stringify({ style:s.style, excluded:intent.exclude })}`;
   }
   if (['send_voice','remember','remember_global'].includes(name)) copy(['text']);
+  if (['remember','update_memory'].includes(name)) {
+    if (s.memoryScope !== undefined) out.scope = s.memoryScope;
+    if (s.expiresAt !== undefined) out.expiresAt = s.expiresAt;
+  }
   if (['search_web','lookup_part'].includes(name)) copy(['query']);
   return out;
 }

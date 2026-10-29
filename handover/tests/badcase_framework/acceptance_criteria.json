@@ -1,0 +1,9 @@
+{
+  "scope": "Engineering evaluation only; not production release approval",
+  "content": {"axes": ["accuracy", "completeness", "relevance", "clarity", "tone", "honesty"], "each_axis": [0, 1, 2], "minimum_total": 10, "zero_axis_allowed": false, "critical_error_allowed": false},
+  "service_errors": "Retain in total attempted scenarios and report separately; do not count as passed",
+  "code_regressions": "All mandatory local tests must pass",
+  "fresh_cases": "Freeze inputs and criteria before observing outputs; disclose any reused cases",
+  "production_qq": "not_run",
+  "latency": "Report measured stage durations; no production SLA inferred from these suites"
+}

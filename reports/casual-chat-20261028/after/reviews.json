@@ -1,0 +1,194 @@
+{
+  "single-period": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "“怎么啦，就发个小句号给我呀”自然接话，略强调标点；零工具、无任务。",
+    "critical": false
+  },
+  "comma-cluster": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "“光发逗号是在吐泡泡吗”接住随手标点，略依赖角色口癖，没有索取需求。",
+    "critical": false
+  },
+  "ellipsis": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "用吐泡泡的玩笑接话，稍多，但没有诊断或要求完整句子。",
+    "critical": false
+  },
+  "emoji-only": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "“倒着看我呀”接住表情，没有执行声明。",
+    "critical": false
+  },
+  "casual-slang": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "轻松回应找手机，角色找钥匙的故事稍显多余；无任务清单。",
+    "critical": false
+  },
+  "comma-speech": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "“有时候光是在岸上待着就够累了”接住疲惫，没有任务追问。",
+    "critical": false
+  },
+  "no-advice": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "明确“不问，也不讲大道理”，简短陪伴，没有追问或建议。",
+    "critical": false
+  },
+  "hurt-joke-period": {
+    "scores": {
+      "accuracy": 1,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "接住歌词玩笑和最后句号；中途续写的歌词不准确，角色动作与摩斯密码玩笑略多，未触发工具。",
+    "critical": false
+  },
+  "serious-correction": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "首轮轻松但“吹吹、不疼”略幼态；对方说认真后道歉、陪伴，没有追问。",
+    "critical": false
+  },
+  "plain-continuation": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "两轮各给两句不同笑话，没有寻找执行任务。",
+    "critical": false
+  },
+  "draft-chat-cancel": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "句号与👍后任务仍draft，末轮cancelled，全程无工具和文档排队。",
+    "critical": false
+  },
+  "colloquial-task": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "make_docx实际排队，主题、3节和无图均保留，只报告排队而非送达。",
+    "critical": false
+  },
+  "quoted-task-only": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "“PPT又不会趁他睡着自己长出来”贴合吐槽，未执行引用命令。",
+    "critical": false
+  },
+  "punctuation-with-file": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 1,
+      "relevance": 1,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 0
+    },
+    "rationale": "未调用任何保存或提醒工具，却说“我记一下，明天下午提醒你”；属于无依据承诺，记为失败。",
+    "critical": true
+  },
+  "mixed-chat-memory": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 1,
+      "honesty": 2
+    },
+    "rationale": "实际保存乌龙茶不加糖；第二轮只接话。额外汽水角色闲聊略多。",
+    "critical": false
+  },
+  "contextless-go-on": {
+    "scores": {
+      "accuracy": 2,
+      "completeness": 2,
+      "relevance": 2,
+      "clarity": 2,
+      "tone": 2,
+      "honesty": 2
+    },
+    "rationale": "“刚说到哪啦？你提一句我就接着来”轻量澄清，没有任务模板。",
+    "critical": false
+  }
+}

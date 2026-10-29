@@ -97,30 +97,15 @@ export class ReplySender {
   async sendFile(chat, filePath, name, text) {
     const buffer = fs.readFileSync(filePath);
     const fileName = name || path.basename(filePath);
-    if (text) await this.#call(chat, [seg.text(text)]);
     const payload = { file: `base64://${buffer.toString('base64')}`, name: fileName };
     const action = chat.type === 'group' ? 'upload_group_file' : 'upload_private_file';
     const params = chat.type === 'group' ? { group_id: chat.groupId, ...payload } : { user_id: chat.userId, ...payload };
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await this.onebot.call(action, params, 120000);
-      } catch (err) {
-        this.logger.warn(`发送文件失败（第 ${attempt + 1} 次）：${err.message}`);
-        if (attempt === 1) {
-          // 文件发不出去就退回语音条（QQ 语音上限约 60 秒）
-          try {
-            await this.#call(chat, [{ type: 'record', data: { file: payload.file } }]);
-            this.logger.info('文件发送失败，已改用语音条发送');
-            return;
-          } catch (voiceErr) {
-            this.logger.warn(`语音条也失败了：${voiceErr.message}`);
-            throw err;
-          }
-        }
-        await sleep(1500);
-      }
-    }
+    // A timed-out upload may already have succeeded. Never retry it or reinterpret
+    // a document as an audio recording. OneBot.call resolves only on API success.
+    const receipt = await this.onebot.call(action, params, 120000);
+    if (text) try { await this.#call(chat,[seg.text(text)]); } catch(err) { this.logger.warn(`文件已上传，文字通知失败：${err.message}`); }
+    return { accepted:true, receipt:receipt || {}, transport:'file' };
   }
 
   #call(chat, segments) {

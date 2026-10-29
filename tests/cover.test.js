@@ -89,7 +89,7 @@ test('spoken prepare instruction with audio attached waits; only next task updat
 test('waiting cover can be cancelled, expires, and cannot be claimed by another group member', async () => {
   const p = pipeline([intent({}), intent({ act: 'update', slots: { source: 'attachment' } }), intent({ act: 'cancel', slots: {} })]);
   const waiting = await p.prepare('group:1', input('下一条翻唱'));
-  assert.match((await p.prepare('group:1', input('我的音频', 'other', true))).reply, /另一位/);
+  assert.match((await p.prepare('group:1', input('我的音频', 'other', true))).reply, /另一位|没有可对应/);
   assert.match((await p.prepare('group:1', input('取消翻唱'))).reply, /取消/);
   assert.equal(waiting.task.status, 'cancelled');
   const expired = pipeline([intent({}), intent({ act: 'update', slots: { source: 'attachment' } })]);

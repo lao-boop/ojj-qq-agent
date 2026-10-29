@@ -37,7 +37,7 @@ test('two invalid outputs stop before state creation and produce a format-specif
   const p = new UnderstandingPipeline({ llm: { chat: async () => { calls++; return { content: 'not JSON' }; } } });
   const result = await p.prepare('test', input);
   assert.equal(calls, 2); assert.equal(result.failed, true);
-  assert.match(result.reply, /任务结构/); assert.equal(p.state.list('test').length, 0);
+  assert.match(result.reply, /没处理好/); assert.doesNotMatch(result.reply, /任务结构|交付要求|校验/); assert.equal(p.state.list('test').length, 0);
 });
 
 for (const [status, pattern] of [[401, /认证/], [402, /额度/], [429, /限流/], [404, /模型不存在/], [400, /请求参数/]]) test(`HTTP ${status} is not retried as a parsing error or exposed verbatim`, async () => {

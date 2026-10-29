@@ -1,0 +1,21 @@
+{
+  "method": "Controlled reproduction: model always returns ordinary text, never structured task JSON. No network calls or real QQ.",
+  "results": [
+    {
+      "version": "before",
+      "modelCalls": 2,
+      "toolCalls": 0,
+      "status": "failed",
+      "reply": "程序未能可靠解析模型返回的任务结构，重新解析一次后仍未通过校验。这次没有启动任务，请把处理对象和交付要求分开说明。",
+      "route": null
+    },
+    {
+      "version": "after",
+      "modelCalls": 1,
+      "toolCalls": 0,
+      "status": "completed",
+      "reply": "我在呢，慢慢说。",
+      "route": "conversation"
+    }
+  ]
+}

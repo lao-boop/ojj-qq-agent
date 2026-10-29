@@ -7,7 +7,7 @@ export function intentFailure(error, logger) {
   let code = 'service', reply = '意图理解接口暂时无法连接，这次没有启动任务，请查看连接日志后再试。';
   if (error instanceof IntentOutputError) {
     code = error.code;
-    reply = '程序未能可靠解析模型返回的任务结构，重新解析一次后仍未通过校验。这次没有启动任务，请把处理对象和交付要求分开说明。';
+    reply = '抱歉，刚才这条我没处理好，能再发一次吗？如果你在让我执行操作，这次还没有开始。';
   } else if ([401, 403].includes(error?.status)) {
     code = 'authentication'; reply = '意图理解接口认证或访问权限未通过，请检查模型服务的 API 密钥和权限；这次没有启动任务。';
   } else if (error?.status === 402) {

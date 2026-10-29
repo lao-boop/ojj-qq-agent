@@ -21,7 +21,7 @@ for (const {enabled, cover, recipient} of [{enabled:true,cover:false},{enabled:f
     if (typeof system === 'string' && system.includes('第一层多模态')) {
       if (recipient) message.content = JSON.stringify({ act:'create', targetId:'', kind:'cover', goal:'翻唱30岁的女人', agents:['audio'], operations:['cover.perform'], forbiddenOperations:[], exclude:[], missing:[], clarification:'', slots: stage++ === 0 ? {title:'30岁的女人',recipientName:'纵蔚'} : {title:'30岁的女人',recipient:'纵蔚',delivery:'unclear'} });
       else message.content = JSON.stringify(cover ? {act:'create',targetId:'',kind:'cover',operations:['cover.perform'],forbiddenOperations:[],slots:{title:'乡愁四韵',artist:'罗大佑'},exclude:[],missing:[],goal:'翻唱乡愁四韵',agents:['audio'],clarification:''} : { act:'create', targetId:'', kind:'general', operations:['image.generate'],forbiddenOperations:[], slots:{prompt:'a cute cat'}, exclude:[], missing:[], goal: '画一只猫', agents: ['image'], clarification: '' });
-    } else if ((typeof system === 'string' && system.includes('内部 image Agent')) || (!enabled && data.tools?.length)) {
+    } else if ((typeof system === 'string' && system.includes('单主 Agent')) || (!enabled && data.tools?.length)) {
       if (stage++ === 0) message.tool_calls = [{ id: 'draw-1', type: 'function', function: { name: 'draw_image', arguments: JSON.stringify({ prompt: 'a cute cat' }) } }];
       else message.content = '图片已生成';
     } else if (data.messages.some(m => String(m.content).includes('你是主管'))) message.content = '画好了，给你。';
@@ -80,7 +80,7 @@ for (const {enabled, cover, recipient} of [{enabled:true,cover:false},{enabled:f
       const envelope = JSON.parse(recognition.messages[1].content);
       assert.equal(envelope.imageCount, 1);
       assert.match(envelope.caption, /猫/);
-    assert.ok(requests.some(r => String(r.messages[0].content).includes('内部 image Agent')));
+    assert.ok(requests.some(r => String(r.messages[0].content).includes('单主 Agent')));
     assert.match(logs, /Agent task .*completed/);
     }
   } finally {

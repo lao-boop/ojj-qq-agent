@@ -1,0 +1,9 @@
+# Verified Python 3.12 test/render dependencies; production voice providers are separate.
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
+Pillow==13.0.0
+pypdf==6.21.2
+pypdfium2==5.14.0
+PyMuPDF==2.0
+pilk==0.2.4
