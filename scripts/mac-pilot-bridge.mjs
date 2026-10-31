@@ -35,6 +35,7 @@ const service = new ReportService({
 });
 
 async function request(message) {
+  if (message.action === 'status') return service.status();
   if (message.action === 'flush') { await service.flush(); return service.status(); }
   if (!/^[A-Z][0-9]{2,6}$/.test(message.requestId || '')) throw new Error('试点请求编号无效');
   if (!['report', 'summary', 'detail'].includes(message.action)) throw new Error('试点操作无效');

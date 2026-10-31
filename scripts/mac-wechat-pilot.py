@@ -193,24 +193,40 @@ def calibrate(ui, reader, peer, state):
 
 
 class Bridge:
-    def __init__(self, node, state, peer, ui):
+    def __init__(self, node, state, peer, ui=None):
         self.state, self.peer, self.ui = state, peer, ui
         self.messages = queue.Queue()
         self.process = subprocess.Popen([node, str(ROOT / "scripts/mac-pilot-bridge.mjs"), str(state.directory), peer],
-                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        text=True, encoding="utf-8", bufsize=1)
         def read():
             try:
                 for line in self.process.stdout:
-                    self.messages.put(json.loads(line))
+                    if not line.strip(): continue
+                    message = json.loads(line)
+                    if not isinstance(message, dict):
+                        self.messages.put({"type": "broken", "reason": "JSON_FRAME"})
+                        return
+                    self.messages.put(message)
+            except (UnicodeError, json.JSONDecodeError):
+                self.messages.put({"type": "broken", "reason": "JSON_DECODE"})
             except Exception:
-                self.messages.put({"type": "broken"})
+                self.messages.put({"type": "broken", "reason": "PIPE_READ"})
             finally:
                 self.messages.put({"type": "closed"})
         self.thread = threading.Thread(target=read, daemon=True)
         self.thread.start()
         try:
-            ready = self.messages.get(timeout=10)
-            if ready.get("type") != "ready": raise RuntimeError("汇报服务未启动")
+            try: ready = self.messages.get(timeout=10)
+            except queue.Empty:
+                raise RuntimeError("SERVICE_START_TIMEOUT：汇报服务 10 秒内没有返回启动结果") from None
+            if ready.get("type") == "closed":
+                self.process.wait(timeout=3)
+                raise RuntimeError(f"SERVICE_EXIT：汇报服务在启动前退出，退出码 {self.process.returncode}")
+            if ready.get("type") == "broken":
+                raise RuntimeError(f"SERVICE_PROTOCOL：汇报服务输出无法解析（{ready['reason']}）")
+            if ready.get("type") != "ready" or type(ready.get("modelEnabled")) is not bool:
+                raise RuntimeError("SERVICE_HANDSHAKE：汇报服务没有返回有效的启动确认")
         except Exception:
             self.close()
             raise
@@ -225,8 +241,12 @@ class Bridge:
         self.write({"type": "request", "id": rpc_id, **request})
         deadline, send_failed = time.monotonic() + 100, False
         while time.monotonic() < deadline:
-            message = self.messages.get(timeout=max(.1, deadline-time.monotonic()))
+            try: message = self.messages.get(timeout=max(.1, deadline-time.monotonic()))
+            except queue.Empty:
+                raise RuntimeError("SERVICE_REQUEST_TIMEOUT：汇报服务处理超时") from None
             if message.get("type") == "send":
+                if self.ui is None:
+                    raise RuntimeError("SERVICE_CHECK_SEND_BLOCKED：服务检查期间禁止发送微信消息")
                 marker = "B" + secrets.token_hex(5).upper()
                 self.state.send_state(message["id"], "sending")
                 code = ui_module.send_once(self.ui, self.peer, str(message["text"]), marker)
@@ -238,7 +258,7 @@ class Bridge:
                     raise RuntimeError("本次处理或发送未确认；程序停止，已有记录保留，不自动重试")
                 return message["status"]
             else:
-                raise RuntimeError("汇报服务连接异常")
+                raise RuntimeError("SERVICE_CONNECTION：汇报服务连接中断或输出异常")
         raise RuntimeError("汇报服务处理超时")
 
     def close(self):
@@ -267,8 +287,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--peer", required=True, help="用户已核实的唯一试点联系人备注")
     parser.add_argument("--data-root", type=Path, default=Path.home()/"wechat-assistant"/"pilot-data")
+    parser.add_argument("--check-service", action="store_true", help="只检查本地汇报服务，不截图、不操作微信")
     args = parser.parse_args()
-    if sys.platform != "darwin": raise RuntimeError("需要在你的 Mac 上运行")
+    if sys.platform != "darwin" and not args.check_service: raise RuntimeError("需要在你的 Mac 上运行")
     if not args.peer.strip(): raise RuntimeError("试点联系人不能为空")
     os.umask(0o077)
     directory = args.data_root / hashlib.sha256(args.peer.encode()).hexdigest()[:16]
@@ -276,10 +297,17 @@ def main():
     bridge, reader = None, None
     try:
         node = node_path()
+        print(f"Node：{node}", flush=True)
+        # Start and check Node before loading Cocoa/Vision or sending calibration.
+        bridge = Bridge(node, state, args.peer)
+        status = bridge.call({"action": "status"})
+        if args.check_service:
+            print(f"SERVICE_OK：汇报服务已启动并完成通信检查；已有 {status['count']} 条汇报。没有截图或发送微信消息。", flush=True)
+            return
         reader = Reader()
         ui = ui_module.WechatUI(args.peer)
+        bridge.ui = ui
         input_top = calibrate(ui, reader, args.peer, state)
-        bridge = Bridge(node, state, args.peer, ui)
         print("READY：只处理当前试点联系人，保持该聊天可见、输入框空白。Ctrl+C 停止。", flush=True)
         print("示例：汇报 A01 项目A已经交付 #END\n汇总 Q01 #END\n详情 Q02 R000001 #END", flush=True)
         print(f"记录保存在：{directory}\n每个新请求请换编号；相同编号不会再次处理。每五分钟汇总未通知记录。", flush=True)

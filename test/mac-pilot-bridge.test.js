@@ -38,6 +38,10 @@ function bridge(t, { visible = true } = {}) {
 test('single-peer pilot collects, summarizes and returns OCR-labelled details through stdio', { timeout: 10000 }, async t => {
   const app = bridge(t);
   assert.equal((await app.ready).modelEnabled, false);
+  const status = await app.call({ action: 'status' });
+  assert.equal(status.ok, true);
+  assert.equal(status.status.count, 0);
+  assert.equal(app.sent.length, 0);
   assert.equal((await app.call({ requestId: 'A01', action: 'report', text: '项目A已交付，尾款周五到账。', observationId: 'frame-1' })).ok, true);
   assert.match(app.sent.at(-1).text, /回复本聊天/);
   assert.ok(!app.sent.at(-1).text.includes('提交老板'));

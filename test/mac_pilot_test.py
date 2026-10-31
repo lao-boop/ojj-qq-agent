@@ -1,6 +1,8 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -76,6 +78,72 @@ class ReaderTests(unittest.TestCase):
 
 
 class BridgeTests(unittest.TestCase):
+    def test_startup_errors_distinguish_exit_from_invalid_output_without_echoing_output(self):
+        for source, expected in [
+            ("process.exit(7);", "SERVICE_EXIT.*7"),
+            ("console.log('private-do-not-echo');", "SERVICE_PROTOCOL.*JSON_DECODE"),
+            ("console.log('[]');", "SERVICE_PROTOCOL.*JSON_FRAME"),
+            ("console.log('{}');", "SERVICE_HANDSHAKE"),
+        ]:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                (root/'scripts').mkdir()
+                (root/'scripts/mac-pilot-bridge.mjs').write_text(source)
+                state = pilot.PilotState(root/'data', "测试联系人")
+                try:
+                    with patch.object(pilot, 'ROOT', root):
+                        with self.assertRaisesRegex(RuntimeError, expected) as caught:
+                            pilot.Bridge(pilot.node_path(), state, "测试联系人")
+                    self.assertNotIn('private-do-not-echo', str(caught.exception))
+                finally:
+                    state.close()
+
+    def test_service_check_runs_without_mac_frameworks_or_sending(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'DEEPSEEK_API_KEY': ''}):
+            result = subprocess.run([sys.executable, str(pilot.ROOT/'scripts/mac-wechat-pilot.py'),
+                                     '--peer', '测试联系人', '--data-root', folder, '--check-service'],
+                                    text=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('SERVICE_OK', result.stdout)
+            directory = next(Path(folder).iterdir())
+            with pilot.sqlite3.connect(directory/'pilot.sqlite') as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM sends').fetchone()[0], 0)
+            self.assertFalse((directory/'evidence').exists())
+
+    def test_service_failure_stops_before_loading_ui_or_calibrating(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(sys, 'argv', ['pilot', '--peer', '测试联系人', '--data-root', folder]), \
+                 patch.object(sys, 'platform', 'darwin'), \
+                 patch.object(pilot, 'node_path', return_value='/node'), \
+                 patch.object(pilot, 'Bridge', side_effect=RuntimeError('SERVICE_EXIT')), \
+                 patch.object(pilot, 'Reader') as reader, \
+                 patch.object(pilot.ui_module, 'WechatUI') as ui, \
+                 patch.object(pilot, 'calibrate') as calibrate:
+                with self.assertRaisesRegex(RuntimeError, 'SERVICE_EXIT'): pilot.main()
+                reader.assert_not_called(); ui.assert_not_called(); calibrate.assert_not_called()
+
+    def test_service_check_rejects_unexpected_send_requests(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root/'scripts').mkdir()
+            (root/'scripts/mac-pilot-bridge.mjs').write_text('''
+console.log(JSON.stringify({type:'ready',modelEnabled:false}));
+process.stdin.on('data', () => console.log(JSON.stringify({type:'send',id:'bad',text:'must not send'})));
+''')
+            state = pilot.PilotState(root/'data', "测试联系人")
+            try:
+                with patch.object(pilot, 'ROOT', root):
+                    bridge = pilot.Bridge(pilot.node_path(), state, "测试联系人")
+                try:
+                    with patch.object(pilot.ui_module, 'send_once') as send:
+                        with self.assertRaisesRegex(RuntimeError, 'SERVICE_CHECK_SEND_BLOCKED'):
+                            bridge.call({'action':'status'})
+                        send.assert_not_called()
+                finally:
+                    bridge.close()
+            finally:
+                state.close()
+
     def test_python_and_node_exchange_requests_and_persist_gui_outcomes(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'DEEPSEEK_API_KEY': ''}):
             state = pilot.PilotState(folder, "测试联系人")
