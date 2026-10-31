@@ -11,6 +11,7 @@ import queue
 import re
 import secrets
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -70,6 +71,13 @@ def parse_requests(rows, input_top):
 def fingerprint(request):
     payload = {key: request[key] for key in ("requestId", "action", "text")}
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+def exit_description(code):
+    if code is not None and code < 0:
+        try: return f"{code}（{signal.Signals(-code).name}）"
+        except ValueError: pass
+    return str(code)
 
 
 class PilotState:
@@ -222,7 +230,7 @@ class Bridge:
                 raise RuntimeError("SERVICE_START_TIMEOUT：汇报服务 10 秒内没有返回启动结果") from None
             if ready.get("type") == "closed":
                 self.process.wait(timeout=3)
-                raise RuntimeError(f"SERVICE_EXIT：汇报服务在启动前退出，退出码 {self.process.returncode}")
+                raise RuntimeError(f"SERVICE_EXIT：汇报服务在启动前退出，退出码 {exit_description(self.process.returncode)}")
             if ready.get("type") == "broken":
                 raise RuntimeError(f"SERVICE_PROTOCOL：汇报服务输出无法解析（{ready['reason']}）")
             if ready.get("type") != "ready" or type(ready.get("modelEnabled")) is not bool:
@@ -275,11 +283,18 @@ class Bridge:
 
 
 def node_path():
-    candidates = [shutil.which("node"), "/opt/homebrew/opt/node@24/bin/node", "/usr/local/opt/node@24/bin/node"]
+    # Use the runtime installed by the Mac preparation steps before an unrelated PATH version.
+    override = os.environ.get("WECHAT_PILOT_NODE", "")
+    candidates = [override] if override else ["/opt/homebrew/opt/node@24/bin/node", "/usr/local/opt/node@24/bin/node", shutil.which("node")]
     for candidate in candidates:
         if candidate and os.path.isfile(candidate):
-            version = subprocess.check_output([candidate, "--version"], text=True).strip()
-            if int(version.lstrip("v").split(".")[0]) >= 20: return candidate
+            try:
+                version = subprocess.check_output([candidate, "--version"], text=True, timeout=10).strip()
+                if re.fullmatch(r"v\d+\.\d+\.\d+", version) and int(version[1:].split(".")[0]) >= 20:
+                    return candidate
+            except (OSError, subprocess.SubprocessError):
+                continue
+    if override: raise RuntimeError("WECHAT_PILOT_NODE 指定的程序不可用；需要可运行的 Node.js 20+")
     raise RuntimeError("未找到 Node.js 20+，请检查 Node.js 24 安装")
 
 

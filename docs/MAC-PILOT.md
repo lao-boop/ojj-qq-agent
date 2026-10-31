@@ -18,6 +18,8 @@ bash scripts/setup-mac-pilot.command
 
 安装脚本复用 `~/wechat-assistant/.venv`，固定安装 Quartz / Vision 12.2.1 和 Pillow 12.3.0，不启动自动化。该入口不需要 `npm install`、Wechaty 或另一个服务进程。
 
+运行时优先选择准备步骤安装的 Homebrew `node@24`，找不到时才使用终端 `PATH` 中的 Node.js 20+。因此即使 `node --version` 指向另一版本，启动日志中的 `Node：` 路径才是实际使用的程序。如需显式指定，可以在启动命令前设置 `WECHAT_PILOT_NODE=/完整路径/node`；指定路径不可用时直接停止，不会悄悄切换版本。
+
 启动前：
 
 1. 在小号微信中手动打开已核实的联系人私聊，备注须唯一，输入框留空。
@@ -95,7 +97,7 @@ bash scripts/run-mac-pilot.command "联系人唯一备注" --check-service
 
 检查模式不加载 Mac 界面组件、不截图、不发微信消息、不调用模型；会打开本地数据，按正常启动规则将中断中的操作标为未确认。成功输出 `SERVICE_OK`，随后退出。它不是持续收信的 `READY`；检查通过后，去掉 `--check-service` 正常启动。
 
-失败时现在会区分 `SERVICE_EXIT`（服务提前退出，附退出码）、`SERVICE_PROTOCOL`（输出解析失败）、`SERVICE_HANDSHAKE`（启动确认格式不符）、`SERVICE_START_TIMEOUT`（启动超时）。终端同时显示选用的 Node 路径。可据这些诊断继续排查，无需反复发送校准消息。
+失败时现在会区分 `SERVICE_EXIT`（服务提前退出，附退出码及信号名）、`SERVICE_PROTOCOL`（输出解析失败）、`SERVICE_HANDSHAKE`（启动确认格式不符）、`SERVICE_START_TIMEOUT`（启动超时）。例如 `-6（SIGABRT）` 表示 Node 进程被中止，单凭这个信号不能判断是版本、运行环境还是程序初始化的问题。终端同时显示选用的 Node 路径。可据这些诊断继续排查，无需反复发送校准消息。
 
 每次发送前检查聊天标题、窗口身份、前台应用和空白输入框；粘贴后复制回读，确认内容一致才按一次发送键。回复附有随机观察标记，用于确认文字已从输入区移入消息区。
 

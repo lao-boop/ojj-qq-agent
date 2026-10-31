@@ -78,6 +78,16 @@ class ReaderTests(unittest.TestCase):
 
 
 class BridgeTests(unittest.TestCase):
+    def test_prepared_runtime_is_preferred_and_explicit_bad_path_cannot_fall_back(self):
+        with patch.dict('os.environ', {'WECHAT_PILOT_NODE': ''}), \
+             patch.object(pilot.shutil, 'which', return_value='/another/node'), \
+             patch.object(pilot.os.path, 'isfile', return_value=True), \
+             patch.object(pilot.subprocess, 'check_output', return_value='v24.22.2\n'):
+            self.assertEqual(pilot.node_path(), '/opt/homebrew/opt/node@24/bin/node')
+        with patch.dict('os.environ', {'WECHAT_PILOT_NODE': '/missing/node'}), \
+             patch.object(pilot.os.path, 'isfile', return_value=False):
+            with self.assertRaisesRegex(RuntimeError, 'WECHAT_PILOT_NODE'): pilot.node_path()
+
     def test_startup_errors_distinguish_exit_from_invalid_output_without_echoing_output(self):
         for source, expected in [
             ("process.exit(7);", "SERVICE_EXIT.*7"),
