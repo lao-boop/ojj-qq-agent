@@ -1,5 +1,7 @@
 # 依赖与产物
 node_modules/
+__pycache__/
+*.py[cod]
 
 # 运行时数据（保留配件库）
 data/*
@@ -8,6 +10,7 @@ data/*
 
 # 配置与密钥
 config.json
+config.wechat.json
 .env
 *.local
 
