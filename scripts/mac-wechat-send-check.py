@@ -17,6 +17,10 @@ def compact(text):
     return "".join(text.split())
 
 
+def marker_in_text(marker, text):
+    return compact(marker).casefold() in compact(text).casefold()
+
+
 def title_report(details, target, bounds):
     """Expose header-only diagnostics while keeping the existing exact-match guard."""
     height = max(1, float(bounds["Height"]))
@@ -129,6 +133,8 @@ class WechatUI:
 
 
 def send_once(ui, target, text=None, marker=None):
+    started = time.monotonic()
+    stage = "PREPARE"
     board = ui.A.NSPasteboard.generalPasteboard()
     text_type = ui.A.NSPasteboardTypeString
     saved = []
@@ -146,12 +152,14 @@ def send_once(ui, target, text=None, marker=None):
 
     def put(value):
         nonlocal owned_count
+        if owned_count is not None and board.changeCount() != owned_count:
+            raise RuntimeError("剪贴板已被其他操作改变；停止使用剪贴板，请检查草稿")
         board.clearContents()
         if not board.setString_forType_(value, text_type):
             raise RuntimeError("无法写入测试文字")
         owned_count = board.changeCount()
 
-    def read_input():
+    def read_input(expected=None):
         nonlocal owned_count
         sentinel = uuid.uuid4().hex
         put(sentinel)
@@ -159,31 +167,62 @@ def send_once(ui, target, text=None, marker=None):
         ui.key(8, command=True)  # Physical C.
         value = board.stringForType_(text_type)
         owned_count = board.changeCount()
+        if expected is not None and value not in (sentinel, expected):
+            # A concurrent copy cannot be distinguished from a changed editor.
+            # Do not overwrite that clipboard value during cleanup.
+            owned_count = None
         ui.key(124)  # Collapse selection without editing its contents.
         return "" if value == sentinel else value
 
+    def before_send_deadline():
+        if time.monotonic() - started >= 30:
+            raise RuntimeError("草稿核对已超过 30 秒；未按发送键，请检查草稿")
+
     try:
+        print("SEND_PREPARING：正在使用微信输入框和剪贴板，请暂缓对微信的点击、滚动和输入。", flush=True)
         ui.snapshot()
         ui.focus_input()
+        stage = "EMPTY_CHECK"
         if read_input() != "":
             raise RuntimeError("输入区域已有内容或无法确认空白；未粘贴或发送测试消息")
+        stage = "PASTE"
         put(text)
         ui.key(9, command=True)  # Physical V.
-        if read_input() != text:
-            raise RuntimeError("输入框回读与测试文字不一致；未按发送键，请检查草稿")
-        rows = ui.snapshot()
-        locations = [r for r in rows if marker in r[0] and r[1] > .2]
-        if len(locations) != 1 or not 0 < locations[0][2] < .35:
-            raise RuntimeError("未确认测试文字位于输入区；未按发送键，请检查草稿")
+        # Re-reading the exact draft also returns the caret to its end. Retry
+        # only this pre-send observation, never the paste or the Return key.
+        for attempt in range(3):
+            stage = "DRAFT_READBACK"
+            before_send_deadline()
+            if read_input(expected=text) != text:
+                raise RuntimeError("草稿内容或输入焦点发生变化；未按发送键，请检查草稿")
+            if attempt == 0:
+                print("SEND_DRAFT_READY：文字回读一致，正在核对草稿位置，尚未发送。", flush=True)
+            stage = "DRAFT_POSITION"
+            rows = ui.snapshot()
+            locations = [r for r in rows if marker_in_text(marker, r[0]) and r[1] > .2]
+            if len(locations) == 1 and 0 < locations[0][2] < .35:
+                break
+            if attempt == 2:
+                raise RuntimeError(f"三次核对仍未确认草稿标记位于输入区（匹配 {len(locations)} 处，"
+                                   f"纵坐标 {[round(r[2], 3) for r in locations[:5]]}）；"
+                                   "滚动或识别失败都可能造成此结果，未按发送键，请检查草稿")
+            print(f"SEND_RECHECK {attempt + 1}/2：重新定位草稿末尾并核对；不会重复粘贴或按发送键。", flush=True)
+            time.sleep(.4)
         input_y = locations[0][2]
-        print(f"目标：{target}；测试标记：{marker}。只尝试发送一次。", flush=True)
+        stage = "FINAL_READBACK"
+        if read_input(expected=text) != text:
+            raise RuntimeError("发送前草稿内容或输入焦点发生变化；未按发送键，请检查草稿")
         ui.foreground()
+        before_send_deadline()
+        stage = "RETURN"
+        print(f"SEND_PRESS：目标 {target}；标记 {marker}；核对完成，只按一次发送键。", flush=True)
         attempted = True  # Set before keydown: a subsequent failure is ambiguous.
         ui.key(36)  # Return; never retry if the user's send shortcut differs.
+        stage = "CONFIRM"
         for delay in (1, 2, 2):
             time.sleep(delay)
             rows = ui.snapshot()
-            found = [r for r in rows if marker in r[0] and r[1] > .2]
+            found = [r for r in rows if marker_in_text(marker, r[0]) and r[1] > .2]
             if len(found) == 1 and input_y + .03 < found[0][2] < .84:
                 print("SEND_VISIBLE：目标聊天中已看到测试文字从输入区移入消息区。")
                 print("这只确认本机界面状态，不表示对方已收到或已读。本次窗口临时截图已删除。")
@@ -192,6 +231,7 @@ def send_once(ui, target, text=None, marker=None):
     except Exception as error:
         status = "SEND_UNKNOWN：可能已发送，不要直接重跑；先人工查看聊天。" if attempted else "SEND_STOPPED：未按发送键。"
         print(status)
+        print(f"SEND_STAGE：{stage}")
         print(str(error) if isinstance(error, RuntimeError) else type(error).__name__)
         return 3 if attempted else 2
     finally:
@@ -199,6 +239,7 @@ def send_once(ui, target, text=None, marker=None):
             board.clearContents()
             if saved:
                 board.writeObjects_(saved)
+        print("SEND_FINISHED：本条发送操作结束。", flush=True)
 
 
 if __name__ == "__main__":

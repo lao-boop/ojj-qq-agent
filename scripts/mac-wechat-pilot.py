@@ -260,7 +260,7 @@ def calibrate(ui, reader, peer, state):
     def frame(filename, rows):
         reader.frame(filename, rows)
         for row in reader.rows:
-            if marker in ui_module.compact(row["text"]): positions.append(dict(row))
+            if ui_module.marker_in_text(marker, row["text"]): positions.append(dict(row))
     ui.on_frame = frame
     state.send_state(marker, "sending")
     code = ui_module.send_once(ui, peer, "单联系人试运行正在校准。请等终端显示 READY 后，按终端示例提交汇报。", marker)
@@ -269,7 +269,7 @@ def calibrate(ui, reader, peer, state):
     if code:
         raise RuntimeError("启动消息未确认；查看聊天后再决定是否重启")
     inputs = [r for r in positions if 0 < r["y"] < .35]
-    outgoing = [r for r in reader.rows if marker in ui_module.compact(r["text"]) and r["direction"] == "self"]
+    outgoing = [r for r in reader.rows if ui_module.marker_in_text(marker, r["text"]) and r["direction"] == "self"]
     if not inputs or not outgoing:
         raise RuntimeError("未确认输入区或绿色发送气泡；当前只支持可识别的浅色聊天界面")
     input_row = inputs[0]
@@ -334,6 +334,9 @@ class Bridge:
             if message.get("type") == "send":
                 if self.ui is None:
                     raise RuntimeError("SERVICE_CHECK_SEND_BLOCKED：服务检查期间禁止发送微信消息")
+                # Each chunk has its own GUI verification period; a long detail
+                # reply must not expire just because earlier chunks took time.
+                deadline = time.monotonic() + 90
                 marker = "B" + secrets.token_hex(5).upper()
                 self.state.send_state(message["id"], "sending")
                 code = ui_module.send_once(self.ui, self.peer, str(message["text"]), marker)

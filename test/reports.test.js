@@ -82,6 +82,25 @@ test('receipts are rate limited without dropping any original reports', async t 
   assert.equal(sent.filter(m => m.id === 'alice').length, 1);
 });
 
+test('desktop pilot allows GUI verification to finish beyond the ordinary send timeout', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let acknowledge;
+  const { service } = setup(t, {
+    cfg: { ...config, singlePeerPilot: true },
+    send: () => new Promise(resolve => { acknowledge = resolve; }),
+  });
+  let state = 'pending';
+  const request = service.handle(event('slow-desktop', 'alice', '等待桌面核对后发送回执'))
+    .then(() => { state = 'done'; }, () => { state = 'failed'; });
+  t.mock.timers.tick(25000);
+  await new Promise(setImmediate);
+  assert.equal(state, 'pending');
+  acknowledge();
+  await request;
+  assert.equal(state, 'done');
+  assert.equal(service.store.records().length, 1);
+});
+
 test('periodic digest combines staff reports, targets only boss, and does not resend', async t => {
   const { service, sent } = setup(t);
   await service.handle(event('a', 'alice', '项目A已经交付。'));

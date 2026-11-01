@@ -138,7 +138,8 @@ export class ReportService {
     for (const part of splitMessages(text)) {
       let timer;
       try {
-        await Promise.race([this.send(id, part), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('送达超时，结果未确认')), 20000); })]);
+        const timeoutMs = this.cfg.singlePeerPilot ? 65000 : 20000;
+        await Promise.race([this.send(id, part), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('送达超时，结果未确认')), timeoutMs); })]);
       } finally { clearTimeout(timer); }
     }
   }

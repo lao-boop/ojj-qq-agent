@@ -22,7 +22,7 @@ function send(targetId, text) {
   if (![staff, owner].includes(targetId)) throw new Error('试点禁止跨联系人发送');
   const id = randomUUID();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error('本机发送确认超时')); }, 19000);
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error('本机发送确认超时')); }, 60000);
     pending.set(id, { resolve, reject, timer });
     emit({ type: 'send', id, text });
   });

@@ -41,6 +41,7 @@ class UI:
         self.board = Board()
         self.buffer, self.error = draft, error
         self.sent = []
+        self.pastes = 0
         self.A = types.SimpleNamespace(
             NSPasteboard=types.SimpleNamespace(generalPasteboard=lambda: self.board),
             NSPasteboardTypeString="text", NSPasteboardItem=Item,
@@ -60,6 +61,7 @@ class UI:
         if code == 8 and self.buffer:
             self.board.setString_forType_(self.buffer, "text")
         if code == 9:
+            self.pastes += 1
             self.buffer += self.board.stringForType_("text")
             if self.error == "paste": self.buffer += "意外内容"
         if code == 36:
@@ -112,6 +114,73 @@ class SendCheckTests(unittest.TestCase):
         ui = UI(error="user clipboard")
         self.assertEqual(self.run_check(ui)[0], 0)
         self.assertEqual(ui.board.stringForType_("text"), "用户新复制内容")
+
+    def test_temporary_hidden_marker_rechecks_without_repasting_or_duplicate_send(self):
+        class ScrolledUI(UI):
+            draft_reads = 0
+            def snapshot(self):
+                if self.buffer:
+                    self.draft_reads += 1
+                    if self.draft_reads < 3: return []
+                return super().snapshot()
+        ui = ScrolledUI()
+        code, output = self.run_check(ui)
+        self.assertEqual(code, 0)
+        self.assertEqual(ui.pastes, 1)
+        self.assertEqual(len(ui.sent), 1)
+        self.assertEqual(output.count('SEND_RECHECK'), 2)
+
+    def test_persistent_hidden_marker_stops_with_a_draft_and_stage(self):
+        class HiddenUI(UI):
+            def snapshot(self): return []
+        ui = HiddenUI()
+        code, output = self.run_check(ui)
+        self.assertEqual(code, 2)
+        self.assertTrue(ui.buffer)
+        self.assertEqual(ui.pastes, 1)
+        self.assertFalse(ui.sent)
+        self.assertIn('SEND_STAGE：DRAFT_POSITION', output)
+        self.assertIn('匹配 0 处', output)
+
+    def test_edit_during_ocr_is_caught_by_final_readback(self):
+        class EditedUI(UI):
+            def snapshot(self):
+                if self.buffer: self.buffer += '用户补充'
+                return super().snapshot()
+        ui = EditedUI()
+        code, output = self.run_check(ui)
+        self.assertEqual(code, 2)
+        self.assertFalse(ui.sent)
+        self.assertIn('用户补充', ui.buffer)
+        self.assertIn('SEND_STAGE：FINAL_READBACK', output)
+
+    def test_copy_during_ocr_is_preserved_and_blocks_send(self):
+        class CopiedUI(UI):
+            def snapshot(self):
+                if self.buffer: self.board.setString_forType_('用户刚复制的内容', 'text')
+                return super().snapshot()
+        ui = CopiedUI()
+        code, output = self.run_check(ui)
+        self.assertEqual(code, 2)
+        self.assertFalse(ui.sent)
+        self.assertEqual(ui.board.stringForType_('text'), '用户刚复制的内容')
+        self.assertIn('剪贴板已被其他操作改变', output)
+
+    def test_marker_case_changes_do_not_change_exact_draft_validation(self):
+        class LowercaseOCR(UI):
+            def snapshot(self):
+                return [(text.lower(), x, y) for text, x, y in super().snapshot()]
+        ui = LowercaseOCR()
+        self.assertEqual(self.run_check(ui)[0], 0)
+        self.assertEqual(len(ui.sent), 1)
+
+    def test_expired_draft_verification_never_presses_return(self):
+        ui = UI()
+        with patch.object(send_check.time, 'monotonic', side_effect=[0, 1, 31]):
+            code, output = self.run_check(ui)
+        self.assertEqual(code, 2)
+        self.assertFalse(ui.sent)
+        self.assertIn('超过 30 秒', output)
 
 
 class TitleCheckTests(unittest.TestCase):
