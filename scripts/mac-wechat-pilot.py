@@ -25,6 +25,14 @@ ui_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ui_module)
 START = re.compile(r"^(汇报|汇总|详情)\s*([A-Z][0-9]{2,6})(?![0-9])", re.I)
 COMMAND = re.compile(r"^(汇报|汇总|详情)\s*([A-Z][0-9]{2,6})(?![0-9])\s*[:：]?\s*(.*?)\s*#END$", re.S | re.I)
+# On the tested Mac, Vision returns 0.5 for complete, legible Chinese commands.
+# This is an eligibility floor, not an accuracy claim; the main loop still
+# requires two identical observations and rejects conflicting/reused request IDs.
+MIN_COMMAND_CONFIDENCE = .5
+
+
+def acceptable_confidence(row):
+    return MIN_COMMAND_CONFIDENCE <= row.get("confidence", 0) <= 1
 
 
 def reading_lines(rows):
@@ -69,7 +77,7 @@ def parse_requests(rows, input_top):
         if row.get("break_before"):
             collected, previous = [], None
         text = row["text"].strip()
-        if row.get("direction") != "incoming" or row.get("confidence", 0) < .75:
+        if row.get("direction") != "incoming" or not acceptable_confidence(row):
             collected, previous = [], None
             continue
         if START.match(text):
@@ -107,7 +115,7 @@ def inbox_diagnostics(rows, input_top):
     visible = [r for r in rows if r["x"] > .2 and input_top < r["y"] < .84]
     return {"blocks": len(visible),
             "incoming": sum(r.get("direction") == "incoming" for r in visible),
-            "low_confidence": sum(r.get("direction") == "incoming" and r.get("confidence", 0) < .75 for r in visible),
+            "low_confidence": sum(r.get("direction") == "incoming" and not acceptable_confidence(r) for r in visible),
             "heads": sum(bool(START.match(r["text"].strip())) for r in visible),
             "commands": len(parse_requests(rows, input_top))}
 

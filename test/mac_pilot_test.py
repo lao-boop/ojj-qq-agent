@@ -18,6 +18,35 @@ def row(text, y=.6, direction="incoming", confidence=.99):
 
 
 class ParserTests(unittest.TestCase):
+    def test_observed_mac_half_confidence_commands_are_not_discarded(self):
+        # Positions, directions and scores from the user's read-only diagnostic;
+        # sidebar labels are synthetic and the report is the existing test text.
+        body = '汇报 A02 今天已完成合同确认，下一步等待回款 #END'
+        rows = [
+            {**row(body, .524, confidence=.5), 'x':.433, 'w':.379, 'h':.032},
+            {**row(body, .422, confidence=.5), 'x':.433, 'w':.378, 'h':.032},
+            {**row('汇总 Q03 #END', .328, confidence=.5), 'x':.433, 'w':.115, 'h':.025},
+            {**row('16:11', .517, confidence=1), 'x':.297, 'w':.032, 'h':.018},
+            {**row('侧栏预览', .407, confidence=1), 'x':.295, 'w':.033, 'h':.013},
+            {**row('侧栏预览', .287, confidence=.5), 'x':.272, 'w':.055, 'h':.021},
+            {**row('校准文字', .694, direction='self', confidence=.5), 'x':.501, 'w':.398, 'h':.032},
+        ]
+        for boundary in (.15, .25):
+            parsed = pilot.parse_requests(rows, boundary)
+            self.assertEqual([r['requestId'] for r in parsed], ['A02', 'A02', 'Q03'])
+            self.assertEqual(pilot.inbox_diagnostics(rows, boundary)['low_confidence'], 0)
+        self.assertEqual([r['requestId'] for r in pilot.parse_requests(rows, .35)], ['A02', 'A02'])
+
+    def test_half_confidence_does_not_bypass_direction_or_complete_command_checks(self):
+        for candidate in [
+            row('汇报 A11 自发消息 #END', direction='self', confidence=.5),
+            row('汇报 A11 方向不明 #END', direction='unknown', confidence=.5),
+            row('汇报 A11 尚未完整', confidence=.5),
+            row('普通聊天', confidence=.5),
+            *[row('汇报 A11 正文 #END', confidence=value) for value in (.49, 0, 1.1, float('nan'))],
+        ]:
+            self.assertEqual(pilot.parse_requests([candidate], .25), [])
+
     def test_multiline_complete_report_and_queries(self):
         rows = [row("汇报 A01 项目A已经交付", .7), row("尾款明天到账 #END", .67), row("汇总 Q01 #END", .5), row("详情 Q02 R000001 #END", .4)]
         result = pilot.parse_requests(rows, .25)
@@ -144,6 +173,50 @@ class ReaderTests(unittest.TestCase):
 
 
 class BridgeTests(unittest.TestCase):
+    def test_half_confidence_intake_requires_stability_then_summarizes_without_replay(self):
+        first = row('汇报 A11 初次识别文字 #END', .6, confidence=.5)
+        stable = row('汇报 A11 合同已确认，等待回款 #END', .6, confidence=.5)
+        query = row('汇总 Q11 #END', .4, confidence=.5)
+        conflict = [row('汇报 A12 内容一 #END', .75, confidence=.5),
+                    row('汇报 A12 内容二 #END', .7, confidence=.5)]
+        own = row('汇报 A99 自发测试 #END', .8, direction='self', confidence=.5)
+        frames = [[first], [stable], [stable], [stable, query], [stable, query], [stable, query]]
+        reader = unittest.mock.Mock(rows=[], image=None)
+        replies, observed = [], []
+        class FakeUI:
+            def __init__(self, peer): self.index = 0
+            def snapshot(self):
+                if self.index == len(frames): raise KeyboardInterrupt
+                reader.rows = [own, *conflict, *frames[self.index]]
+                self.index += 1
+                observed.append(self.index)
+        def visible(ui, peer, text, marker):
+            replies.append((ui.index, text))
+            return 0
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'DEEPSEEK_API_KEY': ''}):
+            with patch.object(sys, 'argv', ['pilot', '--peer', '测试联系人', '--data-root', folder]), \
+                 patch.object(sys, 'platform', 'darwin'), \
+                 patch.object(pilot, 'Reader', return_value=reader), \
+                 patch.object(pilot.ui_module, 'WechatUI', FakeUI), \
+                 patch.object(pilot, 'calibrate', return_value=.25), \
+                 patch.object(pilot.ui_module, 'send_once', side_effect=visible), \
+                 patch.object(pilot.time, 'sleep'), \
+                 patch.object(sys, 'stdout', new_callable=io.StringIO) as output:
+                with self.assertRaises(KeyboardInterrupt): pilot.main()
+            self.assertEqual(observed, [1, 2, 3, 4, 5, 6])
+            self.assertEqual([frame for frame, _ in replies], [3, 5])
+            self.assertIn('已记录试点汇报', replies[0][1])
+            self.assertIn('合同已确认', replies[1][1])
+            self.assertEqual(reader.evidence.call_count, 2)
+            directory = next(Path(folder).iterdir())
+            reports = json.loads((directory/'reports.json').read_text())
+            self.assertEqual(len(reports['records']), 1)
+            self.assertEqual(reports['records'][0]['text'], '合同已确认，等待回款')
+            with pilot.sqlite3.connect(directory/'pilot.sqlite') as db:
+                self.assertEqual(db.execute('SELECT id,state FROM requests ORDER BY id').fetchall(),
+                                 [('A11', 'done'), ('Q11', 'done')])
+            self.assertIn('编号 A12 对应不同内容', output.getvalue())
+
     def test_prepared_runtime_is_preferred_and_explicit_bad_path_cannot_fall_back(self):
         with patch.dict('os.environ', {'WECHAT_PILOT_NODE': ''}), \
              patch.object(pilot.shutil, 'which', return_value='/another/node'), \
