@@ -77,6 +77,26 @@ class ParserTests(unittest.TestCase):
 
 
 class ReaderTests(unittest.TestCase):
+    def test_inbox_check_shows_title_failure_without_collecting_the_chat(self):
+        verify_title = pilot.ui_module.WechatUI.verify_title
+        class FakeUI:
+            def __init__(self, peer):
+                self.target = peer
+                self.identity = (1, 10, {'Width':1200, 'Height':900})
+            def snapshot(self):
+                verify_title(self, [row('一呜', .95)])
+                self.on_frame('must-not-read.png', [])
+        reader = unittest.mock.Mock(image=None)
+        with patch.object(pilot, 'Reader', return_value=reader), \
+             patch.object(pilot.ui_module, 'WechatUI', FakeUI), \
+             patch.object(sys, 'stdout', new_callable=io.StringIO) as output:
+            with self.assertRaisesRegex(RuntimeError, 'TITLE_CHECK_FAILED'):
+                pilot.inspect_inbox('一鸣')
+            self.assertIn('TITLE_CHECK', output.getvalue())
+            self.assertIn('一呜', output.getvalue())
+            self.assertNotIn('INBOX_CHECK', output.getvalue())
+            reader.frame.assert_not_called()
+
     def test_inbox_check_does_not_open_data_or_backend_and_omits_message_body(self):
         class FakeReader:
             image = None

@@ -114,5 +114,43 @@ class SendCheckTests(unittest.TestCase):
         self.assertEqual(ui.board.stringForType_("text"), "用户新复制内容")
 
 
+class TitleCheckTests(unittest.TestCase):
+    def make_ui(self):
+        ui = object.__new__(send_check.WechatUI)
+        ui.target = "一鸣"
+        ui.identity = (1, 10, {"Width": 1200, "Height": 900})
+        reports = []
+        ui.on_title_check = reports.append
+        return ui, reports
+
+    def row(self, text, x=.4, y=.95):
+        return {"text":text, "x":x, "y":y, "w":.1, "h":.02, "confidence":.9}
+
+    def test_misread_title_reports_actual_header_before_refusing_it(self):
+        ui, reports = self.make_ui()
+        with self.assertRaisesRegex(RuntimeError, 'TITLE_CHECK_FAILED.*0'):
+            ui.verify_title([self.row('一呜'), self.row('private-body-do-not-log', y=.5)])
+        self.assertEqual(reports[0]['header_rows'][0]['text'], '一呜')
+        self.assertNotIn('private-body-do-not-log', str(reports))
+
+    def test_duplicate_matches_remain_blocked_and_show_both_positions(self):
+        ui, reports = self.make_ui()
+        with self.assertRaisesRegex(RuntimeError, 'TITLE_CHECK_FAILED.*2'):
+            ui.verify_title([self.row('一鸣', x=.3), self.row('一鸣', x=.5)])
+        self.assertEqual(len(reports[0]['expected_positions']), 2)
+
+    def test_sidebar_or_message_text_is_not_accepted_as_the_title(self):
+        ui, reports = self.make_ui()
+        with self.assertRaisesRegex(RuntimeError, 'TITLE_CHECK_FAILED.*0'):
+            ui.verify_title([self.row('一鸣', x=.1), self.row('一鸣', y=.5)])
+        self.assertEqual(len(reports[0]['expected_positions']), 2)
+
+    def test_unique_exact_title_still_passes_with_diagnostics_disabled(self):
+        ui, reports = self.make_ui()
+        ui.on_title_check = None
+        ui.verify_title([self.row('一 鸣')])
+        self.assertEqual(reports, [])
+
+
 if __name__ == "__main__":
     unittest.main()

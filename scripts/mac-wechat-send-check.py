@@ -17,6 +17,23 @@ def compact(text):
     return "".join(text.split())
 
 
+def title_report(details, target, bounds):
+    """Expose header-only diagnostics while keeping the existing exact-match guard."""
+    height = max(1, float(bounds["Height"]))
+    header_bottom = 1 - min(.16, 80 / height)
+    expected = compact(target)
+    positions = [r for r in details if compact(r["text"]) == expected]
+    matches = [r for r in positions if r["x"] > .2 and r["y"] > .84]
+    return {
+        "expected": target, "matches": len(matches),
+        "window": [round(bounds["Width"]), round(bounds["Height"])],
+        "header_rows": [{"text": r["text"][:40], "confidence": round(r["confidence"], 3),
+                         "box": [round(r[k], 3) for k in ("x", "y", "w", "h")]}
+                        for r in details if r["x"] > .2 and r["y"] >= header_bottom],
+        "expected_positions": [[round(r["x"], 3), round(r["y"], 3)] for r in positions],
+    }
+
+
 class WechatUI:
     def __init__(self, target):
         if sys.platform != "darwin":
@@ -29,6 +46,15 @@ class WechatUI:
         self.target = target
         self.identity = None
         self.on_frame = None
+        self.on_title_check = None
+
+    def verify_title(self, details):
+        report = title_report(details, self.target, self.identity[2])
+        if self.on_title_check:
+            self.on_title_check(report)
+        if report["matches"] != 1:
+            raise RuntimeError(f"TITLE_CHECK_FAILED：目标标题精确匹配 {report['matches']} 处；"
+                               "尚未确认当前聊天。请查看 TITLE_CHECK / TITLE_ROW 诊断。")
 
     def snapshot(self):
         Q, V = self.Q, self.V
@@ -69,9 +95,7 @@ class WechatUI:
                     details.append({"text": str(candidates[0].string()), "x": float(box.origin.x),
                                     "y": float(box.origin.y), "w": float(box.size.width),
                                     "h": float(box.size.height), "confidence": float(candidates[0].confidence())})
-            title_hits = [r for r in rows if r[1] > .2 and r[2] > .84 and r[0] == compact(self.target)]
-            if len(title_hits) != 1:
-                raise RuntimeError("未唯一识别目标聊天标题，请手动打开指定联系人的聊天")
+            self.verify_title(details)
             if self.on_frame:
                 self.on_frame(image, details)
         return rows

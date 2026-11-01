@@ -117,6 +117,13 @@ def inspect_inbox(peer):
     try:
         ui = ui_module.WechatUI(peer)
         ui.on_frame = reader.frame
+        def report_title(info):
+            print("TITLE_CHECK", json.dumps({k: info[k] for k in ("expected", "matches", "window", "expected_positions")}, ensure_ascii=False), flush=True)
+            for row in info["header_rows"]:
+                print("TITLE_ROW", json.dumps(row, ensure_ascii=False), flush=True)
+            if not info["header_rows"]:
+                print("TITLE_ROW：顶部区域没有识别到文字。", flush=True)
+        ui.on_title_check = report_title
         ui.snapshot()
         print("INBOX_CHECK：只读观察，未发送消息、未保存截图或汇报。", flush=True)
         for row in sorted(reader.rows, key=lambda r: -r["y"]):
