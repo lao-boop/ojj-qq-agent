@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import io
 import subprocess
 import sys
 import tempfile
@@ -49,8 +50,53 @@ class ParserTests(unittest.TestCase):
         for page in ["第0页", "第-1页", "第100000页"]:
             self.assertEqual(pilot.parse_requests([row(f"汇总 Q04 {page} #END")], .25), [])
 
+    def test_same_line_fragments_keep_reading_order_despite_baseline_jitter(self):
+        for offset in (-.001, .001):
+            body = {**row('汇报 A02 今天已完成合同确认，下一步等待回款', .49), 'x':.43, 'w':.34}
+            end = {**row('#END', .49 + offset), 'x':.78, 'w':.04}
+            result = pilot.parse_requests([end, body], .15)
+            self.assertEqual([r['requestId'] for r in result], ['A02'])
+            self.assertEqual(result[0]['text'], '今天已完成合同确认，下一步等待回款')
+            self.assertGreaterEqual(result[0]['rows'][0]['x']+result[0]['rows'][0]['w'], .82 - .0001)
+
+    def test_fragments_cannot_cross_direction_confidence_or_large_gaps(self):
+        body = {**row('汇报 A02 正文', .49), 'x':.43, 'w':.2}
+        end = {**row('#END', .491), 'x':.64, 'w':.04}
+        for changed in [dict(end, direction='self'), dict(end, direction='unknown'),
+                        dict(end, confidence=.4), dict(end, x=.9)]:
+            self.assertEqual(pilot.parse_requests([body, changed], .15), [])
+
+    def test_listening_diagnostics_do_not_include_report_body(self):
+        rows = [row('汇报 A02 private-body-do-not-log #END', confidence=.4),
+                row('汇总 Q03 #END', .4)]
+        info = pilot.inbox_diagnostics(rows, .25)
+        self.assertEqual(info['incoming'], 2)
+        self.assertEqual(info['low_confidence'], 1)
+        self.assertEqual(info['commands'], 1)
+        self.assertNotIn('private-body', str(info))
+
 
 class ReaderTests(unittest.TestCase):
+    def test_inbox_check_does_not_open_data_or_backend_and_omits_message_body(self):
+        class FakeReader:
+            image = None
+            rows = [row('汇报 A02 confidential-body #END')]
+            def frame(self, filename, rows): pass
+        with patch.object(sys, 'argv', ['pilot', '--peer', '测试联系人', '--check-inbox']), \
+             patch.object(sys, 'platform', 'darwin'), \
+             patch.object(pilot, 'Reader', return_value=FakeReader()), \
+             patch.object(pilot.ui_module, 'WechatUI') as ui, \
+             patch.object(pilot.ui_module, 'send_once') as send, \
+             patch.object(pilot, 'PilotState') as state, \
+             patch.object(pilot, 'Bridge') as bridge, \
+             patch.object(sys, 'stdout', new_callable=io.StringIO) as output:
+            pilot.main()
+            ui.return_value.snapshot.assert_called_once()
+            state.assert_not_called(); bridge.assert_not_called(); send.assert_not_called()
+            self.assertIn('INBOX_CHECK', output.getvalue())
+            self.assertIn('A02', output.getvalue())
+            self.assertNotIn('confidential-body', output.getvalue())
+
     def test_bubble_direction_and_saved_evidence_crop(self):
         from PIL import Image, ImageDraw
         with tempfile.TemporaryDirectory() as folder:

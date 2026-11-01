@@ -27,12 +27,47 @@ START = re.compile(r"^(汇报|汇总|详情)\s*([A-Z][0-9]{2,6})(?![0-9])", re.I
 COMMAND = re.compile(r"^(汇报|汇总|详情)\s*([A-Z][0-9]{2,6})(?![0-9])\s*[:：]?\s*(.*?)\s*#END$", re.S | re.I)
 
 
+def reading_lines(rows):
+    """Order horizontally adjacent OCR fragments by x despite small baseline jitter."""
+    bands = []
+    for row in sorted(rows, key=lambda r: -(r["y"] + r["h"] / 2)):
+        band = next((b for b in bands if all(
+            abs(row["y"] + row["h"]/2 - r["y"] - r["h"]/2) <= min(row["h"], r["h"]) * .35
+            for r in b)), None)
+        if band is None: bands.append([row])
+        else: band.append(row)
+    result = []
+    for band in bands:
+        band_start = len(result)
+        parts = []
+        def append_line():
+            if not parts: return
+            x = min(r["x"] for r in parts)
+            y = min(r["y"] for r in parts)
+            result.append({**parts[0], "text": " ".join(r["text"].strip() for r in parts),
+                           "x": x, "y": y, "w": max(r["x"]+r["w"] for r in parts)-x,
+                           "h": max(r["y"]+r["h"] for r in parts)-y,
+                           "break_before": len(result) > band_start,
+                           "confidence": min(r.get("confidence", 0) for r in parts)})
+        for row in sorted(band, key=lambda r: r["x"]):
+            if parts:
+                last = parts[-1]
+                gap = row["x"] - last["x"] - last["w"]
+                if (row.get("direction") != last.get("direction")
+                        or gap < -.005 or gap > min(.04, 2 * min(row["h"], last["h"]))):
+                    append_line(); parts = []
+            parts.append(row)
+        append_line()
+    return result
+
+
 def parse_requests(rows, input_top):
     """Require a complete visible envelope; never interpret arbitrary OCR as a command."""
     result, collected, previous = [], [], None
-    for row in sorted(rows, key=lambda r: (-r["y"], r["x"])):
-        if not (row["x"] > .2 and input_top < row["y"] < .84):
-            continue
+    visible = [r for r in rows if r["x"] > .2 and input_top < r["y"] < .84]
+    for row in reading_lines(visible):
+        if row.get("break_before"):
+            collected, previous = [], None
         text = row["text"].strip()
         if row.get("direction") != "incoming" or row.get("confidence", 0) < .75:
             collected, previous = [], None
@@ -66,6 +101,35 @@ def parse_requests(rows, input_top):
                            "text": body, "rows": list(collected)})
         collected, previous = [], None
     return result
+
+
+def inbox_diagnostics(rows, input_top):
+    visible = [r for r in rows if r["x"] > .2 and input_top < r["y"] < .84]
+    return {"blocks": len(visible),
+            "incoming": sum(r.get("direction") == "incoming" for r in visible),
+            "low_confidence": sum(r.get("direction") == "incoming" and r.get("confidence", 0) < .75 for r in visible),
+            "heads": sum(bool(START.match(r["text"].strip())) for r in visible),
+            "commands": len(parse_requests(rows, input_top))}
+
+
+def inspect_inbox(peer):
+    reader = Reader()
+    try:
+        ui = ui_module.WechatUI(peer)
+        ui.on_frame = reader.frame
+        ui.snapshot()
+        print("INBOX_CHECK：只读观察，未发送消息、未保存截图或汇报。", flush=True)
+        for row in sorted(reader.rows, key=lambda r: -r["y"]):
+            if row["x"] <= .2 or not .08 < row["y"] < .84: continue
+            text = row["text"].strip()
+            head = re.match(r"^(汇报|汇总|详情)\s*([A-Za-z0-9]{1,10})", text)
+            print("HEAD=", head.group(0) if head else "-", "END=", bool(re.search(r"[#＃]\s*END\s*$", text, re.I)),
+                  "DIR=", row["direction"], "CONF=", round(row["confidence"], 3),
+                  "BOX=", [round(row[k], 3) for k in ("x", "y", "w", "h")], "LEN=", len(text))
+        for boundary in (.15, .25, .35):
+            print("PARSED", boundary, [(r["requestId"], r["action"]) for r in parse_requests(reader.rows, boundary)])
+    finally:
+        if reader.image is not None: reader.image.close()
 
 
 def fingerprint(request):
@@ -302,11 +366,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--peer", required=True, help="用户已核实的唯一试点联系人备注")
     parser.add_argument("--data-root", type=Path, default=Path.home()/"wechat-assistant"/"pilot-data")
-    parser.add_argument("--check-service", action="store_true", help="只检查本地汇报服务，不截图、不操作微信")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--check-service", action="store_true", help="只检查本地汇报服务，不截图、不操作微信")
+    modes.add_argument("--check-inbox", action="store_true", help="只读检查当前聊天的识别结果，不发送、不保存截图或汇报")
     args = parser.parse_args()
     if sys.platform != "darwin" and not args.check_service: raise RuntimeError("需要在你的 Mac 上运行")
     if not args.peer.strip(): raise RuntimeError("试点联系人不能为空")
     os.umask(0o077)
+    if args.check_inbox:
+        inspect_inbox(args.peer)
+        return
     directory = args.data_root / hashlib.sha256(args.peer.encode()).hexdigest()[:16]
     state = PilotState(directory, args.peer)
     bridge, reader = None, None
@@ -328,9 +397,15 @@ def main():
         print(f"记录保存在：{directory}\n每个新请求请换编号；相同编号不会再次处理。每五分钟汇总未通知记录。", flush=True)
         previous, warned = {}, set()
         next_flush = time.monotonic() + 300
+        next_status = time.monotonic()
         while True:
             ui.snapshot()
             requests = parse_requests(reader.rows, input_top)
+            if time.monotonic() >= next_status:
+                info = inbox_diagnostics(reader.rows, input_top)
+                print(f"监听中：来信文字块 {info['incoming']}，低置信度 {info['low_confidence']}，"
+                      f"指令头 {info['heads']}，完整指令 {info['commands']}；消息区下界 {input_top:.3f}。", flush=True)
+                next_status = time.monotonic() + 15
             grouped = {}
             for request in requests:
                 grouped.setdefault(request["requestId"], []).append(request)

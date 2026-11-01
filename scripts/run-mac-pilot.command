@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
-if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || [ -z "$1" ] || { [ "$#" -eq 2 ] && [ "$2" != '--check-service' ]; }; then
-  echo '用法：bash scripts/run-mac-pilot.command "联系人唯一备注" [--check-service]'
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || [ -z "$1" ] || { [ "$#" -eq 2 ] && [ "$2" != '--check-service' ] && [ "$2" != '--check-inbox' ]; }; then
+  echo '用法：bash scripts/run-mac-pilot.command "联系人唯一备注" [--check-service|--check-inbox]'
   exit 1
 fi
 pilot_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
