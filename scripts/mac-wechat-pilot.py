@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("mac_send_check", ROOT / "scripts/mac-wechat-send-check.py")
 ui_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ui_module)
-START = re.compile(r"^(汇报|汇总|详情)\s*([A-Z][0-9]{2,6})(?![0-9])", re.I)
-COMMAND = re.compile(r"^(汇报|汇总|详情)\s*([A-Z][0-9]{2,6})(?![0-9])\s*[:：]?\s*(.*?)\s*#END$", re.S | re.I)
+START = re.compile(r"^(汇报|汇总|详情|查询)\s*([A-Z][0-9]{2,6})(?![0-9])", re.I)
+COMMAND = re.compile(r"^(汇报|汇总|详情|查询)\s*([A-Z][0-9]{2,6})(?![0-9])\s*[:：]?\s*(.*?)\s*#END$", re.S | re.I)
 # On the tested Mac, Vision returns 0.5 for complete, legible Chinese commands.
 # This is an eligibility floor, not an accuracy claim; the main loop still
 # requires two identical observations and rejects conflicting/reused request IDs.
@@ -69,7 +69,7 @@ def reading_lines(rows):
     return result
 
 
-def parse_requests(rows, input_top):
+def parse_requests(rows, input_top, allow_query=False):
     """Require a complete visible envelope; never interpret arbitrary OCR as a command."""
     result, collected, previous = [], [], None
     visible = [r for r in rows if r["x"] > .2 and input_top < r["y"] < .84]
@@ -99,13 +99,14 @@ def parse_requests(rows, input_top):
         action, request_id, body = match.groups()
         request_id = request_id.upper()
         body = body.strip()
-        if re.search(r"(?:汇报|汇总|详情)\s*[A-Z][0-9]{2,6}", body, re.I):
+        if re.search(r"(?:汇报|汇总|详情|查询)\s*[A-Z][0-9]{2,6}", body, re.I):
             collected, previous = [], None
             continue
         if ((action == "汇报" and body and len(body) <= 2000)
                 or (action == "汇总" and (not body or re.fullmatch(r"第[1-9][0-9]{0,4}页", body)))
-                or (action == "详情" and re.fullmatch(r"R[0-9]{6,}", body))):
-            result.append({"requestId": request_id, "action": {"汇报": "report", "汇总": "summary", "详情": "detail"}[action],
+                or (action == "详情" and re.fullmatch(r"R[0-9]{6,}", body))
+                or (action == "查询" and allow_query and body and len(body) <= 500 and not body.startswith("/"))):
+            result.append({"requestId": request_id, "action": {"汇报": "report", "汇总": "summary", "详情": "detail", "查询": "query"}[action],
                            "text": body, "rows": list(collected)})
         collected, previous = [], None
     return result
@@ -160,7 +161,7 @@ def exit_description(code):
 
 
 class PilotState:
-    def __init__(self, directory, peer):
+    def __init__(self, directory, peer, *, scope=None):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.lock = open(self.directory / "pilot.lock", "a+")
@@ -171,7 +172,7 @@ class PilotState:
             self.lock.close()
             raise RuntimeError("该试点已在运行，请先停止另一个终端里的进程")
         scope_file = self.directory / "scope.json"
-        scope = {"mode": "single-peer-pilot-v1", "peer": peer}
+        scope = scope or {"mode": "single-peer-pilot-v1", "peer": peer}
         if scope_file.exists():
             if json.loads(scope_file.read_text()) != scope:
                 self.close()
@@ -253,7 +254,7 @@ class Reader:
                 out.flush(); os.fsync(out.fileno())
 
 
-def calibrate(ui, reader, peer, state):
+def calibrate(ui, reader, peer, state, text=None):
     """Use the already-tested send path to locate the input row and self bubble."""
     marker = "B" + secrets.token_hex(5).upper()
     positions = []
@@ -263,7 +264,7 @@ def calibrate(ui, reader, peer, state):
             if ui_module.marker_in_text(marker, row["text"]): positions.append(dict(row))
     ui.on_frame = frame
     state.send_state(marker, "sending")
-    code = ui_module.send_once(ui, peer, "单联系人试运行正在校准。请等终端显示 READY 后，按终端示例提交汇报。", marker)
+    code = ui_module.send_once(ui, peer, text or "单联系人试运行正在校准。请等终端显示 READY 后，按终端示例提交汇报。", marker)
     state.send_state(marker, "visible" if code == 0 else "blocked" if code == 2 else "unknown")
     ui.on_frame = reader.frame
     if code:
@@ -280,10 +281,12 @@ def calibrate(ui, reader, peer, state):
 
 
 class Bridge:
-    def __init__(self, node, state, peer, ui=None):
+    def __init__(self, node, state, peer, ui=None, *, boss=None, interval=300):
         self.state, self.peer, self.ui = state, peer, ui
         self.messages = queue.Queue()
-        self.process = subprocess.Popen([node, str(ROOT / "scripts/mac-pilot-bridge.mjs"), str(state.directory), peer],
+        command = [node, str(ROOT / "scripts/mac-pilot-bridge.mjs"), str(state.directory), peer]
+        if boss is not None: command.extend([boss, str(interval)])
+        self.process = subprocess.Popen(command,
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         text=True, encoding="utf-8", bufsize=1)
         def read():
@@ -323,6 +326,9 @@ class Bridge:
         self.process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
         self.process.stdin.flush()
 
+    def send(self, message, marker):
+        return ui_module.send_once(self.ui, self.peer, str(message["text"]), marker)
+
     def call(self, request):
         rpc_id = uuid.uuid4().hex
         self.write({"type": "request", "id": rpc_id, **request})
@@ -339,7 +345,11 @@ class Bridge:
                 deadline = time.monotonic() + 90
                 marker = "B" + secrets.token_hex(5).upper()
                 self.state.send_state(message["id"], "sending")
-                code = ui_module.send_once(self.ui, self.peer, str(message["text"]), marker)
+                try:
+                    code = 2 if send_failed else self.send(message, marker)
+                except Exception as error:
+                    print("SEND_ROUTING_STOPPED：" + (str(error) if isinstance(error, RuntimeError) else type(error).__name__), flush=True)
+                    code = 3  # A callback may have already sent; do not assume otherwise.
                 self.state.send_state(message["id"], "visible" if code == 0 else "blocked" if code == 2 else "unknown")
                 self.write({"type": "send-result", "id": message["id"], "visible": code == 0})
                 send_failed |= code != 0
@@ -396,7 +406,7 @@ def main():
         return
     directory = args.data_root / hashlib.sha256(args.peer.encode()).hexdigest()[:16]
     state = PilotState(directory, args.peer)
-    bridge, reader = None, None
+    bridge, reader, desktop = None, None, None
     try:
         node = node_path()
         print(f"Node：{node}", flush=True)
@@ -406,6 +416,7 @@ def main():
         if args.check_service:
             print(f"SERVICE_OK：汇报服务已启动并完成通信检查；已有 {status['count']} 条汇报。没有截图或发送微信消息。", flush=True)
             return
+        desktop = ui_module.DesktopLock()
         reader = Reader()
         ui = ui_module.WechatUI(args.peer)
         bridge.ui = ui
@@ -464,6 +475,7 @@ def main():
     finally:
         if bridge: bridge.close()
         if reader and reader.image is not None: reader.image.close()
+        if desktop: desktop.close()
         state.close()
 
 

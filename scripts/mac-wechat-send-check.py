@@ -5,12 +5,31 @@ No chat search, background listener, remote API, or automatic resend. A visible
 outgoing bubble is local UI evidence, never a recipient delivery/read receipt.
 """
 import argparse
+import fcntl
+import os
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
 from pathlib import Path
+
+
+class DesktopLock:
+    """The supported runners share one physical keyboard, clipboard and window."""
+    def __init__(self, directory=None):
+        directory = Path(directory) if directory is not None else Path.home() / "wechat-assistant"
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.file = open(directory / "desktop.lock", "a+")
+        os.chmod(directory / "desktop.lock", 0o600)
+        try:
+            fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.file.close()
+            raise RuntimeError("微信桌面已被另一个助手进程使用；请先 Ctrl+C 停止旧程序") from None
+
+    def close(self):
+        self.file.close()
 
 
 def compact(text):
@@ -219,7 +238,7 @@ def send_once(ui, target, text=None, marker=None):
         attempted = True  # Set before keydown: a subsequent failure is ambiguous.
         ui.key(36)  # Return; never retry if the user's send shortcut differs.
         stage = "CONFIRM"
-        for delay in (1, 2, 2):
+        for attempt, delay in enumerate((1, 2, 2), 1):
             time.sleep(delay)
             rows = ui.snapshot()
             found = [r for r in rows if marker_in_text(marker, r[0]) and r[1] > .2]
@@ -227,6 +246,8 @@ def send_once(ui, target, text=None, marker=None):
                 print("SEND_VISIBLE：目标聊天中已看到测试文字从输入区移入消息区。")
                 print("这只确认本机界面状态，不表示对方已收到或已读。本次窗口临时截图已删除。")
                 return 0
+            print(f"SEND_CONFIRM_WAIT {attempt}/3：标记匹配 {len(found)} 处；草稿纵坐标 {input_y:.3f}；"
+                  f"当前纵坐标 {[round(r[2], 3) for r in found[:5]]}。只观察，不再次发送。", flush=True)
         raise RuntimeError("尚未在消息区确认测试文字")
     except Exception as error:
         status = "SEND_UNKNOWN：可能已发送，不要直接重跑；先人工查看聊天。" if attempted else "SEND_STOPPED：未按发送键。"
@@ -250,6 +271,10 @@ if __name__ == "__main__":
     if not args.send_once:
         parser.error("需要 --send-once；默认不执行发送")
     try:
-        sys.exit(send_once(WechatUI(args.target), args.target))
+        desktop = DesktopLock()
+        try:
+            sys.exit(send_once(WechatUI(args.target), args.target))
+        finally:
+            desktop.close()
     except Exception as error:
         sys.exit(str(error) if isinstance(error, RuntimeError) else type(error).__name__)

@@ -138,7 +138,7 @@ export class ReportService {
     for (const part of splitMessages(text)) {
       let timer;
       try {
-        const timeoutMs = this.cfg.singlePeerPilot ? 65000 : 20000;
+        const timeoutMs = this.cfg.singlePeerPilot || this.cfg.desktopCommands ? 65000 : 20000;
         await Promise.race([this.send(id, part), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('送达超时，结果未确认')), timeoutMs); })]);
       } finally { clearTimeout(timer); }
     }
@@ -212,8 +212,9 @@ export class ReportService {
     const quotes = await reportQuotes(records, text, this.llm, this.cfg.useModel);
     if (!this.isBoss(bossId)) return;
     this.store.rememberQuery(bossId, records.map(r => r.id), text);
-    const detailHelp = this.cfg.singlePeerPilot ? '查看完整内容：详情 Q02 R000001 #END（换成要查询的汇报编号，每次使用新请求编号）。' : '需要完整内容请发 /详情 编号；更正信息保留为独立原文，不会覆盖旧记录。';
-    const nextHelp = this.cfg.singlePeerPilot ? `\n继续查看：汇总 Q03 第${page + 1}页 #END（每次使用新请求编号）。` : `\n继续查看：沿用本次查询条件，加“第${page + 1}页”。`;
+    const desktop = this.cfg.singlePeerPilot || this.cfg.desktopCommands;
+    const detailHelp = desktop ? '查看完整内容：详情 Q02 R000001 #END（换成要查询的汇报编号，每次使用新请求编号）。' : '需要完整内容请发 /详情 编号；更正信息保留为独立原文，不会覆盖旧记录。';
+    const nextHelp = desktop ? `\n继续查看：${summary ? '汇总' : '查询'} Q03 ${summary ? '' : query + ' '}第${page + 1}页 #END（每次使用新请求编号）。` : `\n继续查看：沿用本次查询条件，加“第${page + 1}页”。`;
     await this.#send(bossId, `${summary ? '汇报汇总' : '查到相关汇报'}：${matches.length} 条，第 ${page}/${pages} 页（${this.cfg.timezone}）\n\n${records.map(r => this.line(r, quotes.get(r.id))).join('\n\n')}\n\n${detailHelp}${pages > page ? nextHelp : ''}`);
   }
   flush() {
@@ -238,7 +239,7 @@ export class ReportService {
       selected.push(record.id);
     }
     if (!selected.length) throw new Error('汇报摘要超出发送长度');
-    body += `\n\n本批 ${selected.length} 条；另有 ${this.store.pending().length - selected.length} 条待汇总。${this.cfg.singlePeerPilot ? '查看完整内容：详情 Q02 R000001 #END（换成实际汇报编号，每次使用新请求编号）。' : '追问细节或发送 /详情 编号。'}`;
+    body += `\n\n本批 ${selected.length} 条；另有 ${this.store.pending().length - selected.length} 条待汇总。${this.cfg.singlePeerPilot || this.cfg.desktopCommands ? '查看完整内容：详情 Q02 R000001 #END（换成实际汇报编号，每次使用新请求编号）。' : '追问细节或发送 /详情 编号。'}`;
     const delivery = this.store.prepareDelivery(selected, bossId, body, this.now());
     await this.#deliver(delivery);
   }

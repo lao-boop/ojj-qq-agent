@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Local stdio only. The desktop runner owns the only real recipient.
+// Local stdio only. The desktop runner verifies each configured recipient.
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -7,30 +7,34 @@ import { randomUUID } from 'node:crypto';
 import { ReportService } from '../src/reports.js';
 import { LLM } from '../src/llm.js';
 
-const [directory, peer] = process.argv.slice(2);
+const [directory, peer, boss, intervalText = '300'] = process.argv.slice(2);
 if (!directory || !peer) throw new Error('需要独立试点数据目录和联系人备注');
 const scope = JSON.parse(fs.readFileSync(path.join(directory, 'scope.json'), 'utf8'));
-if (scope.mode !== 'single-peer-pilot-v1' || scope.peer !== peer) throw new Error('试点数据身份不匹配');
+const routed = boss !== undefined;
+const interval = Number(intervalText);
+if (!Number.isInteger(interval) || interval < 60 || interval > 86400) throw new Error('汇总周期应为 60–86400 秒');
+if (routed ? scope.mode !== 'two-contact-pilot-v1' || scope.staff !== peer || scope.boss !== boss || !boss.trim() || boss === peer
+  : scope.mode !== 'single-peer-pilot-v1' || scope.peer !== peer) throw new Error('试点数据身份不匹配');
 const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
 const pending = new Map();
-const staff = 'pilot:reporter', owner = 'pilot:reader';
+const staff = routed ? peer : 'pilot:reporter', owner = routed ? boss : 'pilot:reader';
 const logger = { debug() {}, info() {}, warn() { console.error('汇报模块有未确认操作，请查看本机状态。'); }, error() { console.error('汇报模块操作失败，保留已有记录。'); } };
 const apiKey = process.env.DEEPSEEK_API_KEY || '';
 const llm = apiKey ? new LLM({ apiKey, baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com', model: process.env.DEEPSEEK_MODEL || 'deepseek-chat' }, logger) : null;
 
 function send(targetId, text) {
-  if (![staff, owner].includes(targetId)) throw new Error('试点禁止跨联系人发送');
+  if (![staff, owner].includes(targetId)) throw new Error('禁止向未配置的联系人发送');
   const id = randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('本机发送确认超时')); }, 60000);
     pending.set(id, { resolve, reject, timer });
-    emit({ type: 'send', id, text });
+    emit({ type: 'send', id, text, ...(routed ? { target: targetId } : {}) });
   });
 }
 
 const service = new ReportService({
-  file: path.join(directory, 'reports.json'), platform: 'wechat-mac-pilot',
-  cfg: { enabled: true, bossId: owner, staffIds: [staff], batchIntervalMs: 300000, timezone: 'Asia/Shanghai', useModel: Boolean(apiKey), singlePeerPilot: true },
+  file: path.join(directory, 'reports.json'), platform: routed ? 'wechat-mac-routing' : 'wechat-mac-pilot',
+  cfg: { enabled: true, bossId: owner, staffIds: [staff], batchIntervalMs: interval * 1000, timezone: 'Asia/Shanghai', useModel: Boolean(apiKey), singlePeerPilot: !routed, desktopCommands: routed },
   connected: () => true, send, llm, logger,
 });
 
@@ -38,17 +42,19 @@ async function request(message) {
   if (message.action === 'status') return service.status();
   if (message.action === 'flush') { await service.flush(); return service.status(); }
   if (!/^[A-Z][0-9]{2,6}$/.test(message.requestId || '')) throw new Error('试点请求编号无效');
-  if (!['report', 'summary', 'detail'].includes(message.action)) throw new Error('试点操作无效');
+  if (!['report', 'summary', 'detail', ...(routed ? ['query'] : [])].includes(message.action)) throw new Error('试点操作无效');
+  if (routed && message.source !== (message.action === 'report' ? staff : owner)) throw new Error('联系人角色不允许此操作');
   const text = String(message.text || '');
   if (text.length > 2000) throw new Error('试点文字过长');
   if (message.action === 'detail' && !/^R\d{6,}$/.test(text)) throw new Error('汇报编号无效');
   if (message.action === 'summary' && text && !/^第[1-9][0-9]{0,4}页$/.test(text)) throw new Error('汇总页码无效');
   if (message.action === 'report' && !text.trim()) throw new Error('汇报不能为空');
-  const input = message.action === 'summary' ? `/汇总 ${text}`.trim() : message.action === 'detail' ? `/详情 ${text}` : text;
+  if (message.action === 'query' && (!text.trim() || text.length > 500 || text.trim().startsWith('/'))) throw new Error('查询内容无效');
+  const input = message.action === 'summary' ? `/汇总 ${text}`.trim() : message.action === 'detail' ? `/详情 ${text}` : message.action === 'query' ? `/查询 ${text}` : text;
   await service.handle({
-    post_type: 'message', message_type: 'private', self_id: 'single-peer-pilot',
+    post_type: 'message', message_type: 'private', self_id: routed ? 'two-contact-pilot' : 'single-peer-pilot',
     user_id: message.action === 'report' ? staff : owner,
-    message_id: message.requestId, sender: { nickname: peer },
+    message_id: message.requestId, sender: { nickname: message.action === 'report' ? peer : routed ? boss : peer },
     report_submission: message.action === 'report',
     message: [{ type: 'text', data: { text: input } }],
     source: { kind: 'screen-ocr', verified: false, observationId: String(message.observationId || message.requestId) },
