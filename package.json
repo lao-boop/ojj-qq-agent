@@ -6,7 +6,10 @@
   "description": "QQ 机器人：DeepSeek 驱动的小鲸鱼，支持人格、记忆、分条聊天、出图，自带本地控制台",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/start.js",
+    "start:qq": "node src/index.js",
+    "start:wecom": "node src/wecom-main.js",
+    "test:wecom": "node --test test/*.test.js",
     "mock": "node src/mock-onebot.js",
     "test:e2e": "node scripts/e2e.js"
   },
@@ -14,9 +17,12 @@
     "node": ">=20"
   },
   "dependencies": {
-    "opencc-js": "^1.4.2",
-    "ws": "^8.18.0",
+    "@wecom/aibot-node-sdk": "1.0.7",
+    "https-proxy-agent": "7.0.6",
     "mineflayer": "4.39.0",
-    "mineflayer-pathfinder": "2.4.5"
+    "mineflayer-pathfinder": "2.4.5",
+    "opencc-js": "^1.4.2",
+    "proxy-from-env": "2.1.0",
+    "ws": "^8.18.0"
   }
 }

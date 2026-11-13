@@ -32,6 +32,10 @@ loadEnvFile();
 /** 用环境变量覆盖配置里的密钥；config.json 可以只留空字符串。 */
 export function applyEnvOverrides(cfg) {
   const env = process.env;
+  if (env.CHAT_PLATFORM) cfg.platform = env.CHAT_PLATFORM.trim().toLowerCase();
+  if (env.WECOM_BOT_ID || env.WECOM_BOT_SECRET) cfg.wecom ??= {};
+  if (env.WECOM_BOT_ID) cfg.wecom.botId = env.WECOM_BOT_ID;
+  if (env.WECOM_BOT_SECRET) cfg.wecom.secret = env.WECOM_BOT_SECRET;
   if (env.DEEPSEEK_API_KEY) cfg.llm.apiKey = env.DEEPSEEK_API_KEY;
   if (env.DEEPSEEK_BASE_URL) cfg.llm.baseUrl = env.DEEPSEEK_BASE_URL;
   if (env.REPLICATE_API_TOKEN) {
@@ -47,8 +51,18 @@ export function applyEnvOverrides(cfg) {
 }
 
 export const DEFAULTS = {
+  platform: 'qq',
   bot: { name: '小鲸鱼' },
   onebot: { wsUrl: 'ws://127.0.0.1:3001', accessToken: '', httpUrl: '' },
+  wecom: {
+    botId: '',
+    secret: '',
+    mode: 'open',
+    userAllow: [],
+    groupAllow: [],
+    requestTimeoutMs: 240000,
+    maxConcurrentJobs: 2,
+  },
   llm: {
     baseUrl: 'https://api.deepseek.com/v1',
     apiKey: '',
@@ -215,9 +229,10 @@ export function loadConfig() {
       throw new Error(`config.json 解析失败：${err.message}`);
     }
   }
-  const cfg = deepMerge(DEFAULTS, fileCfg);
-  applyEnvOverrides(cfg);
+  const cfg = deepMerge(structuredClone(DEFAULTS), fileCfg);
+  // 环境变量中的凭据只留在内存；首次启动也不能把它们写进配置文件。
   if (!fs.existsSync(CONFIG_PATH)) saveConfig(cfg);
+  applyEnvOverrides(cfg);
   return cfg;
 }
 

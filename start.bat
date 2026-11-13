@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title 小鲸鱼 QQ 机器人
+title 小鲸鱼机器人
 cd /d "%~dp0"
 
 set "NODE_EXE="
@@ -16,13 +16,13 @@ if not defined NODE_EXE (
   exit /b 1
 )
 
-if not exist "node_modules\ws" (
+if not exist "node_modules\@wecom\aibot-node-sdk" (
   echo 第一次运行，正在安装依赖...
   call npm install --no-audit --no-fund
 )
 
 echo 使用 Node：%NODE_EXE%
-"%NODE_EXE%" src\index.js
+"%NODE_EXE%" src\start.js
 echo.
 echo 机器人已退出。
 pause

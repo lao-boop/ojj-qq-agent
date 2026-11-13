@@ -3,6 +3,11 @@
 一个能自己聊天的 QQ 机器人：DeepSeek 当大脑，人格、记忆、表情、分条说话、会画图，自带本地控制台。
 不需要 GPU，不依赖别的框架，QQ 侧通过标准 OneBot v11 接入（NapCat / SnowLuma / Lagrange 都行）。
 
+现已增加**企业微信智能机器人**入口，使用官方 WebSocket 长连接 SDK，无需公网回调域名。
+在 `.env` 设置 `CHAT_PLATFORM=wecom`、`WECOM_BOT_ID` 和 `WECOM_BOT_SECRET` 后运行 `npm start`，
+或直接 `npm run start:wecom`。具体配置、支持的功能和本地测试见 [企业微信接入说明](docs/WECOM.md)。
+未指定渠道时仍默认运行 QQ；企业微信使用独立人格和会话范围。
+
 ```
 QQ 好友/群消息 ──► NapCat / SnowLuma（OneBot v11 WS）──► 本程序 ──► DeepSeek
                                                           │

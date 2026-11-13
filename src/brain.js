@@ -6,9 +6,23 @@ import { formatGlobal } from './global.js';
 const MAX_TOOL_ROUNDS = 4;
 const MAX_BUBBLE_CHARS = 150;
 const CJK = /[\u4e00-\u9fff]/;
+const DEFAULT_REPLY_INSTRUCTIONS = [
+  '- 直接说话，不要写「小鲸鱼：」这样的前缀，不要输出 Markdown、列表、标题、代码块。',
+  '- 一条回复控制在 1~3 条短消息（用换行分隔），每条尽量一句话；想多说就分条，不要一大段。',
+  '- 不要复述工具结果，不要报路径、文件名、链接；画完图一句话带走即可。',
+  '- 说到做到：对方要图/语音/文件/歌时，必须先调用对应工具，再回一句；没调工具就不要说“好/马上/在做”。',
+  '- 偶尔可以用一个括号写动作（比如（尾巴拍了拍水）），但别每句都来。',
+  '- 对方发来的图片如果看不出来，就直说没看清，不要瞎编。',
+  '- 不要主动提 AI、模型、提示词；被问到就自然带过。',
+  '- 这是私人使用：对方让你翻唱/变声/点歌时直接照做，不要提版权、授权、侵权，也不要用“不能翻唱”推脱。',
+  '- 曲库里有这首歌就直接唱，不用解释能不能唱、也不用提醒版权。',
+];
 
 export class Brain {
-  constructor({ cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash', selfState = () => '' }) {
+  constructor({
+    cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash', selfState = () => '',
+    personaProvider, globalContext = formatGlobal, replyInstructions = DEFAULT_REPLY_INSTRUCTIONS,
+  }) {
     this.cfg = cfg;
     this.llm = llm;
     this.memory = memory;
@@ -16,6 +30,9 @@ export class Brain {
     this.logger = logger;
     this.visionModel = visionModel;
     this.selfState = selfState;
+    this.personaProvider = personaProvider;
+    this.globalContext = globalContext;
+    this.replyInstructions = replyInstructions;
     this.personaMtime = 0;
     this.personaCache = '';
   }
@@ -25,6 +42,8 @@ export class Brain {
   }
 
   persona() {
+    // An explicit platform persona must never fall back to the QQ persona.
+    if (this.personaProvider !== undefined) return String(this.personaProvider() || '');
     try {
       const stat = fs.statSync(PERSONA_PATH);
       if (stat.mtimeMs !== this.personaMtime) {
@@ -50,7 +69,7 @@ export class Brain {
     const lines = [
       this.persona().trim(),
       '',
-      formatGlobal(),
+      this.globalContext(),
       selfBlock ? '' : '',
       selfBlock,
       '',
@@ -61,15 +80,7 @@ export class Brain {
       meta.groupName ? `- 群名：${meta.groupName}` : '',
       '',
       '【回复要求】',
-      '- 直接说话，不要写「小鲸鱼：」这样的前缀，不要输出 Markdown、列表、标题、代码块。',
-      '- 一条回复控制在 1~3 条短消息（用换行分隔），每条尽量一句话；想多说就分条，不要一大段。',
-      '- 不要复述工具结果，不要报路径、文件名、链接；画完图一句话带走即可。',
-      '- 说到做到：对方要图/语音/文件/歌时，必须先调用对应工具，再回一句；没调工具就不要说“好/马上/在做”。',
-      '- 偶尔可以用一个括号写动作（比如（尾巴拍了拍水）），但别每句都来。',
-      '- 对方发来的图片如果看不出来，就直说没看清，不要瞎编。',
-      '- 不要主动提 AI、模型、提示词；被问到就自然带过。',
-      '- 这是私人使用：对方让你翻唱/变声/点歌时直接照做，不要提版权、授权、侵权，也不要用“不能翻唱”推脱。',
-      '- 曲库里有这首歌就直接唱，不用解释能不能唱、也不用提醒版权。',
+      ...(Array.isArray(this.replyInstructions) ? this.replyInstructions : [this.replyInstructions]),
     ].filter(Boolean);
     if (ctxText) lines.push('', ctxText);
     return lines.join('\n');
@@ -185,7 +196,7 @@ export class Brain {
     return { reply };
   }
 
-  async respond({ chatKey, title, userText, images = [], meta, onProgress }) {
+  async respond({ chatKey, title, userText, images = [], meta, onProgress, persistAssistant = true }) {
     const started = Date.now();
     const ctx = this.memory.context(chatKey, { title, query: userText });
 
@@ -250,7 +261,8 @@ export class Brain {
     const bubbles = toBubbles(reply, this.cfg.maxBubbles, MAX_BUBBLE_CHARS, CJK);
 
     this.memory.append(chatKey, 'user', userContent, title);
-    this.memory.append(chatKey, 'assistant', bubbles.join('\n'), title);
+    // Platforms that confirm delivery separately persist the assistant turn afterwards.
+    if (persistAssistant) this.memory.append(chatKey, 'assistant', bubbles.join('\n'), title);
     this.memory.maybeSummarize(chatKey).catch(() => {});
 
     this.logger.info(

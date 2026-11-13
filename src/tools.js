@@ -620,7 +620,11 @@ const QUALITY_SUFFIX =
  * 组装可用工具。
  * ctx: { chatKey, images: [], voices: [], memory }
  */
-export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify, friendNotify, jobTracker, logger }) {
+export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify, friendNotify, jobTracker, logger, allowedTools }) {
+  if (allowedTools !== undefined && !Array.isArray(allowedTools)) {
+    throw new TypeError('allowedTools must be an array when provided');
+  }
+  const allowed = allowedTools === undefined ? null : new Set(allowedTools);
   const stickers = scanStickers();
   const stickerCats = Object.keys(stickers);
   const specs = [SPECS.draw_image, SPECS.get_time, SPECS.remember, SPECS.sing, SPECS.search_history, SPECS.search_web];
@@ -673,10 +677,14 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     });
   }
 
+  const visibleSpecs = allowed ? specs.filter((spec) => allowed.has(spec.function.name)) : specs;
+  const runnableNames = new Set(visibleSpecs.map((spec) => spec.function.name));
   const cooldowns = new Map();
   const recentStickers = new Map();
 
   async function run(name, args, ctx) {
+    // Filtering schemas alone does not prevent a model from requesting another tool.
+    if (allowed && !runnableNames.has(name)) return `当前渠道不可用工具：${name}`;
     const t0 = Date.now();
     try {
       switch (name) {
@@ -1121,7 +1129,13 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     }
   }
 
-  return { specs, run, stickerCats, imageEnabled: Boolean(cfg.image.enabled), ttsEnabled: Boolean(cfg.tts?.enabled) };
+  return {
+    specs: visibleSpecs,
+    run,
+    stickerCats: allowed && !runnableNames.has('send_sticker') ? [] : stickerCats,
+    imageEnabled: Boolean(cfg.image.enabled) && (!allowed || runnableNames.has('draw_image')),
+    ttsEnabled: Boolean(cfg.tts?.enabled) && (!allowed || runnableNames.has('send_voice')),
+  };
 }
 
 /** 中文提示词先翻成英文 tag，出图质量会好很多。用便宜的 flash 模型，不占主模型额度。 */

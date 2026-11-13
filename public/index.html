@@ -120,7 +120,7 @@
     <header>
       <div class="logo">🐋</div>
       <div>
-        <h1>小鲸鱼 · QQ 机器人</h1>
+        <h1 id="appTitle">小鲸鱼 · 机器人控制台</h1>
         <div class="sub" id="subline">正在读取状态…</div>
       </div>
       <div class="pill" id="busyPill">空闲</div>
@@ -141,7 +141,7 @@
       <section class="panel active" id="panel-overview">
         <div class="grid">
           <div class="card">
-            <h3>OneBot 连接</h3>
+            <h3 id="connectionTitle">连接状态</h3>
             <div class="big"><span class="dot" id="dotConn"></span><span id="connText">—</span></div>
             <div class="muted" id="connMeta">—</div>
             <div class="row" style="margin-top: 12px">
@@ -189,14 +189,25 @@
 
       <!-- 配置 -->
       <section class="panel" id="panel-config">
+        <p class="muted" id="platformMeta">正在读取当前接入平台…</p>
         <div class="cols">
           <div class="card">
+            <div data-platform="qq">
             <h3>接入 QQ（OneBot）</h3>
             <label>WebSocket 地址</label>
             <input id="cfgWsUrl" placeholder="ws://127.0.0.1:3001" />
             <label>Access Token（没设就留空）</label>
             <input id="cfgToken" placeholder="留空即可" />
             <div class="hint">NapCat / SnowLuma 里开启「WebSocket 服务器」后，把地址和 token 填这里。</div>
+            </div>
+            <div data-platform="wecom" hidden>
+              <h3>接入企业微信（智能机器人）</h3>
+              <label>Bot ID</label>
+              <input id="cfgWecomBotId" autocomplete="off" placeholder="企业微信后台的机器人 ID" />
+              <label>Secret</label>
+              <input id="cfgWecomSecret" type="password" autocomplete="new-password" placeholder="企业微信后台的 Secret" />
+              <div class="hint">在企业微信创建智能机器人，选择「API 模式」和「使用长连接」。也可通过 WECOM_BOT_ID、WECOM_BOT_SECRET 环境变量配置；环境变量优先。</div>
+            </div>
 
             <h3 style="margin-top: 18px">模型</h3>
             <label>API Base</label>
@@ -214,6 +225,7 @@
           </div>
 
           <div class="card">
+            <div data-platform="qq">
             <h3>权限（白名单）</h3>
             <label>管理员 QQ（逗号分隔，可用指令）</label>
             <input id="cfgAdmin" placeholder="12345678, 87654321" />
@@ -229,23 +241,40 @@
             </label>
             <label>通过好友后的欢迎语（留空不发）</label>
             <input id="cfgGreeting" placeholder="嗨，我是小鲸鱼～" />
+            </div>
+            <div data-platform="wecom" hidden>
+              <h3>企业微信访问范围</h3>
+              <label>访问模式</label>
+              <select id="cfgWecomMode">
+                <option value="open">允许企业微信后台可见范围内的会话</option>
+                <option value="whitelist">仅允许下方白名单</option>
+              </select>
+              <label>允许私聊的 User ID（逗号分隔）</label>
+              <input id="cfgWecomUsers" placeholder="zhangsan, lisi" />
+              <label>允许的群 Chat ID（逗号分隔）</label>
+              <input id="cfgWecomGroups" placeholder="企业微信的群会话 ID" />
+              <div class="hint">白名单模式下，空名单不放行。成员和群 ID 使用企业微信原始 ID，与 QQ 名单分别管理。</div>
+            </div>
 
             <h3 style="margin-top: 18px">聊天手感</h3>
             <div class="cols">
               <div><label>最多分几条</label><input id="cfgMaxBubbles" type="number" min="1" max="6" /></div>
-              <div><label>群聊被 @ 才回</label>
+              <div data-platform="qq"><label>群聊被 @ 才回</label>
                 <label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input id="cfgReplyOnAt" type="checkbox" style="width:auto" /> 开启</label>
               </div>
             </div>
+            <div data-platform="qq">
             <label>群聊唤醒词（逗号分隔）</label>
             <input id="cfgWake" />
             <label>群聊随机接话概率（0~1）</label>
             <input id="cfgChance" type="number" step="0.01" min="0" max="1" />
+            </div>
 
             <h3 style="margin-top: 18px">出图</h3>
             <label style="display:flex;align-items:center;gap:8px"><input id="cfgImageOn" type="checkbox" style="width:auto" /> 允许机器人画图</label>
             <label>出图后端</label>
             <select id="cfgImageProvider">
+              <option value="replicate">Replicate（需配置 API Token）</option>
               <option value="pollinations">pollinations（免费免注册，45 秒一张，最大 768）</option>
               <option value="siliconflow">硅基流动 FLUX.1-schnell（要 key，快且好看）</option>
               <option value="openai">OpenAI 兼容接口（要 key）</option>
@@ -269,14 +298,14 @@
         <div class="row" style="margin-top: 16px">
           <button class="primary" onclick="saveConfig()">保存配置</button>
           <button class="ghost" onclick="loadConfig()">放弃修改</button>
-          <span class="muted">保存后立即生效；改了 QQ 地址会自动重连。</span>
+          <span class="muted" id="configSaveHint">保存后立即生效。</span>
         </div>
       </section>
 
       <!-- 测试 -->
       <section class="panel" id="panel-test">
         <div class="card">
-          <h3>不经过 QQ，直接和机器人说一句（用的是同一套人格和记忆）</h3>
+          <h3 id="testTitle">在控制台测试当前机器人的人格和工具</h3>
           <div class="chatbox" id="testBox">
             <div class="muted">输入一句话试试，比如「在吗」「给我画一只猫」。</div>
           </div>
@@ -319,6 +348,7 @@
 
     <script>
       let CONFIG = null;
+      let ACTIVE_PLATFORM = null;
       let token = localStorage.getItem('qqbot-console-token') || '';
 
       const $ = (id) => document.getElementById(id);
@@ -357,6 +387,7 @@
           if (btn.dataset.tab === 'logs') loadLogs();
           if (btn.dataset.tab === 'sessions') loadSessions();
           if (btn.dataset.tab === 'persona') loadPersona();
+          if (btn.dataset.tab === 'config') loadConfig();
         };
       });
 
@@ -367,10 +398,29 @@
         return h + ' 小时 ' + (m % 60) + ' 分';
       }
 
+      function showPlatform(platform) {
+        const wecom = platform === 'wecom';
+        document.querySelectorAll('[data-platform]').forEach((el) => {
+          el.hidden = el.dataset.platform !== (wecom ? 'wecom' : 'qq');
+        });
+        $('appTitle').textContent = '小鲸鱼 · ' + (wecom ? '企业微信' : 'QQ') + '机器人';
+        document.title = $('appTitle').textContent + '控制台';
+        $('connectionTitle').textContent = wecom ? '企业微信智能机器人' : 'OneBot 连接';
+        $('platformMeta').textContent = '当前接入：' + (wecom ? '企业微信智能机器人（长连接）' : 'QQ（OneBot）');
+        $('configSaveHint').textContent = wecom
+          ? '保存后立即生效；更新机器人凭据会重新连接。'
+          : '保存后立即生效；改了 QQ 地址会自动重连。';
+        $('testTitle').textContent = wecom ? '测试企业微信人格和对话（预览不执行工具）' : '不经过 QQ，测试当前机器人的人格和工具';
+      }
+
       async function loadStatus() {
         try {
           const s = await api('/api/status');
-          const on = s.onebot.connected;
+          ACTIVE_PLATFORM = s.platform === 'wecom' ? 'wecom' : 'qq';
+          showPlatform(ACTIVE_PLATFORM);
+          const wecom = ACTIVE_PLATFORM === 'wecom';
+          const connection = (wecom ? s.wecom : s.onebot) || {};
+          const on = !!connection.connected && (!wecom || connection.authenticated !== false);
           const jobs = (s.stats && s.stats.jobs) || [];
           const bp = $('busyPill');
           if (bp) {
@@ -391,16 +441,16 @@
           $('dotConn').className = 'dot ' + (on ? 'on' : 'off');
           $('connText').textContent = on ? '正常' : '断开';
           $('connMeta').textContent = on
-            ? (s.onebot.nickname || '-') + '（' + (s.onebot.selfId || '-') + '）'
-            : s.onebot.lastError || s.onebot.wsUrl;
-          $('subline').textContent = '模型 ' + s.llm.model + ' · 人格 ' + s.personaChars + ' 字 · ' + (on ? '在线' : '等待 NapCat/SnowLuma');
+            ? (wecom ? 'Bot ID：' + (connection.botId || '-') : (connection.nickname || '-') + '（' + (connection.selfId || '-') + '）')
+            : connection.lastError || (wecom ? '等待企业微信连接；请检查 Bot ID 和 Secret' : connection.wsUrl || '等待 OneBot 连接');
+          $('subline').textContent = '模型 ' + s.llm.model + ' · 人格 ' + s.personaChars + ' 字 · ' + (on ? '在线' : wecom ? '等待企业微信' : '等待 NapCat/SnowLuma');
           $('modelName').textContent = s.llm.model;
           $('modelMeta').textContent = (s.llm.hasKey ? '已配置 Key' : '缺少 API Key') + ' · 调用 ' + s.llm.stats.calls + ' 次';
           $('statReceived').textContent = s.stats.received;
           $('statReplied').textContent = s.stats.replied;
           $('statMeta').textContent = '忽略 ' + s.stats.ignored + ' · 出错 ' + s.stats.errors;
           $('uptime').textContent = fmtDuration(s.stats.uptimeMs);
-          $('stickerMeta').textContent = '表情包分类：' + (s.stickerCats.length ? s.stickerCats.join('、') : '未放素材');
+          $('stickerMeta').textContent = '表情包分类：' + (s.stickerCats?.length ? s.stickerCats.join('、') : '未放素材');
 
           const rows = (s.sessions || []).slice(0, 6);
           $('recentSessions').innerHTML = rows.length
@@ -448,6 +498,12 @@
           const d = await api('/api/config');
           CONFIG = d.config;
           const c = d.config;
+          showPlatform(ACTIVE_PLATFORM || c.platform || 'qq');
+          $('cfgWecomBotId').value = c.wecom?.botId || '';
+          $('cfgWecomSecret').value = c.wecom?.secret || '';
+          $('cfgWecomMode').value = c.wecom?.mode || 'open';
+          $('cfgWecomUsers').value = joinList(c.wecom?.userAllow);
+          $('cfgWecomGroups').value = joinList(c.wecom?.groupAllow);
           $('cfgWsUrl').value = c.onebot.wsUrl || '';
           $('cfgToken').value = c.onebot.accessToken || '';
           $('cfgBaseUrl').value = c.llm.baseUrl || '';
@@ -480,7 +536,6 @@
       async function saveConfig() {
         const num = (v) => Number(v);
         const patch = {
-          onebot: { wsUrl: $('cfgWsUrl').value.trim(), accessToken: $('cfgToken').value.trim() },
           llm: {
             baseUrl: $('cfgBaseUrl').value.trim(),
             apiKey: $('cfgApiKey').value.trim(),
@@ -489,21 +544,8 @@
             temperature: num($('cfgTemp').value),
             maxTokens: num($('cfgMaxTokens').value),
           },
-          access: {
-            adminQQ: splitList($('cfgAdmin').value),
-            privateAllow: splitList($('cfgPrivate').value),
-            groupAllow: splitList($('cfgGroups').value),
-            allowAllWhenEmpty: $('cfgAllowEmpty').checked,
-            autoAcceptFriend: $('cfgAutoFriend').checked,
-            greeting: $('cfgGreeting').value.trim(),
-          },
           chat: {
             maxBubbles: num($('cfgMaxBubbles').value),
-            group: {
-              replyOnAt: $('cfgReplyOnAt').checked,
-              wakeWords: splitList($('cfgWake').value),
-              chanceReply: num($('cfgChance').value),
-            },
           },
           image: {
             enabled: $('cfgImageOn').checked,
@@ -518,6 +560,31 @@
             pitch: $('cfgTtsPitch').value.trim(),
           },
         };
+        if ((ACTIVE_PLATFORM || CONFIG?.platform) === 'wecom') {
+          patch.wecom = {
+            botId: $('cfgWecomBotId').value.trim(),
+            mode: $('cfgWecomMode').value,
+            userAllow: splitList($('cfgWecomUsers').value),
+            groupAllow: splitList($('cfgWecomGroups').value),
+          };
+          const secret = $('cfgWecomSecret').value.trim();
+          if (!secret.includes('••••')) patch.wecom.secret = secret;
+        } else {
+          patch.onebot = { wsUrl: $('cfgWsUrl').value.trim(), accessToken: $('cfgToken').value.trim() };
+          patch.access = {
+            adminQQ: splitList($('cfgAdmin').value),
+            privateAllow: splitList($('cfgPrivate').value),
+            groupAllow: splitList($('cfgGroups').value),
+            allowAllWhenEmpty: $('cfgAllowEmpty').checked,
+            autoAcceptFriend: $('cfgAutoFriend').checked,
+            greeting: $('cfgGreeting').value.trim(),
+          };
+          patch.chat.group = {
+            replyOnAt: $('cfgReplyOnAt').checked,
+            wakeWords: splitList($('cfgWake').value),
+            chanceReply: num($('cfgChance').value),
+          };
+        }
         try {
           await api('/api/config', { method: 'POST', body: JSON.stringify({ patch }) });
           toast('配置已保存');

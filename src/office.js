@@ -1,12 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { DATA_DIR, ROOT } from './config.js';
 import { ffmpegBin } from './media.js';
 
 const execFileAsync = promisify(execFile);
 const DOCS_DIR = path.join(DATA_DIR, 'documents');
+
+async function wait(ms, signal) {
+  signal?.throwIfAborted();
+  await sleep(ms, undefined, { signal: signal || undefined });
+  signal?.throwIfAborted();
+}
 
 /** 从模型输出里抠出 JSON（容忍尾逗号、代码块）。 */
 function parseJson(raw) {
@@ -41,6 +49,13 @@ export class Office {
     this.cfg = cfg || {};
   }
 
+  async #chat(options, signal) {
+    signal?.throwIfAborted();
+    const result = await this.llm.chat(options);
+    signal?.throwIfAborted();
+    return result;
+  }
+
   #python() {
     const candidates = [
       this.python,
@@ -55,7 +70,7 @@ export class Office {
   }
 
   /** 让模型分两批写大纲，避免一次输出太长被截断。 */
-  async #askSlides({ topic, count, start, theme, previous = [], withHeader = false }) {
+  async #askSlides({ topic, count, start, theme, previous = [], withHeader = false }, signal) {
     const system =
       '你是专业的内容策划和 PPT 大纲作者。根据主题输出 JSON，结构：' +
       (withHeader ? '{"title":"主标题","subtitle":"副标题（一句话概括）","slides":[{"title":"页标题","bullets":["要点"],"imagePrompt":"english prompt"}]}' : '{"slides":[{"title":"页标题","bullets":["要点"],"imagePrompt":"english prompt"}]}') +
@@ -76,7 +91,7 @@ export class Office {
     let lastErr;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const res = await this.llm.chat({
+        const res = await this.#chat({
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: user },
@@ -84,7 +99,7 @@ export class Office {
           model: this.cfg.model || 'deepseek-flash',
           maxTokens: 6000,
           temperature: attempt === 1 ? 0.7 : 0.5,
-        });
+        }, signal);
         const obj = parseJson(res.content);
         const slides = (obj.slides || []).map((s) => {
           const item = {
@@ -114,6 +129,7 @@ export class Office {
         });
         return { title: obj.title, subtitle: obj.subtitle, slides };
       } catch (err) {
+        signal?.throwIfAborted();
         lastErr = err;
         this.logger.warn(`大纲第 ${attempt} 次解析失败：${err.message}`);
       }
@@ -121,9 +137,9 @@ export class Office {
     throw new Error(`大纲生成失败：${lastErr?.message || '未知错误'}`);
   }
 
-  async #outlinePpt({ topic, pages, theme }) {
+  async #outlinePpt({ topic, pages, theme }, signal) {
     const first = Math.ceil(pages / 2);
-    const part1 = await this.#askSlides({ topic, count: first, start: 1, theme, withHeader: true });
+    const part1 = await this.#askSlides({ topic, count: first, start: 1, theme, withHeader: true }, signal);
     let slides = part1.slides || [];
     if (pages > first) {
       const part2 = await this.#askSlides({
@@ -132,7 +148,7 @@ export class Office {
         start: first + 1,
         theme,
         previous: slides.map((s) => s.title),
-      });
+      }, signal);
       slides = slides.concat(part2.slides || []);
     }
     slides = slides.slice(0, pages);
@@ -143,8 +159,8 @@ export class Office {
     };
   }
 
-  async #outlineDocx({ topic, sections }) {
-    const res = await this.llm.chat({
+  async #outlineDocx({ topic, sections }, signal) {
+    const res = await this.#chat({
       messages: [
         {
           role: 'system',
@@ -158,7 +174,7 @@ export class Office {
       model: this.cfg.model || 'deepseek-flash',
       maxTokens: 6000,
       temperature: 0.7,
-    });
+    }, signal);
     const obj = parseJson(res.content);
     return {
       title: String(obj.title || topic).slice(0, 60),
@@ -167,8 +183,9 @@ export class Office {
     };
   }
 
-  async #build(spec) {
-    const stamp = `${Date.now()}`;
+  async #build(spec, signal) {
+    signal?.throwIfAborted();
+    const stamp = `${Date.now()}-${randomUUID()}`;
     const ext = spec.kind === 'docx' ? 'docx' : 'pptx';
     const file = path.join(DOCS_DIR, `${spec.kind}-${stamp}.${ext}`);
     const specPath = path.join(DOCS_DIR, `${spec.kind}-${stamp}.json`);
@@ -178,9 +195,11 @@ export class Office {
         timeout: 180000,
         windowsHide: true,
         maxBuffer: 8 * 1024 * 1024,
-        signal: this._signal || undefined,
+        signal: signal || undefined,
       });
+      signal?.throwIfAborted();
     } catch (err) {
+      signal?.throwIfAborted();
       throw new Error(`生成失败：${String(err.stderr || err.message).slice(0, 200)}`);
     } finally {
       try {
@@ -195,9 +214,10 @@ export class Office {
 
   /** 生成 PPT，返回 { file, name, title, pages }。 */
   async makePpt({ topic, pages = 12, theme = 'history', withImages = true, signal } = {}) {
-    this._signal = signal || null;
+    signal?.throwIfAborted();
     const started = Date.now();
-    const outline = await this.#outlinePpt({ topic, pages, theme });
+    const outline = await this.#outlinePpt({ topic, pages, theme }, signal);
+    signal?.throwIfAborted();
     if (!outline.slides.length) throw new Error('大纲为空');
 
     if (withImages && this.imageGen) {
@@ -220,20 +240,24 @@ export class Office {
 
       const picks = contentIdx.filter((i) => !skip.includes(i)).slice(0, maxImages);
       for (let k = 0; k < picks.length; k++) {
+        signal?.throwIfAborted();
         const s = outline.slides[picks[k]];
         if (!s.imagePrompt) s.imagePrompt = `illustration for: ${s.title}, chinese historical documentary style, no text`;
-        if (k > 0) await new Promise((r) => setTimeout(r, Math.max(delay, 15000)));
+        if (k > 0) await wait(Math.max(delay, 15000), signal);
         if (!s.imagePrompt) continue;
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
+            signal?.throwIfAborted();
             const img = await this.imageGen.generate({ prompt: s.imagePrompt, size: 'square' });
+            signal?.throwIfAborted();
             s.image = img.file;
             break;
           } catch (err) {
+            signal?.throwIfAborted();
             const throttled = /429|throttl|rate limit/i.test(err.message);
             this.logger.warn(`配图失败（第 ${picks[k] + 1} 页，第 ${attempt} 次）：${err.message.slice(0, 80)}`);
             if (throttled && attempt < 3) {
-              await new Promise((r) => setTimeout(r, 65000));
+              await wait(65000, signal);
               continue;
             }
             break;
@@ -248,7 +272,7 @@ export class Office {
       title: outline.title,
       subtitle: outline.subtitle,
       slides: outline.slides,
-    });
+    }, signal);
     const name = `${outline.title}-${outline.slides.length + 2}页.pptx`.replace(/[\\/:*?"<>|]/g, '_');
     this.logger.info(`PPT 完成：${name}，用时 ${Math.round((Date.now() - started) / 1000)}s`);
     return { file, name, title: outline.title, pages: outline.slides.length + 2 };
@@ -256,9 +280,9 @@ export class Office {
 
   /** 生成 Excel 表格，返回 { file, name, title, rows }。 */
   async makeExcel({ topic, rows = 10, columns = 5, signal } = {}) {
-    this._signal = signal || null;
+    signal?.throwIfAborted();
     const started = Date.now();
-    const res = await this.llm.chat({
+    const res = await this.#chat({
       messages: [
         {
           role: 'system',
@@ -273,7 +297,7 @@ export class Office {
       model: this.cfg.model || 'deepseek-flash',
       maxTokens: 4000,
       temperature: 0.6,
-    });
+    }, signal);
     const obj = parseJson(res.content);
     const sheets = (obj.sheets || []).slice(0, 3).map((sh) => ({
       name: String(sh.name || 'Sheet1').slice(0, 28),
@@ -287,7 +311,7 @@ export class Office {
       theme: 'business',
       title: String(obj.title || topic).slice(0, 60),
       sheets,
-    });
+    }, signal);
     const name = `${String(obj.title || topic).slice(0, 40)}.xlsx`.replace(/[\\/:*?"<>|]/g, '_');
     this.logger.info(`Excel 完成：${name}，用时 ${Math.round((Date.now() - started) / 1000)}s`);
     return { file, name, title: String(obj.title || topic), rows: sheets[0].rows.length };
@@ -295,16 +319,16 @@ export class Office {
 
   /** 生成 Word，返回 { file, name, title, sections }。 */
   async makeDocx({ topic, sections = 5, signal } = {}) {
-    this._signal = signal || null;
+    signal?.throwIfAborted();
     const started = Date.now();
-    const outline = await this.#outlineDocx({ topic, sections });
+    const outline = await this.#outlineDocx({ topic, sections }, signal);
     const file = await this.#build({
       kind: 'docx',
       theme: 'business',
       title: outline.title,
       subtitle: outline.subtitle,
       sections: outline.sections,
-    });
+    }, signal);
     const name = `${outline.title}.docx`.replace(/[\\/:*?"<>|]/g, '_');
     this.logger.info(`Word 完成：${name}，用时 ${Math.round((Date.now() - started) / 1000)}s`);
     return { file, name, title: outline.title, sections: outline.sections.length };

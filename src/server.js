@@ -130,6 +130,9 @@ export class ConsoleServer {
     if (c.console?.token) c.console.token = maskSecret(c.console.token);
     if (c.image?.apiKey) c.image.apiKey = maskSecret(c.image.apiKey);
     if (c.song?.token) c.song.token = maskSecret(c.song.token);
+    if (c.voice?.token) c.voice.token = maskSecret(c.voice.token);
+    if (c.asr?.token) c.asr.token = maskSecret(c.asr.token);
+    if (c.wecom?.secret) c.wecom.secret = maskSecret(c.wecom.secret);
     return c;
   }
 
