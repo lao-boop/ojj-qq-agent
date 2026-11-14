@@ -229,5 +229,16 @@ test('WeCom app configuration and console integration stay local and scoped', as
     assert.deepEqual(visible, ['wecom:other-bot:private:Alice_001']);
   });
 
+  await t.test('secretary configuration rejects incomplete recipients and hot-applies settings', async st => {
+    const { app, disk } = await fixture(st, { patch: { wecom: { botId: 'bot-secretary', secret: 'secret' } } });
+    await assert.rejects(app.applyConfig({ wecom: { secretary: { enabled: true } } }), /接收人/);
+    await assert.rejects(app.applyConfig({ wecom: { secretary: { intervalMinutes: 0 } } }), /间隔/);
+    await app.applyConfig({ wecom: { secretary: { enabled: true, ownerUserId: 'owner', intervalMinutes: 60 } } });
+    assert.equal(app.status().secretary.enabled, true);
+    assert.equal(disk().wecom.secretary.ownerUserId, 'owner');
+    assert.equal(app.secretary.isOwner('wecom:bot-secretary:private:owner'), true);
+    assert.equal(app.secretary.isOwner('wecom:bot-secretary:group:owner'), false);
+  });
+
   assert.deepEqual(unexpectedRequests, []);
 });

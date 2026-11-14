@@ -143,6 +143,22 @@ test('brain failure closes the waiting stream and reports failure', async t => {
   assert.match(x.sent.at(-1).text, /失败/);
 });
 
+test('secretary archives allowed messages before model failure or reply rate limiting', async t => {
+  const archived = [];
+  const x = setup(t, { secretary: {
+    enabled: () => true,
+    capture(f) { archived.push(f.body.msgid); return f.body.msgid; },
+    attachExtraction() {}, command() { return null; },
+  } });
+  x.cfg.chat.rateLimit.perChatPerMinute = 1;
+  x.brain.respond = async () => { throw new Error('model unavailable'); };
+  await x.runtime.handle(frame('model-failure'));
+  await x.runtime.handle(frame('rate-limited'));
+  x.cfg.wecom.mode = 'whitelist';
+  await x.runtime.handle(frame('not-authorized'));
+  assert.deepEqual(archived, ['model-failure', 'rate-limited']);
+});
+
 test('long response closes stream and later delivers proactively without repeating the job', async t => {
   const x = setup(t);
   x.cfg.wecom.requestTimeoutMs = 10;

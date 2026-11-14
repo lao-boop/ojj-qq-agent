@@ -33,8 +33,8 @@ const safeFilename = (name) => path.basename(String(name || 'attachment').replac
 
 /** Orchestration only: no QQ connection, numeric IDs, or global QQ memories. */
 export class WeComRuntime {
-  constructor({ cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger }) {
-    Object.assign(this, { cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger });
+  constructor({ cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary }) {
+    Object.assign(this, { cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary });
     this.chains = new Map();
     this.seen = new Map();
     this.buckets = new Map();
@@ -103,6 +103,8 @@ export class WeComRuntime {
     const dedup = `${wecomScope(this.cfg.wecom.botId)}${frame.body.msgid}`;
     if (this.seen.has(dedup)) { this.stats.ignored++; return; }
     this.seen.set(dedup, now);
+    const archiveId = this.secretary?.capture(frame, chat);
+    if (this.secretary?.enabled() && !archiveId) { this.stats.ignored++; return; }
     if (this.seen.size > 5000) this.seen.delete(this.seen.keys().next().value);
     if (this.#limited(chat.key) || this.pendingMessages >= 50) {
       this.stats.ignored++;
@@ -114,7 +116,10 @@ export class WeComRuntime {
     this.pendingMessages++;
     // Download short-lived media immediately, even while another turn is running.
     // Attach rejection handling immediately as this promise may wait in a queue.
-    const prepared = this.#prepare(frame.body).then(value => ({ value }), error => ({ error }));
+    const prepared = this.#prepare(frame.body).then(value => {
+      this.secretary?.attachExtraction(archiveId, value);
+      return { value };
+    }).catch(error => ({ error }));
     const acknowledged = this.sender.replyText(frame, this.chains.has(chat.key) ? '收到，正在按顺序处理。' : '收到，让我看看。', { streamId, finish: false })
       .then(() => true, () => false);
     const previous = this.chains.get(chat.key) || Promise.resolve();
@@ -200,6 +205,11 @@ export class WeComRuntime {
       if (input.error) throw input.error;
       if (!valid()) return;
       const command = frame.body.msgtype === 'text' ? String(frame.body.text?.content || '').trim() : '';
+      const secretaryReply = this.secretary?.command(command, chat.key);
+      if (secretaryReply != null) {
+        await deliver({ bubbles: [secretaryReply] });
+        return;
+      }
       if (command === '/help') {
         await deliver({ bubbles: ['我是小鲸鱼。可以聊天、记事、读图片和文件、生成文档。/reset 清空当前会话，/cancel 取消当前会话的后台任务。'] });
         return;
@@ -237,6 +247,10 @@ export class WeComRuntime {
         },
       });
       clearTimeout(timer);
+      if (result.evidence?.length && this.secretary?.isOwner(chat.key)) {
+        result.bubbles ??= [];
+        result.bubbles.push('以下为检索得到的来源原文（不是模型改写）：\n' + this.secretary.renderEvidence(result.evidence.slice(0, 5)));
+      }
       if (!await deliver(result)) return;
       const sentText = (result.bubbles || []).join('\n');
       if (sentText) this.memory.append(chat.key, 'assistant', sentText, chat.title);

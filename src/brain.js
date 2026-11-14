@@ -167,7 +167,7 @@ export class Brain {
   async #runLoop(messages, toolCtx, onProgress, countTool) {
     let reply = '';
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const res = await this.llm.chat({ messages, tools: this.tools.specs });
+      const res = await this.llm.chat({ messages, tools: this.tools.specsForChat?.(toolCtx) ?? this.tools.specs });
       if (!res.toolCalls?.length) {
         reply = res.content || '';
         break;
@@ -223,6 +223,9 @@ export class Brain {
 
     const toolCtx = {
       chatKey,
+      requestText: userContent,
+      recentUserRequests: ctx.turns.filter(t => t.role === 'user').slice(-4).map(t => t.content),
+      evidence: [],
       peerName: meta?.peerName || '',
       images: [],
       voices: [],
@@ -276,6 +279,7 @@ export class Brain {
       songs: toolCtx.songs,
       documents: toolCtx.documents,
       videos: toolCtx.videos,
+      evidence: toolCtx.evidence,
       toolCalls,
       ms: Date.now() - started,
     };

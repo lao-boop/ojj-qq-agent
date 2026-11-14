@@ -14,6 +14,11 @@ spec:
 import json
 import os
 import sys
+import ast
+import math
+import re
+import zipfile
+import xml.etree.ElementTree as ET
 from datetime import date
 
 from pptx import Presentation
@@ -32,6 +37,8 @@ from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from openpyxl import Workbook
 from openpyxl.styles import Font as XFont, PatternFill, Alignment as XAlign, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.cell import range_boundaries
+from openpyxl.workbook.properties import CalcProperties
 
 FONT = "微软雅黑"
 
@@ -305,9 +312,100 @@ def _width(text):
     return sum(2 if ord(ch) > 127 else 1 for ch in s)
 
 
+def cache_xlsx_formulas(wb, out_path):
+    """Cache common local calculations for mobile previews; keep formulas for editing.
+
+    Unknown formulas stay untouched and are recalculated by the spreadsheet app.
+    Never execute Python code, external links or arbitrary Excel functions.
+    """
+    ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    cached = {}
+    for index, ws in enumerate(wb.worksheets, 1):
+        values, active = {}, set()
+        def cell_value(address):
+            address = address.replace("$", "")
+            if address in values:
+                return values[address]
+            if address in active:
+                raise ValueError("circular formula")
+            active.add(address)
+            try:
+                value = ws[address].value
+                if isinstance(value, str) and value.startswith("="):
+                    expression = re.sub(r"\$?[A-Z]{1,3}\$?[1-9][0-9]*(?::\$?[A-Z]{1,3}\$?[1-9][0-9]*)?",
+                        lambda m: ('R' if ':' in m[0] else 'C') + '(' + repr(m[0]) + ')', value[1:].upper())
+                    value = evaluate(ast.parse(expression, mode="eval").body)
+                values[address] = value
+                return value
+            finally:
+                active.discard(address)
+        def number(value):
+            if value is None:
+                return 0
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError("not a finite number")
+            return value
+        def evaluate(node):
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                return number(node.value)
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+                value = number(evaluate(node.operand))
+                return -value if isinstance(node.op, ast.USub) else value
+            if isinstance(node, ast.BinOp):
+                a, b = number(evaluate(node.left)), number(evaluate(node.right))
+                if isinstance(node.op, ast.Add): return a + b
+                if isinstance(node.op, ast.Sub): return a - b
+                if isinstance(node.op, ast.Mult): return a * b
+                if isinstance(node.op, ast.Div): return a / b
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
+                name = node.func.id
+                if name in ("C", "R") and len(node.args) == 1 and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                    address = node.args[0].value.replace("$", "")
+                    if name == "C": return cell_value(address)
+                    a, b, c, d = range_boundaries(address)
+                    if (c-a+1)*(d-b+1) > 10000: raise ValueError("range too large")
+                    return [cell_value(f"{get_column_letter(col)}{row}") for row in range(b, d+1) for col in range(a, c+1)]
+                items = []
+                for argument in node.args:
+                    value = evaluate(argument)
+                    items.extend(value if isinstance(value, list) else [value])
+                nums = [number(x) for x in items if isinstance(x, (int, float))]
+                if name == "SUM": return sum(nums)
+                if name == "COUNT": return len(nums)
+                if name == "AVERAGE" and nums: return sum(nums)/len(nums)
+                if name == "MIN" and nums: return min(nums)
+                if name == "MAX" and nums: return max(nums)
+            raise ValueError("unsupported preview formula")
+        for row in ws:
+            for cell in row:
+                if cell.data_type == 'f':
+                    try:
+                        cached[(index, cell.coordinate)] = number(cell_value(cell.coordinate))
+                    except (ValueError, TypeError, SyntaxError, ZeroDivisionError, RecursionError, OverflowError, KeyError):
+                        pass
+    temp = out_path + '.cached'
+    with zipfile.ZipFile(out_path) as source, zipfile.ZipFile(temp, 'w', zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            data = source.read(info.filename)
+            match = re.fullmatch(r'xl/worksheets/sheet(\d+)\.xml', info.filename)
+            if match:
+                index = int(match[1])
+                root = ET.fromstring(data)
+                for cell in root.iter(f'{{{ns}}}c'):
+                    key = (index, cell.attrib['r'])
+                    if key in cached:
+                        value = cell.find(f'{{{ns}}}v')
+                        if value is None: value = ET.SubElement(cell, f'{{{ns}}}v')
+                        value.text = str(cached[key])
+                data = ET.tostring(root, encoding='utf-8', xml_declaration=True)
+            target.writestr(info, data)
+    os.replace(temp, out_path)
+
+
 def build_xlsx(spec, out_path):
     theme = THEMES.get(spec.get("theme", "business"), THEMES["business"])
     wb = Workbook()
+    wb.calculation = CalcProperties(calcId=0, fullCalcOnLoad=True, forceFullCalc=True, calcMode="auto")
     wb.remove(wb.active)
     thin = Side(style="thin", color="D9D9D9")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
@@ -315,43 +413,68 @@ def build_xlsx(spec, out_path):
     for sh in (spec.get("sheets") or [])[:3]:
         name = str(sh.get("name") or "Sheet1")[:28]
         ws = wb.create_sheet(title=name)
+        ws.sheet_view.showGridLines = False
         cols = [str(c) for c in (sh.get("columns") or [])]
         row = 1
         if spec.get("title"):
             span = max(1, len(cols))
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=span)
             cell = ws.cell(row=1, column=1, value=str(spec["title"])[:60])
-            cell.font = XFont(name=FONT, size=14, bold=True)
+            cell.font = XFont(name=FONT, size=18, bold=True, color=theme["accent"])
+            cell.fill = PatternFill("solid", fgColor="EAF1F8")
             cell.alignment = XAlign(horizontal="center", vertical="center")
-            ws.row_dimensions[1].height = 26
+            ws.row_dimensions[1].height = 36
             row = 2
 
         for j, c in enumerate(cols, 1):
             cell = ws.cell(row=row, column=j, value=c)
-            cell.font = XFont(name=FONT, bold=True, color="FFFFFF")
-            cell.fill = PatternFill("solid", fgColor=theme["accent"])
+            # Dark text remains readable in mobile previews that omit cell fills.
+            cell.font = XFont(name=FONT, size=11, bold=True, color="17365D")
+            cell.fill = PatternFill("solid", fgColor="DCE6F1")
             cell.alignment = XAlign(horizontal="center", vertical="center")
             cell.border = border
-        ws.row_dimensions[row].height = 22
+        ws.row_dimensions[row].height = 28
 
         for i, data_row in enumerate(sh.get("rows") or [], row + 1):
+            total = bool(data_row) and str(data_row[0]).strip() in ("合计", "总计", "总金额", "总预算")
+            ws.row_dimensions[i].height = 26
             for j, v in enumerate(data_row, 1):
                 cell = ws.cell(row=i, column=j, value=v)
-                cell.font = XFont(name=FONT, size=10.5)
-                cell.alignment = XAlign(vertical="center", wrap_text=True)
+                numeric = isinstance(v, (int, float)) or (isinstance(v, str) and v.startswith("="))
+                cell.font = XFont(name=FONT, size=11, bold=total, color="17365D" if total else "263445")
+                cell.alignment = XAlign(horizontal="right" if numeric else "left", vertical="center", wrap_text=True)
+                cell.fill = PatternFill("solid", fgColor="DCE6F1" if total else ("F3F6FA" if i % 2 else "FFFFFF"))
+                header = cols[j-1] if j <= len(cols) else ""
+                if numeric and any(word in header for word in ("单价", "金额", "预算", "费用", "价格")):
+                    cell.number_format = '#,##0.00'
                 cell.border = border
 
         for j in range(1, max(1, len(cols)) + 1):
             longest = _width(cols[j - 1] if j <= len(cols) else "")
             for i in range(row + 1, ws.max_row + 1):
-                longest = max(longest, _width(ws.cell(row=i, column=j).value))
-            ws.column_dimensions[get_column_letter(j)].width = min(42, max(10, longest + 4))
+                value = ws.cell(row=i, column=j).value
+                if not (isinstance(value, str) and value.startswith("=")):
+                    longest = max(longest, _width(value))
+            ws.column_dimensions[get_column_letter(j)].width = min(44, max(16, longest + 5))
 
         ws.freeze_panes = ws.cell(row=row + 1, column=1)
+        last_data_row = ws.max_row
+        if str(ws.cell(last_data_row, 1).value).strip() in ("合计", "总计", "总金额", "总预算"):
+            last_data_row -= 1
+        ws.auto_filter.ref = f"A{row}:{get_column_letter(max(1, len(cols)))}{max(row, last_data_row)}"
+        ws.print_options.horizontalCentered = True
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_setup.orientation = "landscape" if len(cols) > 5 else "portrait"
+        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.print_title_rows = f"1:{row}"
+        ws.print_area = ws.dimensions
 
     if not wb.sheetnames:
         wb.create_sheet(title="Sheet1")
     wb.save(out_path)
+    cache_xlsx_formulas(wb, out_path)
     return out_path
 
 

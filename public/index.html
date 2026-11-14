@@ -254,6 +254,13 @@
               <label>允许的群 Chat ID（逗号分隔）</label>
               <input id="cfgWecomGroups" placeholder="企业微信的群会话 ID" />
               <div class="hint">白名单模式下，空名单不放行。成员和群 ID 使用企业微信原始 ID，与 QQ 名单分别管理。</div>
+              <h3 style="margin-top: 18px">秘书汇报与消息溯源</h3>
+              <label style="display:flex;gap:8px;align-items:center"><input id="cfgSecretaryOn" type="checkbox" style="width:auto" /> 开启原文记录与定时汇报</label>
+              <label>汇报接收人 UserID（仅此人的私聊可以查询其他成员消息）</label>
+              <input id="cfgSecretaryOwner" placeholder="填写企业微信 UserID" />
+              <label>汇报间隔（分钟，有新增消息才发送）</label>
+              <input id="cfgSecretaryInterval" type="number" min="1" max="10080" value="60" />
+              <div class="hint">仅记录启用后机器人实际收到且权限允许的消息。私聊发送 /汇报、/查消息 关键词、/原文 编号 可追溯来源。程序运行期间定时发送，离线后恢复会补报。</div>
             </div>
 
             <h3 style="margin-top: 18px">聊天手感</h3>
@@ -273,17 +280,19 @@
             <h3 style="margin-top: 18px">出图</h3>
             <label style="display:flex;align-items:center;gap:8px"><input id="cfgImageOn" type="checkbox" style="width:auto" /> 允许机器人画图</label>
             <label>出图后端</label>
-            <select id="cfgImageProvider">
+            <select id="cfgImageProvider" onchange="showImageProvider()">
               <option value="replicate">Replicate（需配置 API Token）</option>
               <option value="pollinations">pollinations（免费免注册，45 秒一张，最大 768）</option>
               <option value="siliconflow">硅基流动 FLUX.1-schnell（要 key，快且好看）</option>
               <option value="openai">OpenAI 兼容接口（要 key）</option>
               <option value="mock">mock（测试用，固定图）</option>
             </select>
-            <label>出图 API Key（pollinations 可留空）</label>
+            <label id="imageKeyLabel">出图 API Key</label>
             <input id="cfgImageKey" placeholder="sk-..." />
-            <label>出图接口地址（pollinations 用默认即可）</label>
-            <input id="cfgImageBase" />
+            <div id="imageBaseField"><label>出图接口地址</label><input id="cfgImageBase" /></div>
+            <div id="replicateEndpointHint" class="hint" hidden>Replicate 使用官方 api.replicate.com 接口，无需填写接口地址。</div>
+            <label>本地出图冷却（秒，0 表示关闭）</label>
+            <input id="cfgImageCooldown" type="number" min="0" value="0" />
 
             <h3 style="margin-top: 18px">语音（Edge TTS）</h3>
             <label style="display:flex;align-items:center;gap:8px"><input id="cfgTtsOn" type="checkbox" style="width:auto" /> 允许机器人发语音</label>
@@ -493,6 +502,13 @@
       function joinList(arr) { return Array.isArray(arr) ? arr.join(', ') : ''; }
       function splitList(v) { return String(v || '').split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean); }
 
+      function showImageProvider() {
+        const replicate = $('cfgImageProvider').value === 'replicate';
+        $('imageBaseField').hidden = replicate;
+        $('replicateEndpointHint').hidden = !replicate;
+        $('imageKeyLabel').textContent = replicate ? 'Replicate API Token' : '出图 API Key';
+      }
+
       async function loadConfig() {
         try {
           const d = await api('/api/config');
@@ -504,6 +520,9 @@
           $('cfgWecomMode').value = c.wecom?.mode || 'open';
           $('cfgWecomUsers').value = joinList(c.wecom?.userAllow);
           $('cfgWecomGroups').value = joinList(c.wecom?.groupAllow);
+          $('cfgSecretaryOn').checked = !!c.wecom?.secretary?.enabled;
+          $('cfgSecretaryOwner').value = c.wecom?.secretary?.ownerUserId || '';
+          $('cfgSecretaryInterval').value = c.wecom?.secretary?.intervalMinutes ?? 60;
           $('cfgWsUrl').value = c.onebot.wsUrl || '';
           $('cfgToken').value = c.onebot.accessToken || '';
           $('cfgBaseUrl').value = c.llm.baseUrl || '';
@@ -526,6 +545,8 @@
           $('cfgImageProvider').value = c.image.provider || 'pollinations';
           $('cfgImageKey').value = c.image.apiKey || '';
           $('cfgImageBase').value = c.image.baseUrl || '';
+          $('cfgImageCooldown').value = (c.image.cooldownMs ?? 0) / 1000;
+          showImageProvider();
           $('cfgTtsOn').checked = !!c.tts.enabled;
           $('cfgTtsVoice').value = c.tts.voice || '';
           $('cfgTtsRate').value = c.tts.rate || '+0%';
@@ -550,8 +571,9 @@
           image: {
             enabled: $('cfgImageOn').checked,
             provider: $('cfgImageProvider').value,
-            apiKey: $('cfgImageKey').value.trim(),
+            apiKey: $('cfgImageKey').value.replace(/\s+/g, ''),
             baseUrl: $('cfgImageBase').value.trim(),
+            cooldownMs: Math.max(0, num($('cfgImageCooldown').value) * 1000),
           },
           tts: {
             enabled: $('cfgTtsOn').checked,
@@ -566,6 +588,9 @@
             mode: $('cfgWecomMode').value,
             userAllow: splitList($('cfgWecomUsers').value),
             groupAllow: splitList($('cfgWecomGroups').value),
+            secretary: { enabled: $('cfgSecretaryOn').checked,
+              ownerUserId: $('cfgSecretaryOwner').value.trim(),
+              intervalMinutes: num($('cfgSecretaryInterval').value) },
           };
           const secret = $('cfgWecomSecret').value.trim();
           if (!secret.includes('••••')) patch.wecom.secret = secret;

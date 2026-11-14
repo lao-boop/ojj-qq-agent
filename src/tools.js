@@ -254,7 +254,7 @@ const SPECS = {
     function: {
       name: 'make_excel',
       description:
-        '生成 Excel 表格（.xlsx）。对方要「做个表格」「Excel」「清单」「统计表」「报价单」时用，会自动填合理的数据。',
+        '生成 Excel 表格（.xlsx）。忠实保留用户给定的数据与计算要求，不擅自补商品、费用、税费或示例数据；只有明确要求示例时才编造示例。',
       parameters: {
         type: 'object',
         properties: {
@@ -758,12 +758,16 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
         }
         case 'make_excel': {
           if (!office) return '表格功能没开。';
-          const topic = String(args.topic || '').slice(0, 150).trim();
+          const topic = String(args.topic || '').slice(0, 2000).trim();
           if (!topic) return '主题为空。';
           const rows = Math.min(Math.max(Number(args.rows) || 10, 3), 50);
           const columns = Math.min(Math.max(Number(args.columns) || 5, 2), 10);
-          ctx.documents.push({ kind: 'excel', topic, rows, columns });
-          return `表格开始做了（约 ${rows} 行 × ${columns} 列），半分钟就好。`;
+          const sourceText = [
+            ...(ctx.recentUserRequests || []).map(text => `此前用户消息：${text}`),
+            `本次用户原始要求：${ctx.requestText || topic}`,
+          ].join('\n\n').slice(-24000);
+          ctx.documents.push({ kind: 'excel', topic, sourceText, rows, columns });
+          return '表格任务已安排，将按原始数据和要求生成后发送文件。';
         }
         case 'lookup_part': {
           const q = String(args.query || '').trim();

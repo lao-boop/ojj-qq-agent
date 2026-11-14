@@ -62,6 +62,7 @@ export const DEFAULTS = {
     groupAllow: [],
     requestTimeoutMs: 240000,
     maxConcurrentJobs: 2,
+    secretary: { enabled: false, ownerUserId: '', intervalMinutes: 60 },
   },
   llm: {
     baseUrl: 'https://api.deepseek.com/v1',
@@ -111,7 +112,7 @@ export const DEFAULTS = {
     model: '',
     defaultSize: 'square',
     timeoutMs: 90000,
-    cooldownMs: 45000,
+    cooldownMs: 0,
     maxPromptChars: 400,
     removeWatermark: true,
   },

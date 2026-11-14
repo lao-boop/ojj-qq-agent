@@ -279,7 +279,7 @@ export class Office {
   }
 
   /** 生成 Excel 表格，返回 { file, name, title, rows }。 */
-  async makeExcel({ topic, rows = 10, columns = 5, signal } = {}) {
+  async makeExcel({ topic, sourceText = '', rows = 10, columns = 5, signal } = {}) {
     signal?.throwIfAborted();
     const started = Date.now();
     const res = await this.#chat({
@@ -289,22 +289,29 @@ export class Office {
           content:
             '你是数据整理助手。根据主题生成一张表格的 JSON：' +
             '{"title":"表格标题","sheets":[{"name":"工作表名","columns":["列1","列2"],"rows":[["值1","值2"]]}]}。' +
-            `要求：1 个工作表，${columns} 列左右、${rows} 行左右；列名简洁；数据要合理（可以是示意数据，别写不确定的真实统计）；` +
-            '数字用数字类型，日期写成 2026-10-24 这种字符串；语言简体中文；不要 Markdown；不要输出 JSON 以外的任何文字。',
+            '严格依据用户原始要求生成。用户已给出数据时只能使用这些项目、数量与价格，不允许补运费、税费或额外商品；不得为了凑行数添加记录。' +
+            '没有提供的数据留空或写待填写；只有用户明确要求示例数据才可编造，并在标题注明示例。' +
+            `用户没有明确结构时才参考 ${columns} 列、${rows} 行。columns 必须是完整、非空且有意义的列标题。` +
+            '数字使用 JSON 数字。用户要求计算时使用 Excel 公式，不能用计算后的固定数字替代。' +
+            'Excel 第1行为合并标题，第2行为列标题，数据从第3行开始；例如金额 =B3*C3，合计 =SUM(D3:D5)。公式只使用本表单元格、四则运算、SUM/AVERAGE/MIN/MAX/COUNT；不要外部链接。' +
+            '合计行第一列写“合计”，不要无意义地合计单价或把合计行自身包含在公式中。语言简体中文；不要 Markdown；只输出 JSON。',
         },
-        { role: 'user', content: `主题：${topic}` },
+        { role: 'user', content: `主题：${topic}\n\n${sourceText || '用户原始要求：' + topic}` },
       ],
       model: this.cfg.model || 'deepseek-flash',
       maxTokens: 4000,
-      temperature: 0.6,
+      temperature: 0.1,
     }, signal);
     const obj = parseJson(res.content);
     const sheets = (obj.sheets || []).slice(0, 3).map((sh) => ({
       name: String(sh.name || 'Sheet1').slice(0, 28),
-      columns: (sh.columns || []).map((c) => String(c).slice(0, 30)).slice(0, 10),
+      columns: (sh.columns || []).map((c) => String(c).trim().slice(0, 30)).slice(0, 10),
       rows: (sh.rows || []).slice(0, 60).map((r) => (r || []).slice(0, 10)),
     }));
-    if (!sheets.length || !sheets[0].columns.length) throw new Error('表格内容为空');
+    if (!sheets.length || sheets.some(sh => !sh.columns.length || sh.columns.some(c => !c))) throw new Error('表格缺少有效列标题');
+    if (/(公式|自动计算|自动更新)/.test(sourceText || topic) && !sheets.some(sh => sh.rows.some(row => row.some(v => typeof v === 'string' && v.startsWith('='))))) {
+      throw new Error('表格未按要求生成公式，请重新生成');
+    }
 
     const file = await this.#build({
       kind: 'xlsx',

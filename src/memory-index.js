@@ -21,7 +21,7 @@ export function buildIndex(turns) {
   for (const d of docs) {
     for (const tk of new Set(d)) df.set(tk, (df.get(tk) || 0) + 1);
   }
-  const n = docs.length || 1;
+  const n = docs.length;
   const idf = new Map();
   for (const [tk, c] of df) idf.set(tk, Math.log((n + 1) / (c + 0.5)) + 1);
   const vectors = docs.map((d) => {

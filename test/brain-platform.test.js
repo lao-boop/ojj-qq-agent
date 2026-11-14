@@ -49,6 +49,20 @@ function brainFixture(overrides = {}) {
   return { brain, appended };
 }
 
+test('Excel background jobs receive original user data even when the model shortens the tool topic', async () => {
+  const cfg = structuredClone(DEFAULTS);
+  const tools = createTools({ cfg, logger, office: {}, allowedTools: ['make_excel'] });
+  let calls = 0;
+  const { brain } = brainFixture({ tools, llm: { chat: async () => ++calls === 1
+    ? { content: '', toolCalls: [{ id: 'sheet', function: { name: 'make_excel', arguments: '{"topic":"采购预算"}' } }] }
+    : { content: '表格正在生成。', toolCalls: [] } } });
+  const original = '键盘2个单价120元；鼠标3个单价60元；支架1个单价80元。用公式计算金额及总计，不添加运费。';
+  const result = await brain.respond({ chatKey: 'wecom:bot:private:user', title: '预算', userText: original, meta });
+  assert.equal(result.documents.length, 1);
+  assert.equal(result.documents[0].topic, '采购预算');
+  assert.ok(result.documents[0].sourceText.includes(original));
+});
+
 test('QQ defaults retain persona, public memory and reply instructions', () => {
   const { brain } = brainFixture();
   const system = brain.buildSystem({ chat: 'private:123', meta: { scene: '私聊' }, ctxText: '会话笔记' });

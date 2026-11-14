@@ -68,7 +68,7 @@
     "model": "black-forest-labs/flux-1.1-pro",
     "defaultSize": "square",
     "timeoutMs": 90000,
-    "cooldownMs": 45000,
+    "cooldownMs": 0,
     "maxPromptChars": 400,
     "removeWatermark": true
   },
@@ -180,6 +180,11 @@
     "userAllow": [],
     "groupAllow": [],
     "requestTimeoutMs": 240000,
-    "maxConcurrentJobs": 2
+    "maxConcurrentJobs": 2,
+    "secretary": {
+      "enabled": false,
+      "ownerUserId": "",
+      "intervalMinutes": 60
+    }
   }
 }

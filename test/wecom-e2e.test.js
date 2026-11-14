@@ -57,7 +57,12 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
       const body = JSON.parse(Buffer.concat(chunks).toString());
       llmRequests.push(body);
       const last = body.messages.at(-1);
-      const message = last.role === 'tool'
+      const message = last.role === 'tool' && last.tool_call_id === 'secretary-search'
+        ? { role: 'assistant', content: '同事提到了乌龙茶，详情见来源原文。' }
+        : last.role !== 'tool' && last.content.includes('同事说了什么')
+          ? { role: 'assistant', content: '', tool_calls: [{ id: 'secretary-search', type: 'function',
+            function: { name: 'search_colleague_messages', arguments: '{"query":"乌龙茶"}' } }] }
+        : last.role === 'tool'
         ? { role: 'assistant', content: '记住了，你喜欢乌龙茶。' }
         : last.content.includes('乌龙茶')
           ? { role: 'assistant', content: '', tool_calls: [{
@@ -104,9 +109,10 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
   const cfg = deepMerge(structuredClone(DEFAULTS), {
     platform: 'wecom',
     wecom: { botId: 'bot-local-e2e', secret: 'local-bot-secret', mode: 'open',
+      secretary: { enabled: true, ownerUserId: 'owner', intervalMinutes: 60 },
       wsUrl: `ws://127.0.0.1:${wecomServer.address().port}`, maxReconnectAttempts: 0, requestTimeoutMs: 5000 },
     llm: { baseUrl: `${llmOrigin}/v1`, apiKey: 'local-llm-key', model: 'local-model', timeoutMs: 2000 },
-    chat: { retrieval: false, summaryTriggerChars: 100000, maxBubbles: 1 },
+    chat: { retrieval: true, summaryTriggerChars: 100000, maxBubbles: 1 },
     image: { enabled: false }, tts: { enabled: false }, song: { enabled: false },
     console: { enabled: false }, log: { level: 'error', file: false },
   });
@@ -120,16 +126,16 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
   assert.deepEqual(wire[0].body, { bot_id: 'bot-local-e2e', secret: 'local-bot-secret' });
 
   const chatKey = `${wecomScope(cfg.wecom.botId)}private:employee.alpha`;
-  async function roundTrip(id, content) {
+  async function roundTrip(id, content, userId = 'employee.alpha') {
     const finished = once(completed, id);
     peer.send(JSON.stringify({
       cmd: 'aibot_msg_callback', headers: { req_id: id },
       body: { msgid: `message-${id}`, aibotid: cfg.wecom.botId, chattype: 'single',
-        from: { userid: 'employee.alpha' }, msgtype: 'text', text: { content } },
+        from: { userid: userId }, msgtype: 'text', text: { content } },
     }));
     const [reply] = await finished;
     // The server has acknowledged delivery; wait for runtime to persist it.
-    await app.runtime.chains.get(chatKey);
+    await app.runtime.chains.get(`${wecomScope(cfg.wecom.botId)}private:${userId}`);
     return reply;
   }
 
@@ -153,6 +159,19 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
   const persisted = JSON.parse(await fs.readFile(path.join(dir, 'data', 'sessions', diskSessions[0]), 'utf8'));
   assert.equal(persisted.key, chatKey);
   assert.equal(persisted.notes[0].text, '喜欢乌龙茶');
+  assert.equal(llmRequests[0].tools.some(tool => tool.function.name === 'search_colleague_messages'), false);
+  const owner = await roundTrip('owner-query', '同事说了什么？', 'owner');
+  assert.match(owner.body.stream.content, /来源原文/);
+  assert.match(owner.body.stream.content, /发送者：employee.alpha/);
+  assert.match(owner.body.stream.content, /请记住我喜欢乌龙茶/);
+  assert.ok(llmRequests[3].tools.some(tool => tool.function.name === 'search_colleague_messages'));
+  app.secretary.now = () => Date.now() + 3600001;
+  await app.secretary.tick();
+  const reports = wire.filter(frame => frame.cmd === 'aibot_send_msg');
+  assert.ok(reports.length > 0);
+  assert.ok(reports.every(frame => frame.body.chatid === 'owner'));
+  assert.ok(reports.some(frame => frame.body.markdown.content.includes('乌龙茶')));
+  assert.equal(app.secretary.status().pending, 0);
   assert.deepEqual(httpErrors, []);
   assert.deepEqual(externalRequests, []);
 });
