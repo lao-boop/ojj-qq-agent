@@ -159,7 +159,7 @@ export const DEFAULTS = {
   log: { level: 'info', file: true },
   media: { ffmpegPath: '' },
   mc: { username: 'Xiaojingyu', host: '127.0.0.1', port: 25565, version: '26.1', ownerName: '' },
-  office: { pythonPath: '', theme: 'history', model: 'deepseek-flash', maxImages: 8, imagesPerDeck: 0, imageDelayMs: 12000 },
+  office: { pythonPath: '', theme: 'business', model: '', maxImages: 8, imagesPerDeck: 2, imageDelayMs: 0 },
   relay: { enabled: true, allow: [], dailyLimit: 5, maxLen: 200 },
   library: { enabled: true, dir: 'D:\\无损音乐', maxSeconds: 0 },
   asr: {

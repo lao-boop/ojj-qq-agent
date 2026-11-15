@@ -210,3 +210,18 @@ test('the brain cannot execute an unadvertised platform tool returned by the mod
   assert.equal(calls, 2);
   assert.deepEqual(effects, []);
 });
+
+test('PPT jobs retain original requirements and interpret pages as total slide count', async () => {
+  const cfg = structuredClone(DEFAULTS);
+  const tools = createTools({ cfg, logger, office: {}, allowedTools: ['make_ppt'] });
+  let calls = 0;
+  const { brain } = brainFixture({ tools, llm: { chat: async () => ++calls === 1
+    ? { content: '', toolCalls: [{ id: 'deck', function: { name: 'make_ppt', arguments: '{"topic":"项目汇报","pages":8}' } }] }
+    : { content: '正在生成。', toolCalls: [] } } });
+  const original = '做8页PPT给管理层，必须保留项目负责人王小明及交付日2026-12-01，不编造财务数据。';
+  const result = await brain.respond({ chatKey: 'wecom:bot:private:user', title: '汇报', userText: original, meta });
+  assert.equal(result.documents[0].totalPages, 8);
+  assert.equal(result.documents[0].pages, 6);
+  assert.ok(result.documents[0].sourceText.includes(original));
+  assert.equal(result.documents[0].theme, 'business');
+});

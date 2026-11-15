@@ -153,10 +153,10 @@
   },
   "office": {
     "pythonPath": "",
-    "theme": "history",
-    "model": "deepseek-flash",
-    "imagesPerDeck": 0,
-    "imageDelayMs": 12000
+    "theme": "business",
+    "model": "",
+    "imagesPerDeck": 2,
+    "imageDelayMs": 0
   },
   "relay": {
     "enabled": true,

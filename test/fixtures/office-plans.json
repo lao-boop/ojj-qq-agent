@@ -1,0 +1,13 @@
+{
+  "source": "蓝鲸计划：企业内部AI秘书。首期只服务内部同事，负责人为项目组。需求访谈已完成，下一步试点、复盘、推广。采购键盘2个单价120元；鼠标3个单价60元；支架1个单价80元。不要添加运费，用公式计算金额及总计。",
+  "workbook": {"title":"蓝鲸计划采购预算","sheets":[{"name":"采购明细","dataMode":"provided","columns":[{"header":"品名","type":"text"},{"header":"数量","type":"integer"},{"header":"单价（元）","type":"currency"},{"header":"金额（元）","type":"currency"}],"rows":[["键盘",2,120,null],["鼠标",3,60,null],["支架",1,80,null]],"rowSources":["键盘2个单价120元","鼠标3个单价60元","支架1个单价80元"],"computedColumns":[{"column":"D","formula":"={B}*{C}"}],"totals":{"D":"SUM"},"chart":{"type":"bar","title":"采购金额构成","categoryColumn":"A","valueColumns":["D"]}}]},
+  "deck":{"title":"蓝鲸计划：从内部试点到稳定运行","subtitle":"企业微信 AI 秘书 · 项目组评审","closing":"请项目组确认试点人员与验收标准，按试点反馈决定推广范围。","slides":[
+    {"layout":"cards","title":"首期聚焦内部协作中的三个问题","takeaway":"先做好收集、汇报和追溯，再扩大服务范围。","cards":[{"title":"消息收集","text":"保留同事发送给秘书的原始消息，形成可检索的工作记录。"},{"title":"定时汇报","text":"聚合新增消息，帮助负责人及时识别待办与阻塞。"},{"title":"原文追溯","text":"回答管理者追问时附消息来源，避免凭印象总结。"}]},
+    {"layout":"comparison","title":"用原文支撑汇报，减少反复确认","comparison":[{"title":"人工整理","bullets":["消息散落在多个对话中","负责人需要反复询问进展","摘要与原始内容容易脱节"]},{"title":"秘书辅助","bullets":["收集发送给秘书的消息","定时整理新增事项","保留出处供负责人核对"]}]},
+    {"layout":"timeline","title":"先验证内部试点，再决定推广范围","takeaway":"每个阶段都保留复盘与调整的机会。","steps":[{"title":"需求访谈","text":"已完成初步需求收集，确认内部协作场景。"},{"title":"小范围试点","text":"选择内部同事参与，验证消息和文件处理。"},{"title":"复盘优化","text":"按真实使用反馈修正遗漏与体验问题。"},{"title":"分步推广","text":"确认稳定性后，再扩大内部服务范围。"}]},
+    {"layout":"table","title":"采购范围保持清晰，计算交给公式","table":{"columns":["品名","数量","单价（元）"],"rows":[["键盘","2","120"],["鼠标","3","60"],["支架","1","80"]]},"source":"键盘2个单价120元；鼠标3个单价60元；支架1个单价80元"},
+    {"layout":"chart","title":"键盘单价最高，采购时重点核对规格","bullets":["键盘单价为120元。","单价比较不能代替总金额核算。"],"chart":{"type":"bar","title":"采购单价对比（元）","categories":["键盘","鼠标","支架"],"series":[{"name":"单价","values":[120,60,80]}],"source":"键盘2个单价120元；鼠标3个单价60元；支架1个单价80元"}},
+    {"layout":"bullets","title":"上线前把验收标准说清楚","bullets":["同事发送的消息能被正确记录，并在汇报中查到。","负责人追问时能看到对应原文、发送人和时间。","文件可以打开，表格公式计算正确，失败时有明确提示。"]},
+    {"layout":"image","title":"让秘书成为同事愿意使用的入口","bullets":["在企业微信内完成沟通，降低使用门槛。","优先提供准确、可核对的回答。"],"imagePrompt":"A minimal blue whale assistant in a modern office, editorial illustration, clean white background, no text"}
+  ]}
+}

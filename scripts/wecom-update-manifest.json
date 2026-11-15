@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "files": [
     {
       "path": "src/brain.js",
@@ -7,7 +7,7 @@
     },
     {
       "path": "src/config.js",
-      "sha256": "9d7055a2f54709bffbad8cb904652bef5c95266e7c75867411dbf87ab2400f0e"
+      "sha256": "a5ca6aabed33d5a1739fb7054d4e2007f8409e75128f312dc8091a3d2569c3e8"
     },
     {
       "path": "src/memory-index.js",
@@ -15,11 +15,11 @@
     },
     {
       "path": "src/office.js",
-      "sha256": "1c8a8bb62eeb57ec25ffcf34a3f3b84c9a868c270608faac368c88aedabb1050"
+      "sha256": "c20cb2f4e044e654b0e8ac6f35c4652b034cf518980cde0cdd06f15f68263e41"
     },
     {
       "path": "src/tools.js",
-      "sha256": "ecdadb62ab7ad70b9ff6e443e2ae771b320de18bff97d3d5bd109853d493fe70"
+      "sha256": "68943a3e693c4caa301d157eb234c212f4958ae81042e9ff68366d220a113347"
     },
     {
       "path": "src/wecom-main.js",
@@ -35,7 +35,7 @@
     },
     {
       "path": "scripts/build_office.py",
-      "sha256": "1ec1cae636aabdee7bb3546749b2aa4956dc82315b724d25c44f8937faa98505"
+      "sha256": "00d2b503d569b2a7f848d1ba31ab519b93d24634f7cf42639beaa6a8030a70c1"
     },
     {
       "path": "public/index.html",
@@ -43,7 +43,15 @@
     },
     {
       "path": "docs/WECOM.md",
-      "sha256": "3623ceff461d3077a4ff4d34f807fd85d134223288edb5ea265b573c3295dc89"
+      "sha256": "6a27f41132fb988e7eef7be3063173df9a8b9f62a987ef611831574ef05321a3"
+    },
+    {
+      "path": "src/office-plan.js",
+      "sha256": "9ff86cdb4bf6a69d2bd9915276d87bd886b476c69cb6756c09d83551e1d9c937"
+    },
+    {
+      "path": "src/index.js",
+      "sha256": "fe403b65cfe2c9fa8c3b60b392f12da26202d9923ba975087d9a6cfe720cf0fa"
     }
   ]
 }

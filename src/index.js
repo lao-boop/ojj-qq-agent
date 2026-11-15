@@ -856,8 +856,8 @@ async function runOfficeJob(chat, job) {
       job.kind === 'docx'
         ? await office.makeDocx({ topic: job.topic, sections: job.sections, signal: controller.signal })
         : job.kind === 'excel'
-          ? await office.makeExcel({ topic: job.topic, rows: job.rows, columns: job.columns, signal: controller.signal })
-          : await office.makePpt({ topic: job.topic, pages: job.pages, theme: job.theme, withImages: true, signal: controller.signal });
+          ? await office.makeExcel({ ...job, signal: controller.signal })
+          : await office.makePpt({ ...job, withImages: true, signal: controller.signal });
     await sender.sendFile(chat, doc.file, doc.name, pick(['做好啦，看看行不行～', '出炉了，你看看要不要改～']));
     memory.append(chat.key, 'assistant', `[我刚做好并发给你一份文件：${doc.name}]`, chat.title);
     logMedia({ chatKey: chat.key, direction: 'out', kind: 'doc', name: doc.name, path: doc.file });

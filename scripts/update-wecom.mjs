@@ -36,7 +36,10 @@ export async function installUpdate({ root, manifest, fetchFile, ownerUserId }) 
   }
   // Keep credentials, Python environment paths, conversation data and all other settings.
   config.wecom ??= {};
-  config.wecom.secretary = { ...config.wecom.secretary, enabled: true, ownerUserId, intervalMinutes: 60 };
+  config.wecom.secretary ??= { enabled: true, ownerUserId, intervalMinutes: 60 };
+  config.office ??= {};
+  if (config.office.model === 'deepseek-flash') config.office.model = '';
+  if (config.office.imageDelayMs === 12000) config.office.imageDelayMs = 0;
   config.image ??= {};
   config.image.cooldownMs = 0;
   const nextConfig = path.join(work, 'config.json');
@@ -83,7 +86,7 @@ async function main() {
   };
   const manifest = JSON.parse((await fetchFile('scripts/wecom-update-manifest.json')).toString());
   const result = await installUpdate({ root, manifest, fetchFile, ownerUserId });
-  console.log(`更新完成：${result.updated} 个文件。\n秘书将每小时向 ${ownerUserId} 私聊汇报新增消息。\n备份位置：${result.backup}\n请运行 npm run start:wecom 启动。`);
+  console.log(`更新完成：${result.updated} 个文件。\n文档生成已升级，已有秘书设置和凭据已保留。\n备份位置：${result.backup}\n请运行 npm run start:wecom 启动。`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

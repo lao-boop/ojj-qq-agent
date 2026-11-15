@@ -196,7 +196,7 @@ const SPECS = {
         type: 'object',
         properties: {
           topic: { type: 'string', description: '主题，尽量具体，比如“朱元璋生平：从乞丐到开国皇帝”' },
-          pages: { type: 'number', description: '正文页数，默认 12，范围 5~20' },
+          pages: { type: 'number', description: '总页数（含封面和结束页），默认 8，范围 3~24' },
           theme: { type: 'string', enum: ['history', 'business', 'fresh'], description: '配色主题，历史/商务/清新' },
         },
         required: ['topic'],
@@ -259,8 +259,8 @@ const SPECS = {
         type: 'object',
         properties: {
           topic: { type: 'string', description: '表格主题，尽量具体，比如“奶茶店一周销售流水”' },
-          rows: { type: 'number', description: '行数，默认 10，范围 3~50' },
-          columns: { type: 'number', description: '列数，默认 5，范围 2~10' },
+          rows: { type: 'number', description: '参考行数，默认 10，范围 1~200；已有数据不凑行数' },
+          columns: { type: 'number', description: '参考列数，默认 5，范围 1~20' },
         },
         required: ['topic'],
       },
@@ -737,16 +737,19 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
         }
         case 'make_ppt': {
           if (!office) return '文档功能没开。';
-          const pages = Math.min(Math.max(Number(args.pages) || 12, 5), 20);
-          const topic = String(args.topic || '').slice(0, 150).trim();
+          const totalPages = Math.min(Math.max(Math.floor(Number(args.pages) || 8), 3), 24);
+          const topic = String(args.topic || '').slice(0, 2000).trim();
           if (!topic) return '主题为空。';
           ctx.documents.push({
             kind: 'ppt',
             topic,
-            pages,
-            theme: String(args.theme || cfg.office?.theme || 'history'),
+            pages: totalPages - 2,
+            totalPages,
+            sourceText: [...(ctx.recentUserRequests || []).map(text => `此前用户消息：${text}`),
+              `本次用户原始要求：${ctx.requestText || topic}`].join('\n\n').slice(-60000),
+            theme: String(args.theme || 'business'),
           });
-          return `PPT 安排上了（约 ${pages} 页），一两分钟做好我直接发文件。回复里说一声“在做”就行。`;
+          return `PPT 任务已安排（共 ${totalPages} 页，含封面和结束页），按原始要求生成并检查后发送文件。`;
         }
         case 'make_docx': {
           if (!office) return '文档功能没开。';
@@ -760,12 +763,12 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           if (!office) return '表格功能没开。';
           const topic = String(args.topic || '').slice(0, 2000).trim();
           if (!topic) return '主题为空。';
-          const rows = Math.min(Math.max(Number(args.rows) || 10, 3), 50);
-          const columns = Math.min(Math.max(Number(args.columns) || 5, 2), 10);
+          const rows = Math.min(Math.max(Number(args.rows) || 10, 1), 200);
+          const columns = Math.min(Math.max(Number(args.columns) || 5, 1), 20);
           const sourceText = [
             ...(ctx.recentUserRequests || []).map(text => `此前用户消息：${text}`),
             `本次用户原始要求：${ctx.requestText || topic}`,
-          ].join('\n\n').slice(-24000);
+          ].join('\n\n').slice(-60000);
           ctx.documents.push({ kind: 'excel', topic, sourceText, rows, columns });
           return '表格任务已安排，将按原始数据和要求生成后发送文件。';
         }

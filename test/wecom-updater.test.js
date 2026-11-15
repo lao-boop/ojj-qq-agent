@@ -45,3 +45,19 @@ test('invalid hashes, paths and syntax fail before any live file or configuratio
     assert.equal(fs.existsSync(path.join(x.root, 'src', 'wecom-secretary.js')), false);
   }
 });
+
+test('document upgrade preserves existing secretary choices and Python path while adopting the main model', async t => {
+  const x = fixture(t);
+  const configPath = path.join(x.root, 'config.json');
+  const cfg = JSON.parse(fs.readFileSync(configPath));
+  cfg.wecom.secretary = { enabled: false, ownerUserId: 'existing-owner', intervalMinutes: 120 };
+  cfg.office = { model: 'deepseek-flash', pythonPath: '/custom/office-python', imageDelayMs: 12000, imagesPerDeck: 0 };
+  fs.writeFileSync(configPath, JSON.stringify(cfg));
+  await installUpdate(x);
+  const next = JSON.parse(fs.readFileSync(configPath));
+  assert.deepEqual(next.wecom.secretary, cfg.wecom.secretary);
+  assert.equal(next.office.pythonPath, cfg.office.pythonPath);
+  assert.equal(next.office.model, '');
+  assert.equal(next.office.imagesPerDeck, 0);
+  assert.equal(next.office.imageDelayMs, 0);
+});

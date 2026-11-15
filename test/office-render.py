@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -37,6 +38,44 @@ class OfficeRenderTests(unittest.TestCase):
             wb.save(output)
             builder.cache_xlsx_formulas(wb, output)
             self.assertEqual(load_workbook(output, data_only=True).active['D6'].value, 620)
+
+    def test_strict_formula_failure_never_delivers_blank_cached_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for formula in ['=1/0', '=B3', '=UNKNOWN(1)', '=SUM(B3:B3)']:
+                output = os.path.join(directory, 'invalid.xlsx')
+                with self.assertRaisesRegex(ValueError, '公式校验失败'):
+                    builder.build_xlsx({'title': '测试', 'strictFormulas': True,
+                        'sheets': [{'columns': ['项目', '数值'], 'rows': [['测试', formula]]}]}, output)
+
+    def test_all_slide_layouts_have_bounded_geometry_and_separate_chart_text(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures' / 'office-plans.json').read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            output = os.path.join(directory, 'layouts.pptx')
+            builder.build_pptx(fixture['deck'], output)
+            deck = Presentation(output)
+            self.assertEqual(len(deck.slides), 9)
+            for slide in deck.slides:
+                for shape in slide.shapes:
+                    self.assertGreaterEqual(shape.left, 0)
+                    self.assertGreaterEqual(shape.top, 0)
+                    self.assertLessEqual(shape.left + shape.width, deck.slide_width + 10)
+                    self.assertLessEqual(shape.top + shape.height, deck.slide_height + 10)
+            chart_slide = deck.slides[5]
+            chart = next(s for s in chart_slide.shapes if s.has_chart)
+            body = next(s for s in chart_slide.shapes if s.has_text_frame and '单价为120' in s.text)
+            self.assertLess(body.left + body.width, chart.left)
+
+    def test_typed_excel_chart_and_all_five_sheets_are_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = os.path.join(directory, 'charts.xlsx')
+            builder.build_xlsx({'title': '进度', 'strictFormulas': True, 'sheets': [
+                {'name': '表' + str(i), 'columns': ['项目', '完成比例'], 'columnTypes': ['text', 'percent'],
+                 'rows': [['任务A', 0.5], ['任务B', 0.8]],
+                 'chart': {'type': 'bar', 'category': 1, 'values': [2]}} for i in range(5)]}, output)
+            wb = load_workbook(output)
+            self.assertEqual(len(wb.worksheets), 5)
+            self.assertEqual(wb.active['B3'].number_format, '0.0%')
+            self.assertEqual(len(wb.active._charts), 1)
 
     def test_unsupported_formula_is_not_executed_and_original_formula_is_retained(self):
         with tempfile.TemporaryDirectory() as directory:
