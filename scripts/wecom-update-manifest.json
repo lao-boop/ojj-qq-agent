@@ -15,7 +15,7 @@
     },
     {
       "path": "src/office.js",
-      "sha256": "c20cb2f4e044e654b0e8ac6f35c4652b034cf518980cde0cdd06f15f68263e41"
+      "sha256": "4e092e975efd7fbf101b2a27731965e7439787b16d516ba0b5da5eda95b3948e"
     },
     {
       "path": "src/tools.js",
@@ -47,7 +47,7 @@
     },
     {
       "path": "src/office-plan.js",
-      "sha256": "9ff86cdb4bf6a69d2bd9915276d87bd886b476c69cb6756c09d83551e1d9c937"
+      "sha256": "a25bfc7390a6c7a1d052b0086c2475a0aa650cc35e84dd2c769c943485a6e32d"
     },
     {
       "path": "src/index.js",

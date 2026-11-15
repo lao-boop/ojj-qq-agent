@@ -46,3 +46,15 @@ test('PPT creates exact requested total pages in one plan and honors zero image 
   const read = spawnSync(python, ['-c', 'from pptx import Presentation; import sys; print(len(Presentation(sys.argv[1]).slides))', result.file], { encoding: 'utf8' });
   assert.equal(read.status, 0, read.stderr); assert.equal(Number(read.stdout), 9);
 });
+
+test('blank templates honor explicit no-formula requests', async t => {
+  if (!available(t)) return;
+  let calls = 0;
+  const plan = { title: '任务模板', sheets: [{ name: '任务', dataMode: 'template',
+    columns: ['任务', '负责人', '截止日期'], rows: [[null, null, null], [null, null, null]] }] };
+  const office = new Office({cfg: {},logger,pythonPath: python,llm: {chat: async () => {
+    calls++; return {content: JSON.stringify(plan)};
+  }}});
+  const result = await office.makeExcel({topic: '任务模板',sourceText: '制作空白任务模板，不需要公式，也不要填虚构数据。'});
+  assert.equal(calls, 1); assert.ok(fs.existsSync(result.file));
+});

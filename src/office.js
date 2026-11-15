@@ -241,7 +241,7 @@ export class Office {
       user: `主题：${topic}\n\n原始材料与要求：\n${source}`,
       maxTokens: 12000, signal,
       validate: async raw => {
-        const outline = validateWorkbook(raw, { source, requireFormula: /(公式|自动计算|自动更新)/.test(source) });
+        const outline = validateWorkbook(raw, { source, requireFormula: /(公式|自动计算|自动更新)/.test(source.replace(/(?:不要|不需要|无需|不用|不使用|不必)[^，。；\n]{0,8}(?:公式|自动计算|自动更新)/g, '')) });
         const file = await this.#build({ kind: 'xlsx', theme: 'business', ...outline, strictFormulas: true }, signal);
         return { outline, file };
       },

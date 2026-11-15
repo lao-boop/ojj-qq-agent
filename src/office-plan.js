@@ -11,6 +11,13 @@ const list = (value, label, max) => {
 const exampleRequested = source => /(?:示例|样例|模拟|虚构|sample)/i.test(source) && !/(?:不要|禁止|不能|不得).{0,5}(?:示例|模拟|虚构)/.test(source);
 const numbers = source => String(source).replace(/[,，](?=\d{3}\b)/g, '').match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
 const hasNumber = (source, value) => numbers(source).some(n => Math.abs(n - value) < 1e-9);
+const hasCellNumber = (source, value, type) => {
+  if (type !== 'percent') return hasNumber(source, value);
+  const rates = [];
+  const remaining = String(source).replace(/(-?\d+(?:\.\d+)?)\s*[%％]|百分之\s*(-?\d+(?:\.\d+)?)/g,
+    (_, percent, chinese) => { rates.push(Number(percent ?? chinese) / 100); return ''; });
+  return rates.some(n => Math.abs(n - value) < 1e-9) || hasNumber(remaining, value);
+};
 
 export function validateDeck(obj, { count, source }) {
   const slides = list(obj.slides, '正文页', 24);
@@ -71,7 +78,7 @@ export function validateFormula(formula, { width, lastRow }) {
     if (!['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT'].includes(name.toUpperCase())) fail(`不支持的公式函数：${name}`);
   }
   for (const [, col, row] of formula.matchAll(/\$?([A-Z]{1,3})\$?(\d+)/gi)) {
-    if (columnIndex(col.toUpperCase()) > width || Number(row) < 3 || Number(row) > lastRow) fail(`公式引用超出数据区域：${col}${row}`);
+    if (columnIndex(col.toUpperCase()) < 1 || columnIndex(col.toUpperCase()) > width || Number(row) < 3 || Number(row) > lastRow) fail(`公式引用超出数据区域：${col}${row}`);
   }
   return formula;
 }
@@ -100,7 +107,7 @@ export function validateWorkbook(obj, { source, requireFormula = false }) {
         if (['integer', 'number', 'currency', 'percent'].includes(columnTypes[j]) && v !== null && typeof v !== 'number' && !(typeof v === 'string' && v.startsWith('='))) fail('数值列必须填JSON数字、公式或null');
         if (columnTypes[j] === 'integer' && typeof v === 'number' && !Number.isInteger(v)) fail('整数列含小数');
         if (v !== null && !['string', 'number', 'boolean'].includes(typeof v)) fail('单元格不能包含对象或数组');
-        if (typeof v === 'number' && (!Number.isFinite(v) || (!example && !hasNumber(rowSources[i] || source, v)))) fail(`第${i + 1}行存在原始材料中没有的数值：${v}；计算结果必须使用公式`);
+        if (typeof v === 'number' && (!Number.isFinite(v) || (!example && !hasCellNumber(rowSources[i] || source, v, columnTypes[j])))) fail(`第${i + 1}行存在原始材料中没有的数值：${v}；计算结果必须使用公式`);
       }
       return row;
     });

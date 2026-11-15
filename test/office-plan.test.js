@@ -42,3 +42,17 @@ test('formula bounds and functions exclude external links and blank-region refer
   for (const formula of ['=B3*C3', '=SUM(D3:D5)', '=($D$3+D4)/2']) assert.doesNotThrow(() => validateFormula(formula, bounds));
   for (const formula of ['=SUM(A1:A2)', '=E3*B3', '=SUM(D3:D100)', '=WEBSERVICE("https://example.invalid")', '=Sheet2!A3']) assert.throws(() => validateFormula(formula, bounds));
 });
+
+test('percentage input keeps Excel decimal representation without inventing numbers', () => {
+  const source = '销售部完成率25%，研发部完成率80%。';
+  const raw = { title: '完成率', sheets: [{ name: '进度', dataMode: 'provided',
+    columns: [{ header: '部门', type: 'text' }, { header: '完成率', type: 'percent' }],
+    rows: [['销售部', 0.25], ['研发部', 0.8]], rowSources: ['销售部完成率25%', '研发部完成率80%'] }] };
+  assert.equal(validateWorkbook(raw, { source }).sheets[0].rows[0][1], 0.25);
+  raw.sheets[0].rows[0][1] = 0.5;
+  assert.throws(() => validateWorkbook(raw, { source }));
+});
+test('three-letter Excel column references cannot bypass data bounds', () => {
+  for (const formula of ['=AAA3', '=SUM(AAA3:AAA5)', '=XFD3'])
+    assert.throws(() => validateFormula(formula, { width: 4, lastRow: 6 }));
+});
