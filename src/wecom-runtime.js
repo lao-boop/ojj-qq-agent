@@ -220,7 +220,7 @@ export class WeComRuntime {
       if (input.error) throw input.error;
       if (!valid()) return;
       const command = frame.body.msgtype === 'text' ? String(frame.body.text?.content || '').trim() : '';
-      const secretaryReply = this.secretary?.command(command, chat.key);
+      const secretaryReply = await this.secretary?.command(command, chat.key);
       if (secretaryReply != null) {
         await deliver({ bubbles: [secretaryReply] });
         return;
@@ -267,11 +267,10 @@ export class WeComRuntime {
         },
       });
       clearTimeout(timer);
-      if (result.evidence?.length && this.secretary?.isOwner(chat.key)) {
-        result.bubbles ??= [];
-        result.bubbles.push('以下为检索得到的来源原文（不是模型改写）：\n' + this.secretary.renderEvidence(result.evidence.slice(0, 5)));
-      }
       if (!await deliver(result)) return;
+      if (valid() && result.evidence?.length && this.secretary?.isOwner(chat.key)) {
+        this.secretary.rememberSources(result.evidence.map(e => e.id));
+      }
       const sentText = (result.bubbles || []).join('\n');
       if (sentText) this.memory.append(chat.key, 'assistant', sentText, chat.title);
       this.stats.replied++;

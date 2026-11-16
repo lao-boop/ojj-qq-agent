@@ -57,8 +57,9 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
       const body = JSON.parse(Buffer.concat(chunks).toString());
       llmRequests.push(body);
       const last = body.messages.at(-1);
-      const message = last.role === 'tool' && last.tool_call_id === 'secretary-search'
-        ? { role: 'assistant', content: '同事提到了乌龙茶，详情见来源原文。' }
+      const isBrief = body.messages[0].content.includes('每段都在 sources');
+      const message = isBrief ? {role:'assistant',content:JSON.stringify({paragraphs:[{kind:'fact',text:'同事说喜欢乌龙茶，可以记下这个偏好。',sources:JSON.parse(body.messages[1].content).messages.map(m=>m.id)}]})} : last.role === 'tool' && last.tool_call_id === 'secretary-search'
+        ? { role: 'assistant', content: '同事说喜欢乌龙茶，日后招待时可以记一下这个偏好。' }
         : last.role !== 'tool' && last.content.includes('同事说了什么')
           ? { role: 'assistant', content: '', tool_calls: [{ id: 'secretary-search', type: 'function',
             function: { name: 'search_colleague_messages', arguments: '{"query":"乌龙茶"}' } }] }
@@ -165,9 +166,11 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
   assert.equal(persisted.notes[0].text, '喜欢乌龙茶');
   assert.equal(llmRequests[0].tools.some(tool => tool.function.name === 'search_colleague_messages'), false);
   const owner = await roundTrip('owner-query', '同事说了什么？', 'owner');
-  assert.match(owner.body.stream.content, /来源原文/);
-  assert.match(owner.body.stream.content, /发送者：employee.alpha/);
-  assert.match(owner.body.stream.content, /请记住我喜欢乌龙茶/);
+  assert.match(owner.body.stream.content, /喜欢乌龙茶/);
+  assert.doesNotMatch(owner.body.stream.content, /来源原文|M[a-f0-9]{20}|UserID/);
+  const sources = await roundTrip('owner-sources', '/来源', 'owner');
+  assert.match(sources.body.stream.content, /employee.alpha/);
+  assert.match(sources.body.stream.content, /请记住我喜欢乌龙茶/);
   assert.ok(llmRequests[3].tools.some(tool => tool.function.name === 'search_colleague_messages'));
   app.secretary.now = () => Date.now() + 3600001;
   await app.secretary.tick();

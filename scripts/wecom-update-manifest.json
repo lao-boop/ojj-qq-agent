@@ -3,7 +3,7 @@
   "files": [
     {
       "path": "src/brain.js",
-      "sha256": "ed33b8d804d10c85fec3736a6fe51ac5dce7ad91f98745b4228556860c2ae40d"
+      "sha256": "7ac2e4ff153066d71147c3728885060fbe70e8e793421ccf58518aef9137bde1"
     },
     {
       "path": "src/config.js",
@@ -15,7 +15,7 @@
     },
     {
       "path": "src/office.js",
-      "sha256": "4e092e975efd7fbf101b2a27731965e7439787b16d516ba0b5da5eda95b3948e"
+      "sha256": "75eb9391fdde73730ab1ed7a21b93c26af7e26be471137bf953aaafc5a574281"
     },
     {
       "path": "src/tools.js",
@@ -23,15 +23,15 @@
     },
     {
       "path": "src/wecom-main.js",
-      "sha256": "a3788f4c3e233a508f2907dd76b442c578f0d0088d1a61b34997af7fc4a3a8e7"
+      "sha256": "8a3c0b338d0cfa7f4b4116f0056cac48b2cd132e9d74a223abcdbc6bd916a2ed"
     },
     {
       "path": "src/wecom-runtime.js",
-      "sha256": "b1258709075c854ec7652fb3d3b7688b3968024364bf3b8f162b06acafbc65ad"
+      "sha256": "11e02461b35b501bf1e3a8df49c90aa8cd157cab3740011fae57b000a36ffb76"
     },
     {
       "path": "src/wecom-secretary.js",
-      "sha256": "b7e49b8023786900077269ac0bf1c330bb3010b48255abc0be770d08951ef704"
+      "sha256": "0fa94812769c8180f1140e5419cc8322c52c1ba8332cdfd86d6b969d751c3ee6"
     },
     {
       "path": "scripts/build_office.py",
@@ -43,7 +43,7 @@
     },
     {
       "path": "docs/WECOM.md",
-      "sha256": "e3c449b8366c4b1c21444f75ec768c9b452c9b26948f1ab53110cef79c9280fa"
+      "sha256": "9c09c42308f52a6bafc85e4b7f325e0e9f332ba17ec2ca734ee3f05724fc2070"
     },
     {
       "path": "src/office-plan.js",
@@ -60,6 +60,14 @@
     {
       "path": "src/server.js",
       "sha256": "db1077cfa9db833f004bd9deb25ca0c8dae1f8c75a24468b0bfbefb8cc1ef184"
+    },
+    {
+      "path": "src/wecom-briefing.js",
+      "sha256": "daa72c8ec4ecc25372c718a206b7b807db385f87d462c73e048646532c9edcee"
+    },
+    {
+      "path": "src/llm.js",
+      "sha256": "30d082d6bb11f4343be33ab07a4fc4263c5bb1275d7a7e32c13848bb2a2ef828"
     }
   ]
 }

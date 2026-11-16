@@ -21,9 +21,11 @@ const DEFAULT_REPLY_INSTRUCTIONS = [
 export class Brain {
   constructor({
     cfg, llm, memory, tools, logger, visionModel = 'deepseek-flash', selfState = () => '',
-    personaProvider, globalContext = formatGlobal, replyInstructions = DEFAULT_REPLY_INSTRUCTIONS,
+    personaProvider, globalContext = formatGlobal, replyInstructions = DEFAULT_REPLY_INSTRUCTIONS, maxToolRounds = MAX_TOOL_ROUNDS, maxToolCalls = 24,
   }) {
     this.cfg = cfg;
+    this.maxToolRounds = maxToolRounds;
+    this.maxToolCalls = maxToolCalls;
     this.llm = llm;
     this.memory = memory;
     this.tools = tools;
@@ -167,7 +169,8 @@ export class Brain {
 
   async #runLoop(messages, toolCtx, onProgress, countTool) {
     let reply = '';
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    toolCtx.executedCalls ??= 0;
+    for (let round = 0; round < this.maxToolRounds && toolCtx.executedCalls < this.maxToolCalls; round++) {
       const res = await this.llm.chat({ messages, tools: this.tools.specsForChat?.(toolCtx) ?? this.tools.specs });
       if (!res.toolCalls?.length) {
         reply = res.content || '';
@@ -175,6 +178,11 @@ export class Brain {
       }
       messages.push({ role: 'assistant', content: res.content || '', tool_calls: res.toolCalls });
       for (const call of res.toolCalls) {
+        if (toolCtx.executedCalls >= this.maxToolCalls) {
+          messages.push({ role: 'tool', tool_call_id: call.id, content: '本轮工具次数已到上限，请按已读材料回答，说明未确定之处。' });
+          continue;
+        }
+        toolCtx.executedCalls++;
         countTool?.();
         let args = {};
         try {
@@ -193,6 +201,10 @@ export class Brain {
         const result = await this.tools.run(call.function?.name, args, toolCtx);
         messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
       }
+    }
+    if (!reply && messages.at(-1)?.role === 'tool') {
+      messages.push({ role: 'system', content: '工具预算已到上限。请只根据实际读到的材料自然作答；未查清的就说明，不再请求工具。' });
+      reply = (await this.llm.chat({ messages })).content || '';
     }
     return { reply };
   }

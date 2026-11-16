@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { setTimeout as sleep } from 'node:timers/promises';
+import { setTimeout as sleep, setImmediate as yieldImmediate } from 'node:timers/promises';
 import { DATA_DIR, ROOT } from './config.js';
 import { validateDeck, validateWorkbook } from './office-plan.js';
 
@@ -12,7 +12,8 @@ const DOCS_DIR = path.join(DATA_DIR, 'documents');
 
 async function wait(ms, signal) {
   signal?.throwIfAborted();
-  await sleep(ms, undefined, { signal: signal || undefined });
+  if (ms > 0) await sleep(ms, undefined, { signal: signal || undefined });
+  else await yieldImmediate(undefined, { signal: signal || undefined });
   signal?.throwIfAborted();
 }
 

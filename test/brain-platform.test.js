@@ -225,3 +225,13 @@ test('PPT jobs retain original requirements and interpret pages as total slide c
   assert.ok(result.documents[0].sourceText.includes(original));
   assert.equal(result.documents[0].theme, 'business');
 });
+
+test('tool budgets end with a grounded final response rather than an empty fallback',async()=>{
+ let executed=0,calls=0;
+ const {brain}=brainFixture({maxToolRounds:2,maxToolCalls:2,
+  tools:{specs:[],run:async()=>{executed++;return '已读原文';}},
+  llm:{chat:async({tools})=>{calls++;return tools?{toolCalls:[{id:'c'+calls,function:{name:'search_colleague_messages',arguments:'{}'}}]}:{content:'目前只确认了筹备中的安排。'};}}
+ });
+ const result=await brain.respond({chatKey:'wecom:bot:private:owner',title:'查询',userText:'说说进展',meta});
+ assert.equal(executed,2);assert.equal(calls,3);assert.match(result.bubbles.join(''),/筹备中的安排/);
+});

@@ -72,6 +72,7 @@ export class LLM {
           message,
           usage,
           model,
+          finishReason: json.choices?.[0]?.finish_reason || '',
         };
       } catch (err) {
         lastErr = err;

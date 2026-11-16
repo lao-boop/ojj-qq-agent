@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { messageTimes } from './wecom-directory.js';
+import { writeBriefing } from './wecom-briefing.js';
 
 const hash = text => createHash('sha256').update(text).digest('hex');
 const scope = bot => `wecom:${encodeURIComponent(bot || 'unconfigured')}:`;
@@ -46,11 +47,18 @@ const SPECS = [
   tool('read_colleague_message', '根据已检索到的原文编号读取原始消息。长消息用 offset 分页；不可捏造编号。', {
     id: { type: 'string' }, offset: { type: 'integer', minimum: 0 },
   }, ['id']),
+  tool('read_colleague_context', '补读已找到消息前后的同一会话原文，识别省略主语、零散分段、后续更正。邻近不等于回复；不确定关联时说明。', {
+    id: {type:'string'}, before: {type:'integer',minimum:0,maximum:8}, after: {type:'integer',minimum:0,maximum:8},
+    sameSenderOnly: {type:'boolean',description:'只补读同一发言人时为true；群内讨论需其他发言人时为false。'},
+  }, ['id']),
+  tool('read_last_colleague_sources', '查看刚才那份查询答复或最近定时汇报实际采用的原文来源。用于“依据呢/原话是什么”等追问。', {
+    offset:{type:'integer',minimum:0},
+  }),
 ];
 
 export class WeComSecretary {
-  constructor({ cfg, sender, dataDir, logger, contacts, now = Date.now }) {
-    Object.assign(this, { sender, dataDir, logger, contacts, now });
+  constructor({ cfg, sender, dataDir, logger, contacts, llm, now = Date.now }) {
+    Object.assign(this, { sender, dataDir, logger, contacts, llm, now });
     this.generation = 0;
     this.busy = false;
     this.running = false;
@@ -137,7 +145,7 @@ export class WeComSecretary {
   identityFor(record) { return record.identity || this.contacts?.peek(record.sender) || {}; }
   attachExtraction(id, prepared) {
     const record = this.byId.get(id);
-    if (!record || record.messageType === 'text' || !prepared?.text) return;
+    if (!record || ['text', 'voice'].includes(record.messageType) || !prepared?.text) return;
     const text = String(prepared.text);
     this.appendEvent({ type: 'extraction', id, text });
     record.extractedText = text;
@@ -147,7 +155,7 @@ export class WeComSecretary {
   }
   evidence(record, offset = 0, length = 1800) {
     const full = record.text + (record.quote ? '\n[该消息引用的内容，不能据此推定原作者]\n' + record.quote : '')
-      + (record.extractedText ? '\n[附件提取/转写内容]\n' + record.extractedText : '');
+      + (record.extractedText && record.messageType !== 'voice' ? '\n[附件提取/转写内容]\n' + record.extractedText : '');
     offset = Math.max(0, Math.floor(Number(offset) || 0));
     const identity = this.identityFor(record);
     return { senderName: identity.name || '', department: identity.department || '',
@@ -196,31 +204,97 @@ export class WeComSecretary {
         let result;
         try {
           if (name === 'search_colleague_messages') result = self.search(args);
+          else if (name === 'read_colleague_context') result = self.context(args);
+          else if (name === 'read_last_colleague_sources') result = self.lastSources(args.offset);
           else {
             const record = self.byId.get(String(args.id));
             result = { messages: record && self.eligible(record) ? [self.evidence(record, args.offset, 5000)] : [],
               coverage: '查不到编号时不得编造内容。' };
           }
         } catch (err) { return err.message; }
+        const encoded = JSON.stringify(result);
+        ctx.secretaryChars ??= 0;
+        if (ctx.secretaryChars + encoded.length > 60000) return '本轮原文读取预算已到上限。依据已读材料回答，未检查的部分不要推断。';
+        ctx.secretaryChars += encoded.length;
         ctx.evidence ??= [];
         for (const e of result.messages) {
           if (!ctx.evidence.some(x => x.id === e.id && x.offset === e.offset)) ctx.evidence.push(e);
         }
-        return JSON.stringify(result);
+        return encoded;
       },
     };
   }
+  context(args) {
+    const anchor = this.byId.get(String(args.id));
+    if (!anchor || !this.eligible(anchor)) return {messages:[], coverage:'未找到该消息'};
+    const peers = this.records.filter(r => this.eligible(r) && r.chatId === anchor.chatId && r.group === anchor.group
+      && Math.abs(r.receivedAt - anchor.receivedAt) <= 30 * 60000 && (!args.sameSenderOnly || r.sender === anchor.sender));
+    const index = peers.findIndex(r => r.id === anchor.id);
+    const before = Math.max(0, Math.min(8, Math.floor(Number(args.before) || 0)));
+    const after = Math.max(0, Math.min(8, args.after === undefined ? 4 : Math.floor(Number(args.after) || 0)));
+    return {messages:peers.slice(Math.max(0,index-before),index+after+1).map(r=>this.evidence(r,0,1800)),
+      coverage:'同一会话、距定位消息30分钟内的时间顺序上下文；邻近不代表确定的回复或同一话题。长消息可按编号续读。'};
+  }
+  rememberSources(ids) {
+    this.state.latestSources = [...new Set(ids)].filter(id=>this.byId.has(id) && this.eligible(this.byId.get(id))).slice(0,1000);
+    this.saveState();
+  }
+  lastSources(offset = 0) {
+    const records = (this.state.latestSources || []).map(id=>this.byId.get(id)).filter(r=>r && this.eligible(r));
+    offset = Math.max(0,Math.floor(Number(offset)||0));
+    return {messages:records.slice(offset,offset+8).map(r=>this.evidence(r)), total:records.length,
+      nextOffset:offset+8<records.length?offset+8:null, coverage:'最近一次答复或汇报的原始资料，摘要不是证据。'};
+  }
+  renderLastSources(page = 1) {
+    const offset = Math.max(0,(Math.floor(Number(page)||1)-1)*3);
+    const records = (this.state.latestSources || []).map(id=>this.byId.get(id)).filter(r=>r && this.eligible(r));
+    if (!records.length) return '还没有可展开的汇报来源。先问我同事最近说了什么。';
+    const text = records.slice(offset,offset+3).map((r,i)=>{
+      const e=this.evidence(r,0,700);
+      return `${offset+i+1}. ${e.senderName || e.sender} · ${(e.platformAt || e.receivedAt).slice(0,16)}${e.platformAt?'':'（收到）'}\n${e.text}\n查看完整原话：/原文 ${e.id}`;
+    }).join('\n\n');
+    return text + (offset+3<records.length ? `\n\n还有来源，发送 /来源 ${Math.floor(offset/3)+2} 继续。` : '');
+  }
+  briefingMaterial(records) {
+    const ids = new Set(records.map(r=>r.id));
+    const context = [];
+    for (const r of records) {
+      for (const prior of this.records.filter(p=>this.eligible(p) && p.chatId===r.chatId && p.group===r.group
+        && p.seq<records[0].seq && p.receivedAt>=r.receivedAt-86400000).slice(-3)) {
+        if (!ids.has(prior.id) && context.length<12) {ids.add(prior.id);context.push(prior);}
+      }
+    }
+    return [...context,...records].sort((a,b)=>a.seq-b.seq).map(r=>{
+      const e=this.evidence(r,0,records.includes(r)?Math.min(6000,Math.floor(18000/records.length)):1200);
+      return {id:e.id,speaker:e.senderName || e.sender,speakerId:e.sender,department:e.department,
+        time:e.platformAt || e.receivedAt,timeKind:e.platformAt?'平台消息时间':'接收时间',
+        text:e.text,truncated:e.nextOffset!==null,contextOnly:!records.includes(r)};
+    });
+  }
+  async answerSummary(result, question, chatKey) {
+    if (!result.messages.length) return '这次没有找到相关消息。可以换个关键词，或者告诉我大概是谁、哪段时间聊的。';
+    const generation=this.generation;
+    try {
+      const records=result.messages.map(e=>this.byId.get(e.id)).filter(Boolean).sort((a,b)=>a.seq-b.seq);
+      const material=this.briefingMaterial(records);
+      const brief=await writeBriefing({llm:this.llm,messages:material,question,mode:'query'});
+      if (generation!==this.generation || !this.isOwner(chatKey)) return '查询已停止，请重新发起。';
+      this.rememberSources(brief.sources);
+      return brief.text + (result.total>result.messages.length ? `\n\n这次先看了${result.messages.length}条相关消息，更多历史还没有展开。` : '');
+    } catch { return '消息原文已经保存，但这次没能整理好摘要。稍后再问我，或发送 /来源 查看上次汇报的原话。'; }
+  }
   command(text, chatKey) {
-    if (!/^\/(汇报|查消息|原文)(?:\s|$)/.test(text)) return null;
+    if (!/^\/(汇报|查消息|原文|来源)(?:\s|$)/.test(text)) return null;
     if (!this.isOwner(chatKey)) return '此命令仅限汇报接收人的私聊使用。';
     const [name, ...rest] = text.split(/\s+/);
+    if (name === '/来源') return this.renderLastSources(rest[0]);
     if (name === '/原文') {
       const record = this.byId.get(rest[0]);
       return record && this.eligible(record) ? this.renderEvidence([this.evidence(record, rest[1], 6000)]) : '未找到这个原文编号。';
     }
     const result = this.search({ query: rest.join(' '), limit: 10,
       ...(name === '/汇报' ? { since: new Date(this.now() - 86400000).toISOString() } : {}) });
-    return `找到 ${result.total} 条${name === '/汇报' ? '最近 24 小时的' : ''}消息，展示 ${result.messages.length} 条。\n${result.coverage}\n\n${this.renderEvidence(result.messages)}`;
+    return this.answerSummary(result, name === '/汇报' ? '给我讲讲最近24小时的同事消息重点。' : rest.join(' '), chatKey);
   }
   start() {
     if (this.running) return;
@@ -243,19 +317,23 @@ export class WeComSecretary {
           this.state.nextAt = this.now() + this.settings.intervalMinutes * 60000;
           this.saveState(); return;
         }
-        const pages = [];
-        let text = '', cursor = this.state.cursor;
-        const header = `秘书定时汇报｜新增 ${pending.length} 条消息\n以下为原文摘录，时间为北京时间。可用“/原文 编号”追溯。\n\n`;
-        for (const r of pending) {
-          const e = this.evidence(r, 0, 320);
-          e.text = clip(e.text, 240);
-          const line = this.renderEvidence([e]) + '\n\n';
-          if (text && Buffer.byteLength(header + text + line) > 3500) {
-            pages.push({ text: header + text, cursor }); text = '';
-          }
-          text += line; cursor = r.seq;
+        const batches = []; let batch = [], chars = 0;
+        for (const r of pending.slice(0, 40)) {
+          const size = Math.min(this.evidence(r, 0, 6000).text.length, 6000) + 300;
+          if (batch.length && (chars + size > 9000 || batch.length >= 20)) { batches.push(batch); batch = []; chars = 0; }
+          batch.push(r); chars += size;
         }
-        if (text) pages.push({ text: header + text, cursor });
+        if (batch.length) batches.push(batch);
+        const pages = [];
+        for (const records of batches) {
+          const messages = this.briefingMaterial(records);
+          let brief;
+          try { brief = await writeBriefing({llm:this.llm,messages}); }
+          catch (error) { if (current()) { this.state.nextAt = this.now() + 60000; this.saveState(); } throw error; }
+          if (!current()) return;
+          pages.push({text:brief.text, cursor:records.at(-1).seq,
+            sources:brief.sources});
+        }
         this.state.outbox = { pages, index: 0 };
         this.saveState();
       }
@@ -266,10 +344,12 @@ export class WeComSecretary {
         await this.sender.sendText({ body: { chattype: 'single', from: { userid: this.settings.ownerUserId } } }, page.text);
         if (!current()) return;
         this.state.cursor = page.cursor;
+        if (page.sources) this.state.latestSources = page.sources;
         outbox.index++;
         if (outbox.index === outbox.pages.length) {
           this.state.outbox = null;
-          this.state.nextAt = this.now() + this.settings.intervalMinutes * 60000;
+          const more = this.records.some(r => r.seq > page.cursor && this.eligible(r));
+          this.state.nextAt = this.now() + (more ? 15000 : this.settings.intervalMinutes * 60000);
         }
         this.saveState();
       }
