@@ -254,6 +254,20 @@
               <label>允许的群 Chat ID（逗号分隔）</label>
               <input id="cfgWecomGroups" placeholder="企业微信的群会话 ID" />
               <div class="hint">白名单模式下，空名单不放行。成员和群 ID 使用企业微信原始 ID，与 QQ 名单分别管理。</div>
+              <h3 style="margin-top: 18px">企业通讯录与身份识别</h3>
+              <label style="display:flex;gap:8px;align-items:center"><input id="cfgDirectoryOn" type="checkbox" style="width:auto" /> 自动查询发言员工的姓名和部门</label>
+              <label>企业 ID（CorpID）</label>
+              <input id="cfgCorpId" placeholder="企业微信管理后台 → 我的企业 → 企业ID" />
+              <label>自建应用 Secret（用于读取通讯录）</label>
+              <input id="cfgDirectorySecret" type="password" autocomplete="new-password" placeholder="填写有成员读取权限的自建应用 Secret" />
+              <div class="hint">这是自建应用的凭据，与上方机器人 Secret 不同。应用需覆盖相关员工，并按后台要求配置企业可信 IP。查询失败时保留 UserID，不猜姓名。</div>
+              <label>管理员确认的员工名单（可选，每行：UserID | 姓名 | 部门 | 职务）</label>
+              <textarea id="cfgContacts" rows="5" placeholder="zhangsan | 张三 | 销售部 | 客户经理"></textarea>
+              <div class="hint">也可从表格复制制表符分隔的四列，不包含表头。名单可独立使用，优先于自动查询；聊天中的自称姓名不会修改它。</div>
+              <label>检查员工身份（先保存配置）</label>
+              <input id="contactCheckId" placeholder="填写该员工的企业微信 UserID" />
+              <button class="ghost" type="button" onclick="checkContact()">检查姓名与部门</button>
+              <div class="hint" id="directoryStatus"></div>
               <h3 style="margin-top: 18px">秘书汇报与消息溯源</h3>
               <label style="display:flex;gap:8px;align-items:center"><input id="cfgSecretaryOn" type="checkbox" style="width:auto" /> 开启原文记录与定时汇报</label>
               <label>汇报接收人 UserID（仅此人的私聊可以查询其他成员消息）</label>
@@ -476,6 +490,22 @@
         return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
       }
 
+      function parseContacts(value) {
+        return value.split('\n').map(s => s.trim()).filter(Boolean).map((line, i) => {
+          const fields = line.split(/[|\t]/).map(s => s.trim());
+          if (fields.length < 2 || fields.length > 4 || !fields[0] || !fields[1]) throw new Error(`员工名单第${i + 1}行格式错误，请使用 UserID | 姓名 | 部门 | 职务`);
+          const [userId, name, department = '', position = ''] = fields;
+          return { userId, name, department, position };
+        });
+      }
+      async function checkContact() {
+        try {
+          const d = await api('/api/wecom/contact', { method: 'POST', body: JSON.stringify({userId: $('contactCheckId').value.trim()}) });
+          const p = d.profile;
+          $('directoryStatus').textContent = `${p.name || '姓名未匹配'}（${p.userId}） · ${p.department || '部门未知'} · ${p.source}${p.stale ? '（缓存已过期）' : ''}${d.directory.lastError ? '；' + d.directory.lastError : ''}`;
+        } catch (e) { $('directoryStatus').textContent = e.message; }
+      }
+
       async function reconnect() {
         try {
           await api('/api/reconnect', { method: 'POST' });
@@ -520,6 +550,10 @@
           $('cfgWecomMode').value = c.wecom?.mode || 'open';
           $('cfgWecomUsers').value = joinList(c.wecom?.userAllow);
           $('cfgWecomGroups').value = joinList(c.wecom?.groupAllow);
+          $('cfgDirectoryOn').checked = !!c.wecom?.directoryEnabled;
+          $('cfgCorpId').value = c.wecom?.corpId || '';
+          $('cfgDirectorySecret').value = c.wecom?.directorySecret || '';
+          $('cfgContacts').value = (c.wecom?.contacts || []).map(p => [p.userId, p.name, p.department || '', p.position || ''].join(' | ')).join('\n');
           $('cfgSecretaryOn').checked = !!c.wecom?.secretary?.enabled;
           $('cfgSecretaryOwner').value = c.wecom?.secretary?.ownerUserId || '';
           $('cfgSecretaryInterval').value = c.wecom?.secretary?.intervalMinutes ?? 60;
@@ -555,6 +589,7 @@
       }
 
       async function saveConfig() {
+        try {
         const num = (v) => Number(v);
         const patch = {
           llm: {
@@ -585,6 +620,8 @@
         if ((ACTIVE_PLATFORM || CONFIG?.platform) === 'wecom') {
           patch.wecom = {
             botId: $('cfgWecomBotId').value.trim(),
+            directoryEnabled: $('cfgDirectoryOn').checked, corpId: $('cfgCorpId').value.trim(),
+            contacts: parseContacts($('cfgContacts').value),
             mode: $('cfgWecomMode').value,
             userAllow: splitList($('cfgWecomUsers').value),
             groupAllow: splitList($('cfgWecomGroups').value),
@@ -592,6 +629,8 @@
               ownerUserId: $('cfgSecretaryOwner').value.trim(),
               intervalMinutes: num($('cfgSecretaryInterval').value) },
           };
+          const directorySecret = $('cfgDirectorySecret').value.trim();
+          if (!directorySecret.includes('••••')) patch.wecom.directorySecret = directorySecret;
           const secret = $('cfgWecomSecret').value.trim();
           if (!secret.includes('••••')) patch.wecom.secret = secret;
         } else {
@@ -610,7 +649,6 @@
             chanceReply: num($('cfgChance').value),
           };
         }
-        try {
           await api('/api/config', { method: 'POST', body: JSON.stringify({ patch }) });
           toast('配置已保存');
           loadStatus();

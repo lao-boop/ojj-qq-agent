@@ -150,7 +150,11 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
   assert.equal(llmRequests[0].tools.some((tool) => ['post_qzone', 'relay_to_friend', 'mc_connect'].includes(tool.function.name)), false);
   const session = app.memory.get(chatKey);
   assert.deepEqual(session.notes.map((note) => note.text), ['喜欢乌龙茶']);
-  assert.deepEqual(session.turns.map(({ role, content }) => ({ role, content })), [
+  for (const turn of session.turns.filter(t => t.role === 'user')) {
+    assert.match(turn.content, /employee.alpha/);
+    assert.match(turn.content, /receivedTime/);
+  }
+  assert.deepEqual(session.turns.map(({ role, content }) => ({ role, content: role === 'user' ? content.split('[消息正文]\n').slice(1).join('[消息正文]\n') : content })), [
     { role: 'user', content: '在吗' }, { role: 'assistant', content: '我在。' },
     { role: 'user', content: '请记住我喜欢乌龙茶' }, { role: 'assistant', content: '记住了，你喜欢乌龙茶。' },
   ]);

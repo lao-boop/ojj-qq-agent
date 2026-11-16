@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { messageTimes, beijingTime } from './wecom-directory.js';
 
 const encode = (value) => encodeURIComponent(String(value));
 export const wecomScope = (botId) => `wecom:${encode(botId || 'unconfigured')}:`;
@@ -33,8 +34,8 @@ const safeFilename = (name) => path.basename(String(name || 'attachment').replac
 
 /** Orchestration only: no QQ connection, numeric IDs, or global QQ memories. */
 export class WeComRuntime {
-  constructor({ cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary }) {
-    Object.assign(this, { cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary });
+  constructor({ cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary, contacts }) {
+    Object.assign(this, { cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary, contacts });
     this.chains = new Map();
     this.seen = new Map();
     this.buckets = new Map();
@@ -103,6 +104,8 @@ export class WeComRuntime {
     const dedup = `${wecomScope(this.cfg.wecom.botId)}${frame.body.msgid}`;
     if (this.seen.has(dedup)) { this.stats.ignored++; return; }
     this.seen.set(dedup, now);
+    chat.receivedAt = now;
+    chat.identity = this.contacts?.peek(chat.userId);
     const archiveId = this.secretary?.capture(frame, chat);
     if (this.secretary?.enabled() && !archiveId) { this.stats.ignored++; return; }
     if (this.seen.size > 5000) this.seen.delete(this.seen.keys().next().value);
@@ -116,7 +119,19 @@ export class WeComRuntime {
     this.pendingMessages++;
     // Download short-lived media immediately, even while another turn is running.
     // Attach rejection handling immediately as this promise may wait in a queue.
-    const prepared = this.#prepare(frame.body).then(value => {
+    const identified = (async () => {
+      const identity = this.contacts ? await this.contacts.resolve(chat.userId) : { userId: chat.userId, name: '', source: '仅平台UserID' };
+      if (!this.#current(generation)) return;
+      chat.identity = identity;
+      const times = messageTimes(frame.body, now);
+      chat.meta.peerName = identity.name || chat.userId;
+      chat.meta.message = { userId: chat.userId, name: identity.name || '', department: identity.department || '',
+        position: identity.position || '', identitySource: identity.source, identityStale: !!identity.stale,
+        platformTime: times.platformAt ? beijingTime(times.platformAt) : null, receivedTime: beijingTime(now) };
+      if (!chat.group && identity.name) chat.title = `企业微信私聊 ${identity.name}（${chat.userId}）`;
+      this.secretary?.attachIdentity?.(archiveId, identity);
+    })();
+    const prepared = Promise.all([this.#prepare(frame.body), identified]).then(([value]) => {
       this.secretary?.attachExtraction(archiveId, value);
       return { value };
     }).catch(error => ({ error }));
@@ -208,6 +223,11 @@ export class WeComRuntime {
       const secretaryReply = this.secretary?.command(command, chat.key);
       if (secretaryReply != null) {
         await deliver({ bubbles: [secretaryReply] });
+        return;
+      }
+      if (command === '/我是谁') {
+        const m = chat.meta.message;
+        await deliver({ bubbles: [`员工：${m?.name || '姓名尚未匹配'}（UserID：${chat.userId}）\n部门：${m?.department || '未知'}\n身份来源：${m?.identitySource || '仅平台UserID'}${m?.identityStale ? '（缓存已过期，尚未重新核验）' : ''}\n平台消息时间：${m?.platformTime || '平台未提供'}\n接收时间：${m?.receivedTime || beijingTime(receivedAt)}`] });
         return;
       }
       if (command === '/help') {

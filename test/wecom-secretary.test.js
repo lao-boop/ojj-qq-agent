@@ -166,3 +166,32 @@ test('disabled recording is silent and separate bot identities cannot search eac
   assert.equal(x.secretary.capture(message('2', 'alice', 'disabled'), { userId: 'alice', id: 'alice', group: false }), null);
   assert.equal(x.secretary.records.length, 0);
 });
+
+test('identity snapshots retain original names across rename/restart; namesakes remain separate with two times', t => {
+  const x = fixture(t);
+  for (const [i, sender] of ['alice', 'bob'].entries()) {
+    const f = message('identity-' + i, sender, '提交了进展', { create_time: 1794614390 });
+    const id = x.capture(f);
+    x.secretary.attachIdentity(id, { userId: sender, name: '张三', department: i ? '研发部' : '销售部', source: '企业通讯录', checkedAt: 1794614400000 });
+  }
+  x.secretary.contacts = { peek: userId => ({ userId, name: '改名后的姓名' }) };
+  const result = x.secretary.search({ senderName: '张三' });
+  assert.equal(result.total, 2);
+  assert.equal(new Set(result.messages.map(e => e.sender)).size, 2);
+  assert.equal(result.messages[0].platformAt, '2026-11-14 07:59:50 +08:00');
+  assert.equal(result.messages[0].receivedAt, '2026-11-14 08:00:00 +08:00');
+  assert.match(x.secretary.renderEvidence(result.messages), /张三（alice）/);
+  assert.match(x.secretary.renderEvidence(result.messages), /平台消息时间/);
+  const restored = x.make();
+  assert.equal(restored.search({senderName:'张三'}).total, 2);
+  assert.equal(restored.search({query:'销售部'}).messages[0].sender, 'alice');
+});
+
+test('platform-time searches exclude records without that timestamp and do not confuse delivery delay', t => {
+  const x=fixture(t);
+  x.capture(message('old','alice','延迟到达',{create_time:1794610800}));
+  x.capture(message('unknown','alice','没有平台时间'));
+  assert.equal(x.secretary.search({timeBasis:'platform',since:'2026-11-14T07:00:00+08:00',until:'2026-11-14T07:01:00+08:00'}).total,1);
+  assert.equal(x.secretary.search({timeBasis:'received',since:'2026-11-14T07:00:00+08:00',until:'2026-11-14T07:01:00+08:00'}).total,0);
+  assert.equal(x.secretary.search({timeBasis:'platform'}).total,1);
+});

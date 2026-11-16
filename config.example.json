@@ -185,6 +185,10 @@
       "enabled": false,
       "ownerUserId": "",
       "intervalMinutes": 60
-    }
+    },
+    "corpId": "",
+    "directorySecret": "",
+    "directoryEnabled": false,
+    "contacts": []
   }
 }

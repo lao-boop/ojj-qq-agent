@@ -1,13 +1,13 @@
 {
-  "version": 2,
+  "version": 3,
   "files": [
     {
       "path": "src/brain.js",
-      "sha256": "9833c9989447160b49d7df62ec5a43079fe53eaec4095adf234420bb349d649b"
+      "sha256": "ed33b8d804d10c85fec3736a6fe51ac5dce7ad91f98745b4228556860c2ae40d"
     },
     {
       "path": "src/config.js",
-      "sha256": "a5ca6aabed33d5a1739fb7054d4e2007f8409e75128f312dc8091a3d2569c3e8"
+      "sha256": "452631d138bd4064b0ad5357cd044f6a26123045d35dfc8dedcbe14f95a3be03"
     },
     {
       "path": "src/memory-index.js",
@@ -23,15 +23,15 @@
     },
     {
       "path": "src/wecom-main.js",
-      "sha256": "47a54eca554ce9b922e0a0d5d06353b499b793c5c719ff9303e0e10fc924ccd9"
+      "sha256": "a3788f4c3e233a508f2907dd76b442c578f0d0088d1a61b34997af7fc4a3a8e7"
     },
     {
       "path": "src/wecom-runtime.js",
-      "sha256": "cc70ae497a56a867e44a4d28f8d0990255537d4ca6644645e0f4d04624255ce5"
+      "sha256": "b1258709075c854ec7652fb3d3b7688b3968024364bf3b8f162b06acafbc65ad"
     },
     {
       "path": "src/wecom-secretary.js",
-      "sha256": "dcdcb8edea8d581c5da457969d6633e53ddf8343df506ef44083c1ad09c036bd"
+      "sha256": "b7e49b8023786900077269ac0bf1c330bb3010b48255abc0be770d08951ef704"
     },
     {
       "path": "scripts/build_office.py",
@@ -39,11 +39,11 @@
     },
     {
       "path": "public/index.html",
-      "sha256": "17f543a86bde415d9de6854e65aeb1331812b8b41d3605337a75b23ab43a99f9"
+      "sha256": "31628413a7ff483c615c9a9c0232a8cdde9273666a17a8f1fb68338f81cbc330"
     },
     {
       "path": "docs/WECOM.md",
-      "sha256": "6a27f41132fb988e7eef7be3063173df9a8b9f62a987ef611831574ef05321a3"
+      "sha256": "e3c449b8366c4b1c21444f75ec768c9b452c9b26948f1ab53110cef79c9280fa"
     },
     {
       "path": "src/office-plan.js",
@@ -52,6 +52,14 @@
     {
       "path": "src/index.js",
       "sha256": "fe403b65cfe2c9fa8c3b60b392f12da26202d9923ba975087d9a6cfe720cf0fa"
+    },
+    {
+      "path": "src/wecom-directory.js",
+      "sha256": "68a12ddf1ea63d6e74a92700efa4d246a28f70ff4d24dd7ea521ce12366af17f"
+    },
+    {
+      "path": "src/server.js",
+      "sha256": "db1077cfa9db833f004bd9deb25ca0c8dae1f8c75a24468b0bfbefb8cc1ef184"
     }
   ]
 }

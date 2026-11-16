@@ -86,7 +86,7 @@ async function main() {
   };
   const manifest = JSON.parse((await fetchFile('scripts/wecom-update-manifest.json')).toString());
   const result = await installUpdate({ root, manifest, fetchFile, ownerUserId });
-  console.log(`更新完成：${result.updated} 个文件。\n文档生成已升级，已有秘书设置和凭据已保留。\n备份位置：${result.backup}\n请运行 npm run start:wecom 启动。`);
+  console.log(`更新完成：${result.updated} 个文件。\n功能已升级，已有秘书设置和凭据已保留。通讯录自动查询请在控制台配置企业 ID 和自建应用 Secret。\n备份位置：${result.backup}\n请运行 npm run start:wecom 启动。`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

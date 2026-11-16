@@ -26,7 +26,7 @@ test('WeCom app configuration and console integration stay local and scoped', as
   const dataDir = path.join(temp, 'data');
   const envKeys = [
     'QQBOT_CONFIG', 'QQBOT_DATA', 'CHAT_PLATFORM', 'WECOM_BOT_ID', 'WECOM_BOT_SECRET',
-    'DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'REPLICATE_API_TOKEN',
+    'WECOM_CORP_ID', 'WECOM_DIRECTORY_SECRET', 'DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL', 'REPLICATE_API_TOKEN',
     'ONEBOT_ACCESS_TOKEN', 'ONEBOT_WS_URL', 'CONSOLE_TOKEN',
   ];
   const savedEnv = new Map(envKeys.map(key => [key, process.env[key]]));
@@ -104,6 +104,22 @@ test('WeCom app configuration and console integration stay local and scoped', as
     };
     return { app, clients, request, disk: () => JSON.parse(fs.readFileSync(configPath, 'utf8')) };
   }
+
+  await t.test('directory secrets stay masked and manual lookup config changes do not reconnect the bot', async st => {
+    const {app,clients,request,disk} = await fixture(st, {patch:{wecom:{botId:'bot',secret:'bot-secret',directorySecret:'directory-private-secret'}},env:{WECOM_DIRECTORY_SECRET:'environment-directory-secret'}});
+    const config = (await request('/api/config')).body.config;
+    assert.ok(config.wecom.directorySecret.includes('••••'));
+    const connections = clients.length;
+    await app.applyConfig({wecom:{directorySecret:config.wecom.directorySecret,contacts:[{userId:'alice',name:'张三',department:'销售部'}]}});
+    assert.equal(clients.length,connections);
+    assert.equal(disk().wecom.directorySecret,'directory-private-secret');
+    assert.equal(app.cfg.wecom.directorySecret,'environment-directory-secret');
+    const result=await request('/api/wecom/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:'alice'})});
+    assert.equal(result.body.profile.name,'张三');
+    assert.equal(result.body.profile.source,'管理员名单');
+    assert.doesNotMatch(JSON.stringify(result.body),/directory-private-secret|environment-directory-secret/);
+    await assert.rejects(app.applyConfig({wecom:{directoryEnabled:true}}),/企业 ID/);
+  });
 
   await t.test('missing bot credentials leave the local console available without a client', async (st) => {
     const { app, clients, request } = await fixture(st);

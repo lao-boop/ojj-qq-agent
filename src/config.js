@@ -36,6 +36,8 @@ export function applyEnvOverrides(cfg) {
   if (env.WECOM_BOT_ID || env.WECOM_BOT_SECRET) cfg.wecom ??= {};
   if (env.WECOM_BOT_ID) cfg.wecom.botId = env.WECOM_BOT_ID;
   if (env.WECOM_BOT_SECRET) cfg.wecom.secret = env.WECOM_BOT_SECRET;
+  if (env.WECOM_CORP_ID) cfg.wecom.corpId = env.WECOM_CORP_ID;
+  if (env.WECOM_DIRECTORY_SECRET) cfg.wecom.directorySecret = env.WECOM_DIRECTORY_SECRET;
   if (env.DEEPSEEK_API_KEY) cfg.llm.apiKey = env.DEEPSEEK_API_KEY;
   if (env.DEEPSEEK_BASE_URL) cfg.llm.baseUrl = env.DEEPSEEK_BASE_URL;
   if (env.REPLICATE_API_TOKEN) {
@@ -62,6 +64,7 @@ export const DEFAULTS = {
     groupAllow: [],
     requestTimeoutMs: 240000,
     maxConcurrentJobs: 2,
+    corpId: '', directorySecret: '', directoryEnabled: false, contacts: [],
     secretary: { enabled: false, ownerUserId: '', intervalMinutes: 60 },
   },
   llm: {
