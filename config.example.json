@@ -55,7 +55,7 @@
     "privateAllow": [],
     "groupAllow": [],
     "allowAllWhenEmpty": false,
-    "autoAcceptFriend": true,
+    "autoAcceptFriend": false,
     "autoAcceptGroupInvite": false,
     "greeting": "嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。",
     "forwardFiles": false
@@ -142,9 +142,7 @@
   },
   "relay": {
     "enabled": true,
-    "allow": [
-      "2074602296"
-    ],
+    "allow": [],
     "dailyLimit": 5,
     "maxLen": 200
   },

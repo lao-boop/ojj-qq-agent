@@ -289,7 +289,7 @@ const SPECS = {
       name: 'forward_file',
       description:
         '把刚收到的文件（Word/PPT/Excel/PDF）原样转发给白名单里的某个好友。' +
-        '对方说“把这个发给 XX”“转给 TDHD”“传给老王”“发给他”时用。只有主人能用。',
+        '对方说“把这个发给 XX”“转给 小明”“传给老王”“发给他”时用。只有主人能用。',
       parameters: {
         type: 'object',
         properties: {
@@ -364,7 +364,7 @@ const SPECS = {
     function: {
       name: 'relay_message',
       description:
-        '帮对方给主人带一句话（只有主人白名单里的好友能用）。对方说“帮我告诉 Pay…”“帮我转告你主人…”时用。',
+        '帮对方给主人带一句话（只有主人白名单里的好友能用）。对方说“帮我告诉主人…”“帮我转告你主人…”时用。',
       parameters: {
         type: 'object',
         properties: {
@@ -387,7 +387,7 @@ const SPECS = {
     function: {
       name: 'relay_to_friend',
       description:
-        '主人让给某个好友带话时用（只有主人能用）。主人说“帮我告诉 TDHD·R……”“给某某发一句……”时调用，会立刻发出去。',
+        '主人让给某个好友带话时用（只有主人能用）。主人说“帮我告诉 小明……”“给某某发一句……”时调用，会立刻发出去。',
       parameters: {
         type: 'object',
         properties: {
