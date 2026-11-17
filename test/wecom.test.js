@@ -356,3 +356,15 @@ test('proxy denial fails without falling back to a reachable direct WebSocket', 
   assert.equal(directConnections, 0);
   assert.equal(transport.status().authenticated, false);
 });
+
+test('generic document results upload real files and revalidate permission after upload',async t=>{
+ const {sender,clients}=setup(t);const client=clients[0];client.authenticate();
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'wecom-generic-file-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'summary.docx');await fs.writeFile(file,'real file bytes');
+ await sender.sendResult(frame,{bubbles:['文件已准备'],files:[{path:file,name:'summary.docx'}]});
+ assert.equal(client.calls.filter(c=>c[0]==='sendMediaMessage').length,1);
+ let allowed=true;
+ client.uploadMedia=async()=>{allowed=false;return {media_id:'revoked'};};
+ await assert.rejects(sender.sendFile(frame,file,'summary.docx',{validate:()=>allowed}),/权限/);
+ assert.equal(client.calls.filter(c=>c[0]==='sendMediaMessage').length,1);
+});

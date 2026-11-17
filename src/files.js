@@ -9,7 +9,8 @@ import { findPython } from './tts.js';
 
 const execFileAsync = promisify(execFile);
 const FILES_DIR = path.join(DATA_DIR, 'files');
-const MAX_BYTES = 20 * 1024 * 1024;
+const MAX_BYTES = 100 * 1024 * 1024; // QQ 文件常见 20~50MB，别卡在 20MB
+const DOWNLOAD_TIMEOUT_MS = 120000;
 
 function safeName(name) {
   const base = String(name || 'file').replace(/[\\/:*?"<>|]/g, '_').slice(-80);
@@ -40,11 +41,21 @@ export class FileReader {
 
     const url = data.url || (/^https?:\/\//i.test(data.file || '') ? data.file : '');
     if (url) {
-      const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
       if (!res.ok) throw new Error(`下载文件失败 HTTP ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > MAX_BYTES) throw new Error('文件太大（>20MB）');
+      if (Number(res.headers.get('content-length')) > MAX_BYTES) {
+        await res.body?.cancel(); throw new Error('文件太大（上限 100MB）');
+      }
+      const chunks = []; let bytes = 0;
+      for await (const chunk of res.body) {
+        bytes += chunk.length;
+        if (bytes > MAX_BYTES) throw new Error('文件太大（上限 100MB）');
+        chunks.push(chunk);
+      }
+      const buf = Buffer.concat(chunks);
+      if (buf.length > MAX_BYTES) throw new Error(`文件太大（${Math.round(buf.length / 1024 / 1024)}MB，上限 100MB）`);
       fs.writeFileSync(target, buf);
+      this.logger?.info?.(`文件已下载：${name}（${Math.round(buf.length / 1024 / 1024)}MB）`);
       return { path: target, name, size: buf.length };
     }
 
@@ -58,21 +69,21 @@ export class FileReader {
     }
     if (local && fs.existsSync(local)) {
       const size = fs.statSync(local).size;
-      if (size > MAX_BYTES) throw new Error('文件太大（>20MB）');
+      if (size > MAX_BYTES) throw new Error(`文件太大（${Math.round(size / 1024 / 1024)}MB，上限 100MB）`);
       fs.copyFileSync(local, target);
       return { path: target, name, size };
     }
 
     const fileId = data.file_id || data.file;
     if (fileId && onebot) {
-      const info = await onebot.call('get_file', { file_id: fileId, file: fileId }, 20000);
+      const info = await onebot.call('get_file', { file_id: fileId, file: fileId }, 60000);
       const got = info?.file || info?.url;
       if (got && /^https?:\/\//i.test(got)) {
         return this.download(onebot, { ...data, url: got, file: '' });
       }
       if (got && fs.existsSync(got)) {
         const size = fs.statSync(got).size;
-        if (size > MAX_BYTES) throw new Error('文件太大（>20MB）');
+        if (size > MAX_BYTES) throw new Error(`文件太大（${Math.round(size / 1024 / 1024)}MB，上限 100MB）`);
         fs.copyFileSync(got, target);
         return { path: target, name, size };
       }

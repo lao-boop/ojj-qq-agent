@@ -235,3 +235,13 @@ test('tool budgets end with a grounded final response rather than an empty fallb
  const result=await brain.respond({chatKey:'wecom:bot:private:owner',title:'查询',userText:'说说进展',meta});
  assert.equal(executed,2);assert.equal(calls,3);assert.match(result.bubbles.join(''),/筹备中的安排/);
 });
+
+test('Brain retains generic file attachments produced by tools',async()=>{
+ let calls=0;
+ const {brain}=brainFixture({
+  llm:{async chat(){return ++calls===1?{toolCalls:[{id:'f1',type:'function',function:{name:'send_document',arguments:'{}'}}]}:{content:'附件已准备'};}},
+  tools:{specs:[{type:'function',function:{name:'send_document',parameters:{type:'object'}}}],async run(name,args,ctx){ctx.files.push({path:'/fixture/report.docx',name:'report.docx'});return 'queued';}},
+ });
+ const result=await brain.respond({chatKey:'private:123',title:'test',userText:'发我报告',meta:{}});
+ assert.deepEqual(result.files,[{path:'/fixture/report.docx',name:'report.docx'}]);
+});

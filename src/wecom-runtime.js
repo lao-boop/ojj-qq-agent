@@ -34,8 +34,8 @@ const safeFilename = (name) => path.basename(String(name || 'attachment').replac
 
 /** Orchestration only: no QQ connection, numeric IDs, or global QQ memories. */
 export class WeComRuntime {
-  constructor({ cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary, contacts }) {
-    Object.assign(this, { cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary, contacts });
+  constructor({ cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary, contacts, documents }) {
+    Object.assign(this, { cfg, transport, sender, brain, memory, fileReader, officeFactory, songGen, dataDir, logger, secretary, contacts, documents });
     this.chains = new Map();
     this.seen = new Map();
     this.buckets = new Map();
@@ -132,7 +132,9 @@ export class WeComRuntime {
       this.secretary?.attachIdentity?.(archiveId, identity);
     })();
     const prepared = Promise.all([this.#prepare(frame.body), identified]).then(([value]) => {
+      if (!this.#current(generation) || !allowedWecom(chat, this.cfg.wecom)) return {value};
       this.secretary?.attachExtraction(archiveId, value);
+      this.documents?.capture(chat, value.files, frame.body.msgid);
       return { value };
     }).catch(error => ({ error }));
     const acknowledged = this.sender.replyText(frame, this.chains.has(chat.key) ? '收到，正在按顺序处理。' : '收到，让我看看。', { streamId, finish: false })
@@ -158,6 +160,7 @@ export class WeComRuntime {
   async #prepare(body) {
     const texts = [];
     const images = [];
+    const files = [];
     let count = 0;
     const visit = async (item, quoted = false) => {
       if (!item) return;
@@ -174,7 +177,7 @@ export class WeComRuntime {
         }
         try {
           const { buffer, filename } = await this.transport.client.downloadFile(media.url, media.aeskey);
-          if (!Buffer.isBuffer(buffer) || buffer.length > 20 * 1024 * 1024) throw new Error('attachment too large');
+          if (!Buffer.isBuffer(buffer) || buffer.length > 100 * 1024 * 1024) throw new Error('attachment too large');
           if (item.msgtype === 'image') {
             if (buffer.length > 8 * 1024 * 1024) throw new Error('image too large');
             images.push({ base64: `base64://${buffer.toString('base64')}` });
@@ -185,6 +188,7 @@ export class WeComRuntime {
             const file = path.join(dir, `${randomUUID()}-${name}`);
             fs.writeFileSync(file, buffer, { mode: 0o600 });
             const extracted = await this.fileReader.extractText({ path: file, name, size: buffer.length });
+            if (!quoted) files.push({path:file,name,text:extracted.ok ? extracted.text || '' : '',chars:extracted.chars || 0});
             texts.push(`【${quoted ? '引用' : '收到'}文件：${name}】\n${extracted.ok ? String(extracted.text || '').slice(0, 6000) : '未能提取正文，请发送可读的文档或文字。'}`);
             const pics = await this.fileReader.extractImages({ path: file, name });
             images.push(...pics.slice(0, Math.max(0, 3 - images.length)).map(file => ({ file })));
@@ -200,7 +204,7 @@ export class WeComRuntime {
     };
     await visit(body);
     if (body.quote) await visit(body.quote, true);
-    return { text: texts.filter(Boolean).join('\n').slice(0, 40000), images };
+    return { text: texts.filter(Boolean).join('\n').slice(0, 40000), images, files };
   }
 
   async #respond({ frame, chat, input, streamId, generation, proactive, receivedAt }) {
@@ -212,6 +216,8 @@ export class WeComRuntime {
       if (!valid()) return false;
       finalAttempted = true;
       await this.sender.sendResult(frame, result, { streamId, proactive: streamClosed,
+        validate: () => valid() && (result.files || []).every(f => f.documentAccessGeneration === undefined
+          || (this.documents?.isOwner(chat.key) && f.documentAccessGeneration === this.documents.generation)),
         deadlineAt: receivedAt + (this.cfg.wecom.requestTimeoutMs || 240000) });
       streamClosed = true;
       return true;
@@ -325,7 +331,8 @@ export class WeComRuntime {
   }
 
   async #runJob(job) {
-    const valid = () => this.#current(job.generation) && !job.controller.signal.aborted && allowedWecom(job.chat, this.cfg.wecom);
+    const valid = () => this.#current(job.generation) && !job.controller.signal.aborted && allowedWecom(job.chat, this.cfg.wecom)
+      && (job.spec.kind !== 'inbox' || (this.documents?.isOwner(job.chatKey) && job.spec.accessGeneration === this.documents.generation));
     try {
       let result;
       if (!valid()) return;
@@ -334,12 +341,16 @@ export class WeComRuntime {
         // Each background job gets its own builder and configuration snapshot.
         const office = this.officeFactory();
         const args = { ...job.spec, signal: job.controller.signal };
-        if (job.spec.kind === 'docx') result = await office.makeDocx(args);
+        if (job.spec.kind === 'inbox') result = await this.documents.buildSummary(job.spec, job.chatKey, job.controller.signal);
+        else if (job.spec.kind === 'docx') result = await office.makeDocx(args);
         else if (job.spec.kind === 'excel') result = await office.makeExcel(args);
         else result = await office.makePpt({ ...args, withImages: true });
       }
       if (!valid()) return;
-      await this.sender.sendFile(job.frame, result.file, result.name);
+      await this.sender.sendFile(job.frame, result.file, result.name, {validate:valid});
+      if (!valid()) return;
+      this.documents?.delivered(result);
+      this.documents?.rememberGenerated(job.chat, result);
       this.memory.append(job.chatKey, 'assistant', `[已完成并发送${job.kind === 'song' ? '歌曲' : '文档'}：${result.name || path.basename(result.file)}]`, job.chat.title);
     } catch {
       this.stats.errors++;

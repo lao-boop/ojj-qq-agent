@@ -168,6 +168,24 @@ export class Office {
     return file;
   }
 
+  /** 用现成的章节内容生成 Word（不经过大纲模型），用于汇总材料。 */
+  async makeSummaryDocx({ title, subtitle = '', sections = [], theme = 'business', signal } = {}) {
+    signal?.throwIfAborted();
+    if (!Array.isArray(sections) || sections.length > 40) throw new Error('汇总章节超过40节，请分批处理');
+    const cleanTitle = String(title || '汇总材料').slice(0, 60);
+    const spec = {
+      kind: 'docx',
+      theme,
+      title: cleanTitle,
+      subtitle,
+      author: '小鲸鱼',
+      sections: (sections || []).slice(0, 40),
+    };
+    const file = await this.#build(spec, signal);
+    const name = `${cleanTitle}.docx`.replace(/[\\/:*?"<>|]/g, '_').slice(0, 100);
+    return { file, name, title: cleanTitle, sections: spec.sections.length };
+  }
+
   /** 生成 PPT，返回 { file, name, title, pages }。 */
   async makePpt({ topic, sourceText = '', pages = 8, totalPages, theme = 'business', withImages = true, signal } = {}) {
     signal?.throwIfAborted();

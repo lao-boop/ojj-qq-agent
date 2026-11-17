@@ -99,6 +99,8 @@ export const DEFAULTS = {
     mode: 'whitelist',
     adminQQ: [],
     ownerQQ: '',
+    forwardToOwner: true,
+    forwardFiles: false,
     privateAllow: [],
     groupAllow: [],
     allowAllWhenEmpty: false,
@@ -234,9 +236,24 @@ export function loadConfig() {
     }
   }
   const cfg = deepMerge(structuredClone(DEFAULTS), fileCfg);
+  normalizeConfig(cfg);
   // 环境变量中的凭据只留在内存；首次启动也不能把它们写进配置文件。
   if (!fs.existsSync(CONFIG_PATH)) saveConfig(cfg);
   applyEnvOverrides(cfg);
+  return cfg;
+}
+
+/** Fill unusable scalar values; explicit access restrictions and valid zero values stay intact. */
+export function normalizeConfig(cfg) {
+  for (const [section, keys] of Object.entries({onebot:['wsUrl'], console:['host'], llm:['baseUrl','model','visionModel','helperModel'], tts:['voice'], image:['provider']})) {
+    cfg[section] ??= structuredClone(DEFAULTS[section]);
+    for (const key of keys) if (typeof cfg[section][key] !== 'string' || !cfg[section][key].trim()) cfg[section][key] = DEFAULTS[section][key];
+  }
+  cfg.chat ??= structuredClone(DEFAULTS.chat);
+  for (const [section,key] of [['llm','maxTokens'],['chat','maxBubbles']]) {
+    if (!Number.isFinite(cfg[section][key]) || cfg[section][key] <= 0) cfg[section][key] = DEFAULTS[section][key];
+  }
+  if (!Number.isFinite(cfg.llm.temperature) || cfg.llm.temperature < 0) cfg.llm.temperature = DEFAULTS.llm.temperature;
   return cfg;
 }
 

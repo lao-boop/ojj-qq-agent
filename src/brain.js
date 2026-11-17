@@ -171,7 +171,7 @@ export class Brain {
     let reply = '';
     toolCtx.executedCalls ??= 0;
     for (let round = 0; round < this.maxToolRounds && toolCtx.executedCalls < this.maxToolCalls; round++) {
-      const res = await this.llm.chat({ messages, tools: this.tools.specsForChat?.(toolCtx) ?? this.tools.specs });
+      const res = await this.llm.chat({ messages, tools: this.tools.specsForChat?.(toolCtx) ?? this.tools.specsFor?.(toolCtx) ?? this.tools.specs });
       if (!res.toolCalls?.length) {
         reply = res.content || '';
         break;
@@ -241,6 +241,7 @@ export class Brain {
       requestText: userContent,
       recentUserRequests: ctx.turns.filter(t => t.role === 'user').slice(-4).map(t => t.content),
       evidence: [],
+      files: [],
       peerName: meta?.peerName || '',
       images: [],
       voices: [],
@@ -293,6 +294,7 @@ export class Brain {
       voices: toolCtx.voices,
       songs: toolCtx.songs,
       documents: toolCtx.documents,
+      files: toolCtx.files,
       videos: toolCtx.videos,
       evidence: toolCtx.evidence,
       toolCalls,

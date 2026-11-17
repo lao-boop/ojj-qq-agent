@@ -1,15 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadConfig, saveConfig, deepMerge, writePersona, readPersona, ensureDirs, DATA_DIR, ROOT, applyEnvOverrides } from './config.js';
+import { loadConfig, saveConfig, deepMerge, writePersona, readPersona, ensureDirs, DATA_DIR, ROOT, applyEnvOverrides, normalizeConfig } from './config.js';
 import { Logger } from './logger.js';
 import { OneBot } from './onebot.js';
 import { LLM, sleep } from './llm.js';
 import { ImageGen } from './image.js';
-import { peekPending, markDelivered, upsertContact } from './relay.js';
+import { peekPending, markDelivered, upsertContact, listContacts } from './relay.js';
 import { ActionJournal, selfContext } from './self-state.js';
 import { GameHub } from './games.js';
 import { logMc, formatMcDigest } from './mc-log.js';
+import { addDoc } from './doc-inbox.js';
 import { MC_KNOWLEDGE, mcStatusText } from './mc-knowledge.js';
 import { Minecraft } from './minecraft.js';
 import { logMedia, formatMediaDigest } from './media-log.js';
@@ -111,7 +112,8 @@ const minecraft = new Minecraft({
 });
 const actionJournal = new ActionJournal({ logger: logger.child('actions') });
 const memory = new Memory({ logger: logger.child('memory'), llm, cfg: cfg.chat });
-let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
+let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
 const brain = new Brain({
   cfg: cfg.chat,
   llm,
@@ -127,7 +129,6 @@ const brain = new Brain({
       runtime: { qzoneInitialized: Boolean(qzone), connected: Boolean(onebot?.status?.().connected) },
     }),
 });
-const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
 const sender = new ReplySender({ onebot, cfg: cfg.chat, logger: logger.child('reply') });
 
 const stats = { received: 0, replied: 0, ignored: 0, errors: 0, startedAt: Date.now() };
@@ -883,6 +884,59 @@ async function notifyOwnerRelay(item) {
   return true;
 }
 
+/** 白名单里的好友：文件对所有人互转（除了发送者自己）。 */
+function forwardTargets(fromUin) {
+  const allow = (cfg.access?.privateAllow || []).map(String).filter(Boolean);
+  const known = listContacts().map((c) => String(c.uin)).filter(Boolean);
+  const list = allow.length ? allow : known;
+  const out = new Set(list);
+  if (cfg.access?.ownerQQ) out.add(String(cfg.access.ownerQQ));
+  out.delete(String(fromUin));
+  return [...out].filter(Boolean);
+}
+
+/** 员工私发的文档，原样转发给白名单里的其他好友。 */
+async function forwardFileToPeers({ fromName, fromUin, filePath, fileName, size }) {
+  if (cfg.access?.forwardFiles === false) return 0;
+  const targets = forwardTargets(fromUin);
+  if (!targets.length) return 0;
+
+  if (size > 50 * 1024 * 1024) {
+    for (const target of targets) {
+      await onebot
+        .sendPrivate(Number(target), [
+          {
+            type: 'text',
+            data: { text: `${fromName || fromUin} 发来一份文件（${Math.round(size / 1024 / 1024)}MB），太大没转发，去他聊天里看吧。` },
+          },
+        ])
+        .catch(() => {});
+    }
+    return 0;
+  }
+
+  const buffer = fs.readFileSync(filePath);
+  let sent = 0;
+  for (const target of targets) {
+    try {
+      await onebot.sendPrivate(Number(target), [
+        { type: 'text', data: { text: `${fromName || fromUin} 发来一份文件：${fileName}` } },
+      ]);
+      await onebot.call(
+        'upload_private_file',
+        { user_id: Number(target), file: `base64://${buffer.toString('base64')}`, name: fileName },
+        180000,
+      );
+      sent++;
+      await new Promise((r) => setTimeout(r, 300));
+    } catch (err) {
+      logger.warn(`转发给 ${target} 失败：${err.message}`);
+    }
+  }
+  logger.info(`文件 ${fileName} 已转发给 ${sent}/${targets.length} 位好友（来自 ${fromName || fromUin}）`);
+  return sent;
+}
+
 /** 主人让带话时，立刻私聊发给指定好友。 */
 async function notifyFriend(uin, text) {
   await onebot.sendPrivate(Number(uin), [{ type: 'text', data: { text } }]);
@@ -1099,8 +1153,10 @@ async function onMessage(event) {
           chunks.push(`【对方发来的文件：${name}】（我读不出里面的文字：${r.error || '格式不支持'}）`);
         }
         // Word/PPT/Excel 里的图片也抽出来一起看
+        let docImages = 0;
         if (/\.(docx|pptx|xlsx)$/i.test(name)) {
           const pics = await fileReader.extractImages(r);
+          docImages = pics.length;
           if (pics.length) {
             effectiveImages = [...effectiveImages, ...pics.map((p) => ({ file: p }))];
             chunks.push(`（文件里还有 ${pics.length} 张图，已经一起看了）`);
@@ -1109,6 +1165,45 @@ async function onMessage(event) {
           logMedia({ chatKey: chat.key, direction: 'in', kind: 'doc', name, detail: `${r.chars || 0} 字 · ${pics.length} 图`, path: r.path, snippet: String(r.text || '').slice(0, 200) });
         } else {
           logMedia({ chatKey: chat.key, direction: 'in', kind: 'doc', name, detail: `${r.chars || 0} 字`, path: r.path, snippet: String(r.text || '').slice(0, 200) });
+        }
+        if (isPrivate && r.path && /\.(docx|pptx|xlsx|doc|ppt|xls|pdf|txt|md|csv)$/i.test(name)) {
+          const added = addDoc({
+            uin: String(event.user_id),
+            senderName,
+            chatKey: chat.key,
+            name,
+            filePath: r.path,
+            text: r.text,
+            chars: r.chars,
+            images: docImages,
+          });
+          if (added) chunks.push('（这份文件已经放进待汇总箱，老板要汇总时可以用上）');
+        }
+
+        // 自动转发默认关闭；只有把 access.forwardFiles 设为 true 才会对白名单广播
+        if (
+          cfg.access?.forwardFiles === true &&
+          isPrivate &&
+          /\.(docx|pptx|xlsx|doc|ppt|xls|pdf)$/i.test(name) &&
+          r.path &&
+          fs.existsSync(r.path)
+        ) {
+          try {
+            logger.info(`收到文档：${name}，准备转发（解析${r.ok ? '成功' : '失败'}）`);
+            const size = fs.statSync(r.path).size;
+            const sent = await forwardFileToPeers({
+              fromName: senderName,
+              fromUin: event.user_id,
+              filePath: r.path,
+              fileName: name,
+              size,
+            });
+            if (sent > 0) chunks.push(`（已转给 ${sent} 位好友）`);
+            else logger.info(`没有可转发的对象（白名单为空或只有发送者自己）`);
+          } catch (err) {
+            logger.warn(`转发文件失败：${err.message}`);
+            chunks.push('（文件收到，但转发失败了）');
+          }
         }
       } catch (err) {
         chunks.push(`【对方发来的文件：${name}】（读取失败：${err.message}）`);
@@ -1597,6 +1692,17 @@ async function onMessage(event) {
         }
       }
 
+      for (const f of result.files ?? []) {
+        logMedia({
+          chatKey: chat.key,
+          direction: 'out',
+          kind: 'doc',
+          name: f.name,
+          path: f.path,
+          detail: `${Math.round((f.size || 0) / 1024)}KB`,
+        });
+      }
+
       await sender.send(chat, result, { quoteId: isPrivate ? event.message_id : undefined });
       if (relayIds.length) markDelivered(relayIds);
       for (const v of result.videos ?? []) {
@@ -1608,6 +1714,31 @@ async function onMessage(event) {
       for (const job of result.songs ?? []) {
         trackJob(`写歌：${job.title || '新歌'}`, runSongJob(chat, job)).catch((err) => logger.warn(`歌曲任务异常：${err.message}`));
       }
+      // 兜底：老板要“汇总”，模型没调工具，就直接汇总收件箱
+      const ownerKey = `private:${cfg.access?.ownerQQ || ''}`;
+      if (
+        chat.key === ownerKey &&
+        !(result.files ?? []).length &&
+        /(汇总|整理|总结).{0,10}(文档|文件|材料|word|ppt|excel|东西)/i.test(userSay)
+      ) {
+        try {
+          const sctx = { chatKey: chat.key, files: [], images: [], voices: [], memory };
+          const msg = await tools.run('summarize_inbox', { hours: 72 }, sctx);
+          if (sctx.files.length) {
+            result = {
+              ...result,
+              files: sctx.files,
+              bubbles: ['汇总好了，发你了。', ...(result.bubbles ?? [])].slice(0, 3),
+            };
+            logger.info(`兜底汇总：${msg.slice(0, 60)}`);
+          } else {
+            logger.info(`兜底汇总未命中：${msg.slice(0, 60)}`);
+          }
+        } catch (err) {
+          logger.warn(`兜底汇总失败：${err.message}`);
+        }
+      }
+
       // 兜底：对方明确要 PPT/Word/Excel，模型却没调工具，就替它排队生成
       // 只是“提到/回忆某个文档”不算，别自作主张做文件
       const docKind = wantsDocCreation(userSay) ? wantDocType(userSay) : '';
@@ -1730,7 +1861,7 @@ onebot.on('ready', ({ selfId, nickname }) => {
         journal: actionJournal,
       });
       qzone.startAuto();
-      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
     } else {
       qzone.updateConfig(cfg.qzone);
     }
@@ -1752,7 +1883,7 @@ async function applyConfig(rawPatch) {
   if (patch?.image?.apiKey && patch.image.apiKey.includes('••••')) delete patch.image.apiKey;
   if (patch?.song?.token && patch.song.token.includes('••••')) delete patch.song.token;
 
-  const next = deepMerge(cfg, patch);
+  const next = normalizeConfig(deepMerge(cfg, patch));
   const oldWs = cfg.onebot.wsUrl;
   const oldToken = cfg.onebot.accessToken;
 
@@ -1781,7 +1912,7 @@ async function applyConfig(rawPatch) {
   brain.updateConfig(cfg.chat);
   memory.updateConfig(cfg.chat);
   sender.updateConfig(cfg.chat);
-  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
   brain.tools = tools;
   if (cfg.llm.maxTokens) llm.cfg.maxTokens = cfg.llm.maxTokens;
 

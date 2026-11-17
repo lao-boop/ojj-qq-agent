@@ -305,7 +305,8 @@ export class WeComSender {
     });
   }
 
-  async #uploadAndSend(client, chatId, filePath, name, type) {
+  async #uploadAndSend(client, chatId, filePath, name, type, validate = () => true) {
+    if (!validate()) throw new Error('附件发送权限或任务状态已变化');
     this.#checkClient(client);
     const info = await fs.stat(filePath);
     if (!info.isFile() || info.size === 0) throw new Error('企业微信附件为空或不是文件');
@@ -316,16 +317,18 @@ export class WeComSender {
     const media = await client.uploadMedia(buffer, { type, filename });
     if (!media?.media_id) throw new Error('企业微信上传未返回 media_id');
     this.#checkClient(client);
+    if (!validate()) throw new Error('附件发送权限或任务状态已变化');
     await client.sendMediaMessage(chatId, type, media.media_id, type === 'video' ? { title: filename } : undefined);
     return media;
   }
 
-  async sendFile(frame, filePath, name) {
-    return this.#queue(frame, (client, chatId) => this.#uploadAndSend(client, chatId, filePath, name, 'file'));
+  async sendFile(frame, filePath, name, {validate} = {}) {
+    return this.#queue(frame, (client, chatId) => this.#uploadAndSend(client, chatId, filePath, name, 'file', validate));
   }
 
-  async sendResult(frame, result = {}, { streamId, proactive = false, deadlineAt } = {}) {
+  async sendResult(frame, result = {}, { streamId, proactive = false, deadlineAt, validate = () => true } = {}) {
     return this.#queue(frame, async (client, chatId) => {
+      if (!validate()) throw new Error('回复权限已变化');
       // A preceding upload may have consumed the callback's remaining lifetime.
       const activeDelivery = proactive || (Number.isFinite(deadlineAt) && Date.now() >= deadlineAt);
       const text = (result.bubbles || []).filter(Boolean).join('\n\n');
@@ -358,6 +361,9 @@ export class WeComSender {
       for (const item of result.videos || []) {
         const type = path.extname(item.file || '').toLowerCase() === '.mp4' ? 'video' : 'file';
         await this.#uploadAndSend(client, chatId, item.file, item.name, type);
+      }
+      for (const item of result.files || []) {
+        await this.#uploadAndSend(client, chatId, item.path, item.name, 'file', validate);
       }
     });
   }

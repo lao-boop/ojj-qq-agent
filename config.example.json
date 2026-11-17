@@ -57,7 +57,9 @@
     "autoAcceptFriend": true,
     "autoAcceptGroupInvite": false,
     "greeting": "嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。",
-    "ownerQQ": "123456789"
+    "ownerQQ": "123456789",
+    "forwardToOwner": true,
+    "forwardFiles": false
   },
   "image": {
     "enabled": true,
@@ -160,9 +162,7 @@
   },
   "relay": {
     "enabled": true,
-    "allow": [
-      "2074602296"
-    ],
+    "allow": [],
     "dailyLimit": 5,
     "maxLen": 200
   },

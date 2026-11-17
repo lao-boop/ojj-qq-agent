@@ -197,7 +197,7 @@ export class WeComSecretary {
   wrapTools(base) {
     const self = this;
     return { ...base,
-      specsForChat(ctx) { return [...base.specs, ...(self.isOwner(ctx.chatKey) ? SPECS : [])]; },
+      specsForChat(ctx) { return [...(base.specsForChat?.(ctx) ?? base.specsFor?.(ctx) ?? base.specs), ...(self.isOwner(ctx.chatKey) ? SPECS : [])]; },
       async run(name, args, ctx) {
         if (!SPECS.some(s => s.function.name === name)) return base.run(name, args, ctx);
         if (!self.isOwner(ctx.chatKey)) return '无权查询其他成员消息。';

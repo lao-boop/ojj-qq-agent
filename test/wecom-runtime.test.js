@@ -238,3 +238,21 @@ test('speaker identity and both times reach the model without trusting claimed n
   const result=x.sent.filter(s=>s.type==='result').at(-1).result;
   assert.match(result.bubbles[0],/张三.*001-alice/);assert.match(result.bubbles[0],/平台未提供/);
 });
+
+test('private attachments enter the inbox with resolved identity; quoted files are not new submissions',async t=>{
+ const captured=[];
+ const x=setup(t,{documents:{capture(...args){captured.push(args);}},contacts:{peek(){return {};},async resolve(){return {name:'小林',source:'管理员名单'};}}});
+ x.transport.client.downloadFile=async()=>({buffer:Buffer.from('fixture'),filename:'预算.docx'});
+ await x.runtime.handle(frame('inbox-1',{msgtype:'file',file:{url:'https://example.invalid/file',aeskey:'test'},quote:{msgtype:'file',file:{url:'https://example.invalid/quote',aeskey:'test'}}}));
+ assert.equal(captured.length,1);assert.equal(captured[0][0].identity.name,'小林');assert.equal(captured[0][1].length,1);assert.equal(captured[0][1][0].text,'文档正文');assert.equal(captured[0][2],'inbox-1');
+});
+test('inbox summary marks processing only after file delivery succeeds',async t=>{
+ let marks=0,builds=0;
+ const documents={generation:1,isOwner:()=>true,capture(){},async buildSummary(){builds++;return {file:'/generated/summary.docx',name:'summary.docx',summaryIds:['d1']};},delivered(){marks++;},rememberGenerated(){}};
+ const x=setup(t,{documents});x.brain.respond=async()=>({bubbles:['开始汇总'],documents:[{kind:'inbox',docIds:['d1'],accessGeneration:1}]});
+ x.sender.sendFile=async()=>{throw new Error('delivery failed');};
+ await x.runtime.handle(frame('summary-fail'));while(x.runtime.jobs.size)await pause(5);
+ assert.equal(builds,1);assert.equal(marks,0);
+ x.sender.sendFile=async()=>{};await x.runtime.handle(frame('summary-ok'));while(x.runtime.jobs.size)await pause(5);
+ assert.equal(builds,2);assert.equal(marks,1);
+});
