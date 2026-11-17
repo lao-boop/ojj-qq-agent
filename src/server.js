@@ -105,8 +105,13 @@ export class ConsoleServer {
           const body = await readJson(req);
           const text = String(body.text ?? '').trim();
           if (!text) return sendJson(res, 400, { ok: false, error: '内容为空' });
-          const result = await this.hooks.testChat(text);
-          return sendJson(res, 200, { ok: true, ...result });
+          try {
+            const result = await this.hooks.testChat(text);
+            return sendJson(res, 200, { ok: true, ...result });
+          } catch (err) {
+            this.logger.error(`控制台测试失败：${err.stack || err.message}`);
+            return sendJson(res, 500, { ok: false, error: err.message });
+          }
         }
         case 'GET /api/logs':
           return sendJson(res, 200, { ok: true, lines: this.hooks.logs(Number(url.searchParams.get('limit') ?? 200)) });

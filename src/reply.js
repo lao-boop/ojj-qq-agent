@@ -32,8 +32,8 @@ export class ReplySender {
   }
 
   async #sendNow(chat, result, quoteId) {
-    const { bubbles = [], images = [], voices = [] } = result;
-    if (!bubbles.length && !images.length && !voices.length) return;
+    const { bubbles = [], images = [], voices = [], files = [] } = result;
+    if (!bubbles.length && !images.length && !voices.length && !files.length) return;
 
     await sleep(rand(this.cfg.firstDelayMs));
 
@@ -66,6 +66,15 @@ export class ReplySender {
         await sleep(rand([300, 900]));
       } catch (err) {
         this.logger.warn(`发送图片失败：${err.message}`);
+      }
+    }
+
+    for (const f of files) {
+      try {
+        await this.sendFile(chat, f.path, f.name, '');
+        await sleep(rand([500, 1100]));
+      } catch (err) {
+        this.logger.warn(`发送文件失败：${err.message}`);
       }
     }
   }

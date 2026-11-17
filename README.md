@@ -336,6 +336,41 @@ CONSOLE_TOKEN=...
 
 > 服务端建议 `online-mode=false`（离线模式）并只监听 `127.0.0.1`，不要把 25565 暴露到公网。
 
+## 文件转发与汇总
+
+白名单好友私聊发来的 Word / PPT / Excel / PDF，可以原样转发给其他人，也可以攒起来让老板一键汇总。
+
+**转发（按指令）**
+
+```
+（发一份 25MB 的 PPT）
+你：传给 TDHD·R
+她：已把《xxx.pptx》转给 TDHD·R（2074602296）。
+```
+
+- 支持 100MB 以内的文件
+- 文件先下载到 `data/files`，再用 `upload_private_file` 原样发出
+- 只有 `ownerQQ` 能下转发指令
+- 自动广播默认关闭；`access.forwardFiles: true` 才会收到就转发
+
+**汇总（老板）**
+
+```
+你：把大家发的文档汇总一下
+她：汇总好了，发你了。（附一份 Word）
+```
+
+- 收件箱：`data/doc-inbox.json`
+- 每份文档压成 3~5 条要点，再写一段总体概览
+- 生成 Word 发回，已汇总的不会重复
+
+```json
+"access": {
+  "privateAllow": ["123456789", "987654321"],
+  "forwardFiles": false
+}
+```
+
 ## 常见问题
 
 **控制台显示「未连接」**

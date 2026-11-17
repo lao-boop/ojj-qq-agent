@@ -21,9 +21,9 @@ export function buildIndex(turns) {
   for (const d of docs) {
     for (const tk of new Set(d)) df.set(tk, (df.get(tk) || 0) + 1);
   }
-  const n = docs.length || 1;
+  const count = docs.length || 1;
   const idf = new Map();
-  for (const [tk, c] of df) idf.set(tk, Math.log((n + 1) / (c + 0.5)) + 1);
+  for (const [tk, c] of df) idf.set(tk, Math.log((count + 1) / (c + 0.5)) + 1);
   const vectors = docs.map((d) => {
     const tf = new Map();
     for (const tk of d) tf.set(tk, (tf.get(tk) || 0) + 1);
@@ -38,7 +38,7 @@ export function buildIndex(turns) {
     for (const [tk, w] of vec) vec.set(tk, w / norm);
     return vec;
   });
-  return { idf, vectors, n };
+  return { idf, vectors, n: docs.length };
 }
 
 /** 返回每一轮的余弦相似度（0~1）。 */

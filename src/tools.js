@@ -4,6 +4,7 @@ import { DATA_DIR } from './config.js';
 import { renderHum } from './music.js';
 import { webSearch } from './websearch.js';
 import { lookupPart } from './parts.js';
+import { listDocs, markSummarized, latestDoc } from './doc-inbox.js';
 import { addGlobalFact, isOwner, loadGlobal } from './global.js';
 import { addRelay, canRelay, findContact, markDelivered, peekPending } from './relay.js';
 import { formatMediaList, searchMedia } from './media-log.js';
@@ -263,6 +264,68 @@ const SPECS = {
           columns: { type: 'number', description: '列数，默认 5，范围 2~10' },
         },
         required: ['topic'],
+      },
+    },
+  },
+  send_document: {
+    type: 'function',
+    function: {
+      name: 'send_document',
+      description:
+        '把资料库里已有的 Word / PPT / Excel / PDF 发给对方（按文件名关键词查找）。' +
+        '对方说“把之前那个文档发我”“把 XX 的 PPT 发过来”时用。只有主人能用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: { type: 'string', description: '文件名关键词，比如“朱棣”“周报”“小鲸鱼”' },
+        },
+        required: ['keyword'],
+      },
+    },
+  },
+  forward_file: {
+    type: 'function',
+    function: {
+      name: 'forward_file',
+      description:
+        '把刚收到的文件（Word/PPT/Excel/PDF）原样转发给白名单里的某个好友。' +
+        '对方说“把这个发给 XX”“转给 TDHD”“传给老王”“发给他”时用。只有主人能用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: { type: 'string', description: '好友昵称或 QQ 号' },
+          file: { type: 'string', description: '文件名关键词；留空表示最近收到的那份' },
+        },
+        required: ['to'],
+      },
+    },
+  },
+  inbox_list: {
+    type: 'function',
+    function: {
+      name: 'inbox_list',
+      description: '查看员工最近私发来的、还没汇总的 Word/PPT/Excel 文档列表。只有主人能用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          hours: { type: 'number', description: '看最近多少小时，默认 48' },
+        },
+      },
+    },
+  },
+  summarize_inbox: {
+    type: 'function',
+    function: {
+      name: 'summarize_inbox',
+      description:
+        '把员工私发来的 Word/PPT/Excel 汇总成一份 Word（每份文档 3~5 条要点 + 总体概览），' +
+        '然后发给主人。老板说“把大家发的文档汇总一下”“整理成一份给我”时用。只有主人能用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          hours: { type: 'number', description: '汇总最近多少小时，默认 48' },
+          title: { type: 'string', description: '汇总文档标题，可留空' },
+        },
       },
     },
   },
@@ -620,7 +683,7 @@ const QUALITY_SUFFIX =
  * 组装可用工具。
  * ctx: { chatKey, images: [], voices: [], memory }
  */
-export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, relayNotify, friendNotify, jobTracker, logger }) {
+export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify, friendNotify, jobTracker, logger }) {
   const stickers = scanStickers();
   const stickerCats = Object.keys(stickers);
   const specs = [SPECS.draw_image, SPECS.get_time, SPECS.remember, SPECS.sing, SPECS.search_history, SPECS.search_web];
@@ -630,6 +693,10 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
   if (office) specs.push(SPECS.make_ppt, SPECS.make_docx, SPECS.make_excel);
   specs.push(
     SPECS.lookup_part,
+    SPECS.send_document,
+    SPECS.forward_file,
+    SPECS.inbox_list,
+    SPECS.summarize_inbox,
     SPECS.remember_global,
     SPECS.relay_message,
     SPECS.relay_list,
@@ -756,6 +823,196 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           const columns = Math.min(Math.max(Number(args.columns) || 5, 2), 10);
           ctx.documents.push({ kind: 'excel', topic, rows, columns });
           return `表格开始做了（约 ${rows} 行 × ${columns} 列），半分钟就好。`;
+        }
+        case 'forward_file': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          if (!isOwner(m?.[1], cfg)) return '只有主人能让我转发文件。';
+          if (!onebot) return '发送通道没接上。';
+          const to = String(args.to || '').trim();
+          if (!to) return '要转给谁？给我昵称或 QQ 号。';
+
+          const contact = findContact(to);
+          if (!contact) return `没找到「${to}」。让他先给我发条消息，或者直接把 QQ 号给我。`;
+
+          const allow = (cfg.access?.privateAllow || []).map(String).filter(Boolean);
+          if (allow.length && !allow.includes(String(contact.uin))) {
+            return `「${contact.name}」不在白名单里，不能转发。`;
+          }
+
+          let doc = latestDoc({ chatKey: ctx.chatKey, keyword: String(args.file || '').trim() });
+          if (!doc && args.file) doc = latestDoc({ keyword: String(args.file).trim() });
+
+          // 兜底：收件箱里没有，就直接在 data/files、data/documents 里按文件名找
+          if (!doc) {
+            const kw = String(args.file || '').trim().toLowerCase();
+            const dirs = [path.join(DATA_DIR, 'files'), path.join(DATA_DIR, 'documents')];
+            const exts = /\.(docx|pptx|xlsx|pdf|doc|ppt|xls)$/i;
+            const cands = [];
+            for (const dir of dirs) {
+              let names = [];
+              try {
+                names = fs.readdirSync(dir);
+              } catch {
+                continue;
+              }
+              for (const name of names) {
+                if (!exts.test(name)) continue;
+                if (kw && !name.toLowerCase().includes(kw)) continue;
+                const full = path.join(dir, name);
+                try {
+                  const st = fs.statSync(full);
+                  if (st.isFile()) cands.push({ path: full, name, mtime: st.mtimeMs });
+                } catch {
+                  /* skip */
+                }
+              }
+            }
+            cands.sort((a, b) => b.mtime - a.mtime);
+            if (cands[0]) doc = { path: cands[0].path, name: cands[0].name };
+          }
+
+          if (!doc) return '最近没收到可以转发的文件。先把文件发我，我再转。';
+
+          try {
+            const buffer = fs.readFileSync(doc.path);
+            await onebot.call(
+              'upload_private_file',
+              { user_id: Number(contact.uin), file: `base64://${buffer.toString('base64')}`, name: doc.name },
+              180000,
+            );
+            await onebot.sendPrivate(Number(contact.uin), [
+              { type: 'text', data: { text: `${ctx.peerName || '有人'} 转发：${doc.name}` } },
+            ]);
+            return `已把《${doc.name}》转给 ${contact.name}（${contact.uin}）。`;
+          } catch (err) {
+            return `转发失败：${err.message}`;
+          }
+        }
+        case 'inbox_list': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          if (!isOwner(m?.[1], cfg)) return '只有主人能看汇总箱。';
+          const hours = Math.min(Math.max(Number(args.hours) || 48, 1), 720);
+          const docs = listDocs({ hours });
+          if (!docs.length) return `最近 ${hours} 小时没有待汇总的文档。`;
+          const lines = docs.map((d) => {
+            const t = new Date(d.at).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            return `- ${t}｜${d.senderName || d.uin}｜${d.name}｜${d.chars} 字`;
+          });
+          return `待汇总文档（${docs.length} 份）：\n${lines.join('\n')}\n回复时说清有几份、谁发的，不要报路径。`;
+        }
+        case 'summarize_inbox': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          if (!isOwner(m?.[1], cfg)) return '只有主人能让我汇总文档。';
+          if (!office) return '文档功能没开。';
+          const hours = Math.min(Math.max(Number(args.hours) || 48, 1), 720);
+          const docs = listDocs({ hours });
+          if (!docs.length) return `最近 ${hours} 小时没有待汇总的文档。`;
+
+          const formatDoc = async (d) => {
+            const text = String(d.text || '').slice(0, 3000);
+            if (!text) return [`（这份文档没有抽出文字，文件名：${d.name}）`];
+            try {
+              const res = await llm.chat({
+                model: cfg.office?.model || 'deepseek-flash',
+                messages: [
+                  {
+                    role: 'system',
+                    content:
+                      '把这份文档压缩成 3~5 条要点，中文，每条一行，直接输出要点，不要开场白。' +
+                      '保留数字、结论、负责人、时间；不要编造文档里没有的内容。',
+                  },
+                  { role: 'user', content: `文件名：${d.name}\n\n${text}` },
+                ],
+                maxTokens: 500,
+                temperature: 0.3,
+              });
+              const bullets = String(res.content || '')
+                .split(/\r?\n/)
+                .map((s) => s.replace(/^[-*·\d.、\s]+/, '').trim())
+                .filter(Boolean)
+                .slice(0, 5);
+              return bullets.length ? bullets : [text.slice(0, 80)];
+            } catch (err) {
+              logger?.warn?.(`汇总 ${d.name} 失败：${err.message}`);
+              return [text.slice(0, 80)];
+            }
+          };
+
+          const sections = [];
+          const digest = [];
+          for (const d of docs) {
+            const bullets = await formatDoc(d);
+            digest.push(`${d.senderName || d.uin}《${d.name}》：${bullets.join('；')}`);
+            sections.push({
+              heading: `${d.name}（${d.senderName || d.uin}）`,
+              bullets,
+            });
+          }
+
+          let intro = `共收到 ${docs.length} 份文档，来自 ${new Set(docs.map((d) => d.uin)).size} 位同事。`;
+          try {
+            const res = await llm.chat({
+              model: cfg.office?.model || 'deepseek-flash',
+              messages: [
+                { role: 'system', content: '用 3~4 句中文概括这批文档的整体情况：谁交了什么、主要进展、需要老板关注的点。不要编造。' },
+                { role: 'user', content: digest.join('\n').slice(0, 4000) },
+              ],
+              maxTokens: 400,
+              temperature: 0.4,
+            });
+            if (res.content?.trim()) intro = res.content.trim();
+          } catch {
+            /* 用默认开场 */
+          }
+
+          const title = String(args.title || `文档汇总 ${new Date().toLocaleDateString('zh-CN')}`).slice(0, 50);
+          const built = await office.makeSummaryDocx({
+            title,
+            subtitle: `共 ${docs.length} 份 · 生成于 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+            sections: [{ heading: '总体概览', paragraphs: [intro] }, ...sections],
+            theme: cfg.office?.theme || 'business',
+          });
+
+          ctx.files.push({ path: built.file, name: built.name, size: fs.statSync(built.file).size });
+          markSummarized(docs.map((d) => d.id));
+          return `汇总好了：${docs.length} 份文档，已生成《${built.name}》并加入待发送。回复里一句话说明即可。`;
+        }
+        case 'send_document': {
+          const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
+          if (!isOwner(m?.[1], cfg)) return '只有主人能让我发文件。';
+          const kw = String(args.keyword || '').trim().toLowerCase();
+          if (!kw) return '要发哪个文件？给我一个文件名关键词。';
+
+          const dirs = [path.join(DATA_DIR, 'documents'), path.join(DATA_DIR, 'files')];
+          const exts = new Set(['.docx', '.pptx', '.xlsx', '.doc', '.ppt', '.xls', '.pdf']);
+          const found = [];
+          for (const dir of dirs) {
+            let names = [];
+            try {
+              names = fs.readdirSync(dir);
+            } catch {
+              continue;
+            }
+            for (const name of names) {
+              const ext = path.extname(name).toLowerCase();
+              if (!exts.has(ext)) continue;
+              if (!name.toLowerCase().includes(kw)) continue;
+              const full = path.join(dir, name);
+              try {
+                const st = fs.statSync(full);
+                if (!st.isFile()) continue;
+                found.push({ path: full, name, size: st.size, mtime: st.mtimeMs });
+              } catch {
+                /* 跳过读不到的文件 */
+              }
+            }
+          }
+
+          if (!found.length) return `资料库里没找到文件名包含「${args.keyword}」的文档。`;
+          found.sort((a, b) => b.mtime - a.mtime);
+          const pickFile = found[0];
+          ctx.files.push({ path: pickFile.path, name: pickFile.name, size: pickFile.size });
+          return `已加入待发送：${pickFile.name}（${Math.round(pickFile.size / 1024)}KB）。回复里一句话带过即可，不要报路径。`;
         }
         case 'lookup_part': {
           const q = String(args.query || '').trim();
@@ -1121,7 +1378,62 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     }
   }
 
-  return { specs, run, stickerCats, imageEnabled: Boolean(cfg.image.enabled), ttsEnabled: Boolean(cfg.tts?.enabled) };
+  const nameOf = (s) => s.function?.name;
+  const pick = (...names) => specs.filter((s) => names.includes(nameOf(s)));
+  const baseSpecs = pick(
+    'draw_image',
+    'get_time',
+    'remember',
+    'send_voice',
+    'sing',
+    'sing_song',
+    'search_history',
+    'search_web',
+    'find_media',
+    'remember_global',
+  );
+  const docSpecs = pick('make_ppt', 'make_docx', 'make_excel');
+  const mcSpecs = specs.filter((s) => String(nameOf(s)).startsWith('mc_'));
+  const relaySpecs = pick('relay_message', 'relay_list', 'relay_to_friend');
+  const videoSpecs = pick('fetch_video');
+  const qzoneSpecs = pick('post_qzone');
+  const partSpecs = pick('lookup_part');
+  const stickerSpecs = pick('send_sticker');
+
+  /**
+   * 按当前这句话挑工具，避免每轮都把 20 多个 MC 工具和文档工具塞进请求。
+   * 工具定义越少，提示词越短，推理越快。
+   */
+  function specsFor({ text = '' } = {}) {
+    const t = String(text || '');
+    const out = [...baseSpecs, ...relaySpecs, ...qzoneSpecs];
+    if (/(ppt|幻灯片|文档|word|excel|表格|汇报|报告|作业|论文)/i.test(t)) out.push(...docSpecs);
+    const mcHint =
+      (minecraft && minecraft.online) ||
+      /(我的世界|minecraft|\bmc\b|游戏|服务器|挖矿|挖方块|合成|打怪|僵尸|苦力怕|骷髅|床|箱子|铁矿|石头|木头|跟着我)/i.test(t);
+    if (mcHint) out.push(...mcSpecs);
+    if (/(视频|b站|哔哩|短片)/i.test(t)) out.push(...videoSpecs);
+    if (/(配件|零件|车架|vin|型号|oem|故障码)/i.test(t)) out.push(...partSpecs);
+    if (stickerCats.length) out.push(...stickerSpecs);
+    const seen = new Set();
+    const picked = out.filter((s) => {
+      const n = nameOf(s);
+      if (!n || seen.has(n)) return false;
+      seen.add(n);
+      return true;
+    });
+    logger?.debug?.(`[tools] 本轮工具 ${picked.length} 个`);
+    return picked;
+  }
+
+  return {
+    specs,
+    specsFor,
+    run,
+    stickerCats,
+    imageEnabled: Boolean(cfg.image.enabled),
+    ttsEnabled: Boolean(cfg.tts?.enabled),
+  };
 }
 
 /** 中文提示词先翻成英文 tag，出图质量会好很多。用便宜的 flash 模型，不占主模型额度。 */

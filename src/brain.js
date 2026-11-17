@@ -153,10 +153,10 @@ export class Brain {
     return captions.length ? `[对方发来的图片] ${captions.join(' / ')}` : '';
   }
 
-  async #runLoop(messages, toolCtx, onProgress, countTool) {
+  async #runLoop(messages, toolCtx, onProgress, countTool, toolSpecs) {
     let reply = '';
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const res = await this.llm.chat({ messages, tools: this.tools.specs });
+      const res = await this.llm.chat({ messages, tools: toolSpecs });
       if (!res.toolCalls?.length) {
         reply = res.content || '';
         break;
@@ -218,11 +218,13 @@ export class Brain {
       songs: [],
       documents: [],
       videos: [],
+      files: [],
       memory: this.memory,
     };
     let toolCalls = 0;
+    const toolSpecs = this.tools.specsFor?.({ text: userContent }) || this.tools.specs;
 
-    const first = await this.#runLoop(messages, toolCtx, onProgress, () => toolCalls++);
+    const first = await this.#runLoop(messages, toolCtx, onProgress, () => toolCalls++, toolSpecs);
     let reply = first.reply;
 
     // 兜底：模型嘴上说“画好了”却没真的调工具，补一次强制画图
@@ -239,7 +241,7 @@ export class Brain {
           '[系统提示] 你上一条说图已经画好了，但并没有真的调用 draw_image，对方其实什么都没收到。' +
           '现在请调用 draw_image 把图补上；如果确实画不了，就如实说明没画成。',
       });
-      const second = await this.#runLoop(messages, toolCtx, onProgress, () => toolCalls++);
+      const second = await this.#runLoop(messages, toolCtx, onProgress, () => toolCalls++, toolSpecs);
       if (second.reply) reply = second.reply;
     }
 
@@ -254,7 +256,7 @@ export class Brain {
     this.memory.maybeSummarize(chatKey).catch(() => {});
 
     this.logger.info(
-      `回复 ${chatKey}：${bubbles.length} 条 / ${reply.length} 字 / 工具 ${toolCalls} 次 / ${Date.now() - started}ms`,
+      `回复 ${chatKey}：${bubbles.length} 条 / ${reply.length} 字 / 工具 ${toolCalls} 次 / 定义 ${toolSpecs.length} 个 / ${Date.now() - started}ms`,
     );
 
     return {

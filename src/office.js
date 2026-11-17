@@ -193,6 +193,22 @@ export class Office {
     return file;
   }
 
+  /** 用现成的章节内容生成 Word（不经过大纲模型），用于汇总材料。 */
+  async makeSummaryDocx({ title, subtitle = '', sections = [], theme = 'business' } = {}) {
+    const cleanTitle = String(title || '汇总材料').slice(0, 60);
+    const spec = {
+      kind: 'docx',
+      theme,
+      title: cleanTitle,
+      subtitle,
+      author: '小鲸鱼',
+      sections: (sections || []).slice(0, 40),
+    };
+    const file = await this.#build(spec);
+    const name = `${cleanTitle}.docx`.replace(/[\\/:*?"<>|]/g, '_').slice(0, 100);
+    return { file, name, title: cleanTitle, sections: spec.sections.length };
+  }
+
   /** 生成 PPT，返回 { file, name, title, pages }。 */
   async makePpt({ topic, pages = 12, theme = 'history', withImages = true, signal } = {}) {
     this._signal = signal || null;

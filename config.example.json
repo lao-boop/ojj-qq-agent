@@ -29,6 +29,9 @@
       1200
     ],
     "historyTurns": 60,
+    "storeAllTurns": true,
+    "retrieval": true,
+    "recallLimit": 10,
     "summaryTriggerChars": 9000,
     "group": {
       "replyOnAt": true,
@@ -42,26 +45,25 @@
     },
     "rateLimit": {
       "perChatPerMinute": 12
-    },
-    "storeAllTurns": true,
-    "retrieval": true,
-    "recallLimit": 10
+    }
   },
   "access": {
     "mode": "whitelist",
     "adminQQ": [],
+    "ownerQQ": "123456789",
+    "forwardToOwner": true,
     "privateAllow": [],
     "groupAllow": [],
-    "allowAllWhenEmpty": true,
+    "allowAllWhenEmpty": false,
     "autoAcceptFriend": true,
     "autoAcceptGroupInvite": false,
     "greeting": "嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。",
-    "ownerQQ": "123456789"
+    "forwardFiles": false
   },
   "image": {
     "enabled": true,
     "provider": "replicate",
-    "baseUrl": "https://image.pollinations.ai/prompt/",
+    "baseUrl": "",
     "apiBase": "",
     "apiKey": "",
     "model": "black-forest-labs/flux-1.1-pro",
@@ -123,6 +125,29 @@
   "media": {
     "ffmpegPath": ""
   },
+  "mc": {
+    "username": "Xiaojingyu",
+    "host": "127.0.0.1",
+    "port": 25565,
+    "version": "26.1",
+    "ownerName": "YourName"
+  },
+  "office": {
+    "pythonPath": "",
+    "theme": "history",
+    "model": "deepseek-flash",
+    "maxImages": 8,
+    "imagesPerDeck": 0,
+    "imageDelayMs": 12000
+  },
+  "relay": {
+    "enabled": true,
+    "allow": [
+      "2074602296"
+    ],
+    "dailyLimit": 5,
+    "maxLen": 200
+  },
   "library": {
     "enabled": true,
     "dir": "D:\\\\Music",
@@ -149,27 +174,5 @@
     "replyComments": true,
     "pollMinutes": 15,
     "ugcRight": 1
-  },
-  "office": {
-    "pythonPath": "",
-    "theme": "history",
-    "model": "deepseek-flash",
-    "imagesPerDeck": 0,
-    "imageDelayMs": 12000
-  },
-  "relay": {
-    "enabled": true,
-    "allow": [
-      "2074602296"
-    ],
-    "dailyLimit": 5,
-    "maxLen": 200
-  },
-  "mc": {
-    "username": "Xiaojingyu",
-    "host": "127.0.0.1",
-    "port": 25565,
-    "version": "26.1",
-    "ownerName": "YourName"
   }
 }

@@ -81,6 +81,7 @@ export const DEFAULTS = {
     mode: 'whitelist',
     adminQQ: [],
     ownerQQ: '',
+    forwardToOwner: true,
     privateAllow: [],
     groupAllow: [],
     allowAllWhenEmpty: false,
@@ -216,6 +217,23 @@ export function loadConfig() {
     }
   }
   const cfg = deepMerge(DEFAULTS, fileCfg);
+  // 防止控制台保存空值/0 后关键功能静默失效
+  if (!cfg.onebot?.wsUrl) cfg.onebot.wsUrl = 'ws://127.0.0.1:3001';
+  if (!cfg.console?.host) cfg.console.host = '127.0.0.1';
+  if (!cfg.llm?.baseUrl) cfg.llm.baseUrl = 'https://api.deepseek.com/v1';
+  if (!cfg.llm?.model) cfg.llm.model = 'deepseek-v4-pro';
+  if (!cfg.llm?.visionModel) cfg.llm.visionModel = 'deepseek-flash';
+  if (!cfg.llm?.helperModel) cfg.llm.helperModel = 'deepseek-flash';
+  if (!(cfg.llm?.temperature > 0)) cfg.llm.temperature = 1.15;
+  if (!(cfg.llm?.maxTokens > 0)) cfg.llm.maxTokens = 900;
+  if (!(cfg.chat?.maxBubbles > 0)) cfg.chat.maxBubbles = 3;
+  if (!cfg.chat?.group?.wakeWords?.length) cfg.chat.group.wakeWords = ['小鲸鱼', '鲸鱼', '小鱼'];
+  if (!cfg.tts?.voice) cfg.tts.voice = 'zh-CN-XiaoyiNeural';
+  if (!cfg.image?.provider) cfg.image.provider = 'replicate';
+  if (!cfg.access?.privateAllow?.length && cfg.access?.allowAllWhenEmpty === false) {
+    // 白名单为空又关闭了全放行，会导致谁都不回：自动放行，避免“活着但不说话”
+    cfg.access.allowAllWhenEmpty = true;
+  }
   applyEnvOverrides(cfg);
   if (!fs.existsSync(CONFIG_PATH)) saveConfig(cfg);
   return cfg;
