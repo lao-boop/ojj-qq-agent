@@ -23,7 +23,7 @@
     },
     {
       "path": "src/wecom-main.js",
-      "sha256": "df91d0a89f32b231a50507e83209331c1a497666677e5de85092f040d92acbf9"
+      "sha256": "af7370427ce4cc41463f7078ba1360a9a4080c625c7ff7dbf2404db2a4253b00"
     },
     {
       "path": "src/wecom-runtime.js",
@@ -43,7 +43,7 @@
     },
     {
       "path": "docs/WECOM.md",
-      "sha256": "bd4e436efca69db81e37845d73426a2c1ec4f1cd0eedcc797bb8b1e5bb1e6074"
+      "sha256": "594f12f3e1069b663f69b38443e40f64e4e38f50cd58d3976719e301cfbedc24"
     },
     {
       "path": "src/office-plan.js",
@@ -63,7 +63,7 @@
     },
     {
       "path": "src/wecom-briefing.js",
-      "sha256": "daa72c8ec4ecc25372c718a206b7b807db385f87d462c73e048646532c9edcee"
+      "sha256": "70365a459f088f31cc10ed6e5a06151b64495f5067a1999525076915248e1d91"
     },
     {
       "path": "src/llm.js",
@@ -92,6 +92,10 @@
     {
       "path": "src/wecom.js",
       "sha256": "005416185a4e50a68b16c98e161eab8549fa87eca2e6cf8be530174720a0c73e"
+    },
+    {
+      "path": "src/wecom-personality.js",
+      "sha256": "2d029dd74a081fdd02f7d80b8ca29f5b06bb2d19a130c071c278a8de5213b4c2"
     }
   ]
 }
