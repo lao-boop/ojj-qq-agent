@@ -72,6 +72,7 @@ const server = http.createServer(async (req,res) => {
 });
 const port = Number(process.env.PORT || 3020);
 server.listen(port,process.env.HOST || '127.0.0.1',() => {
-  console.log('问卷 http://127.0.0.1:'+port+'   后台 http://127.0.0.1:'+port+'/admin');
+  const actualPort = server.address().port;
+  console.log('问卷 http://127.0.0.1:'+actualPort+'   后台 http://127.0.0.1:'+actualPort+'/admin');
   console.log('管理口令保存在 '+keyFile);
 });
