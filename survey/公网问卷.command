@@ -48,9 +48,10 @@ for n in {1..40}; do
     {
       for (i=1; i<=NF; i++) {
         url=$i
+        gsub(/\033\[[0-9;]*m/, "", url)
         sub(/\r$/, "", url)
         sub(/\/$/, "", url)
-        if (url ~ /^https:\/\/[A-Za-z0-9-]+\.lhr\.life$/ ||
+        if (url ~ /^https:\/\/[A-Za-z0-9-]+\.(app\.)?lhr\.life$/ ||
             (tolower($0) ~ /tunneled|forwarding/ && url ~ /^https:\/\/[A-Za-z0-9-]+\.localhost\.run$/)) {
           if (url !~ /^https:\/\/(admin|www|docs)\.localhost\.run$/) print url
         }
@@ -59,7 +60,7 @@ for n in {1..40}; do
   [ -n "$public_url" ] && break
   sleep 1
 done
-[ -n "$public_url" ] || fail '未取得公网链接。这条网络可能无法连接 localhost.run 的 SSH 服务。可以换手机热点后重试。'
+[ -n "$public_url" ] || fail '未识别到分配的问卷网址。请保留窗口，检查中转服务是否返回了带 tunneled 的一行。'
 echo '正在检查公网链接能否读到这份问卷…'
 verified=false
 for n in {1..3}; do
