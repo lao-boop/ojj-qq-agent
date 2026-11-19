@@ -9,3 +9,5 @@
 答卷保存在网站目录 data/survey.sqlite，管理口令保存在 data/admin-key.txt。重启时继续使用同一个目录。备份时先停止服务，再复制整个 data 文件夹。重新解压到新目录会新建空数据库。
 
 服务无第三方依赖。手动启动可在该目录执行 node server.mjs（默认只在本机 3020 端口监听）。可用 HOST、PORT、SURVEY_DATA 分别指定监听地址、端口、私有数据目录。
+
+公网版（Cloudflare Workers + D1）：在 Deploy to Cloudflare 部署页登录自己的 Cloudflare 账号，按提示连接 GitHub，设置 ADMIN_KEY（至少 16 位，供本人登录后台），点击部署。如首次使用时提示选择 workers.dev 子域，按提示完成。在已部署项目中点击 Visit 打开问卷；同一来源的 /admin 是后台。答卷保存在该项目的 D1 数据库。请保留数据库，更新时绑定原数据库。部署页链接仅供管理者使用。

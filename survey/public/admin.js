@@ -26,3 +26,13 @@ el('csv').onclick=()=>{
   const url=URL.createObjectURL(new Blob(['\uFEFF'+fields.map(row=>row.map(escape).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download='小鲸鱼体验答卷.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
+
+const share=el('share');
+if(location.protocol==='https:' && navigator.clipboard){
+  share.hidden=false;
+  share.onclick=async()=>{
+    const link=new URL('/',location.origin).href;
+    try{await navigator.clipboard.writeText(link);el('status').textContent='问卷网址已复制，可以发给参与者。';}
+    catch{el('status').textContent='问卷网址：'+link;}
+  };
+}

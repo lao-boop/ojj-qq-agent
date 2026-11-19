@@ -1,1 +1,4 @@
 data/
+.dev.vars
+.wrangler/
+node_modules/

@@ -1,0 +1,18 @@
+{
+  "name": "whale-talk-survey",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "ADMIN_KEY": {
+        "description": "自己设置一个至少 16 位的后台管理口令，留给自己登录查看答卷。"
+      }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "4.165.0"
+  }
+}
