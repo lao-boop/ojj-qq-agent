@@ -1,6 +1,6 @@
 const el=id=>document.getElementById(id);
 const storage='whale-survey-v1';
-const groups=[['接话与表达',0,3],['理解与共情',3,7],['个性与节奏',7,10],['聊聊你的感受',10,10]];
+const groups=[['你们聊得顺吗？',0,3],['你说的，它听懂了吗？',3,7],['跟它聊天是什么感觉？',7,10],['有没有哪句话让你记住了？',10,10]];
 const id=()=>Array.from(crypto.getRandomValues(new Uint8Array(18)),v=>v.toString(16).padStart(2,'0')).join('');
 let state={id:id(),scores:Array(10).fill(null),good:'',improve:'',page:0};
 try {
@@ -25,7 +25,8 @@ function render(){
   el('message').textContent='';const box=el('questions');box.replaceChildren();
   for(let i=start;i<end;i++){
     const field=document.createElement('fieldset');
-    field.innerHTML='<legend><small>'+String(i+1).padStart(2,'0')+'</small> '+items[i][0]+'</legend><p>'+items[i][1]+'</p><div class="scale"></div><div class="ends"><span>完全不符合</span><span>非常符合</span></div>';
+    const [,question,low,high]=items[i];
+    field.innerHTML='<legend><small>'+String(i+1).padStart(2,'0')+'</small> '+question+'</legend><div class="scale"></div><div class="ends"><span>0 · '+low+'</span><span>10 · '+high+'</span></div>';
     for(let n=0;n<=10;n++){
       const label=document.createElement('label'), input=document.createElement('input'), num=document.createElement('span');
       input.type='radio';input.name='q'+i;input.required=true;input.value=n;input.checked=state.scores[i]===n;
@@ -33,9 +34,9 @@ function render(){
     }
     box.append(field);
   }
-  if(state.page===3)for(const [key,prompt] of [['good','哪句话让你觉得小鲸鱼接住了你？'],['improve','哪一句让你觉得生硬？你希望它怎么接？']]){
+  if(state.page===3)for(const [key,prompt] of [['good','哪一句让你想接着跟它聊？还记得你们当时在说什么吗？'],['improve','有没有哪句让你突然不知道怎么回？换成你，你会怎么说？']]){
     const label=document.createElement('label');label.className='feedback';label.textContent=prompt;
-    const input=document.createElement('textarea');input.maxLength=1000;input.placeholder='可以只描述大意（选填）';input.value=state[key];
+    const input=document.createElement('textarea');input.maxLength=1000;input.placeholder='记得多少写多少';input.value=state[key];
     input.oninput=()=>{state[key]=input.value;save();};label.append(input);box.append(label);
   }
   progress();
@@ -51,7 +52,7 @@ el('form').onsubmit=async e=>{
   try{
     const req=await fetch('/api/responses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)});
     const body=await req.json();if(!req.ok)throw Error(body.error);
-    el('layout').hidden=true;el('success').hidden=false;el('receipt').textContent='本次体验总分为 '+body.total+' / 100。你可以关闭此页面。';
+    el('layout').hidden=true;el('success').hidden=false;el('receipt').textContent='这次你给小鲸鱼打了 '+body.total+' 分（满分 100）。';
     el('success').scrollIntoView();try{sessionStorage.removeItem(storage);}catch{}
   }catch(err){el('message').textContent=err.message+'。请再次提交。';}
   finally{el('next').disabled=el('back').disabled=false;}
