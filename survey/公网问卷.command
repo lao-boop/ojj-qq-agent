@@ -43,7 +43,19 @@ relay_pid=$!
 public_url=''
 for n in {1..40}; do
   kill -0 "$relay_pid" 2>/dev/null || break
-  public_url=$(LC_ALL=C grep -Eo 'https://[a-zA-Z0-9-]+\.(lhr\.life|localhost\.run)' "$state/relay" | tail -1)
+  # The welcome banner can link to admin.localhost.run before forwarding is ready.
+  public_url=$(LC_ALL=C awk '
+    {
+      for (i=1; i<=NF; i++) {
+        url=$i
+        sub(/\r$/, "", url)
+        sub(/\/$/, "", url)
+        if (url ~ /^https:\/\/[A-Za-z0-9-]+\.lhr\.life$/ ||
+            (tolower($0) ~ /tunneled|forwarding/ && url ~ /^https:\/\/[A-Za-z0-9-]+\.localhost\.run$/)) {
+          if (url !~ /^https:\/\/(admin|www|docs)\.localhost\.run$/) print url
+        }
+      }
+    }' "$state/relay" | tail -1)
   [ -n "$public_url" ] && break
   sleep 1
 done
@@ -51,17 +63,29 @@ done
 echo '正在检查公网链接能否读到这份问卷…'
 verified=false
 for n in {1..3}; do
-  if curl -fsS --max-time 8 "$public_url/items.json" -o "$state/items" && cmp -s public/items.json "$state/items"; then
-    verified=true
-    break
+  http_status=$(curl -sS --compressed --connect-timeout 5 --max-time 12 -w '%{http_code}' -o "$state/items" "$public_url/items.json")
+  curl_status=$?
+  if [ "$curl_status" -eq 0 ] && [ "$http_status" = 200 ]; then
+    if node -e 'const fs=require("node:fs"), assert=require("node:assert/strict"); const read=p=>JSON.parse(fs.readFileSync(p,"utf8").trim()); assert.deepEqual(read(process.argv[1]), read("public/items.json"));' "$state/items" 2>/dev/null; then
+      verified=true
+      break
+    fi
+    echo "第 $n 次检查：HTTP 200，但返回内容与问卷题目不符。"
+  else
+    echo "第 $n 次检查：HTTP ${http_status:-000}，curl 状态 $curl_status。"
   fi
-  sleep 1
+  kill -0 "$relay_pid" 2>/dev/null || fail '中转连接已断开，请重新打开本程序。'
+  [ "$n" -eq 3 ] || sleep 2
 done
-[ "$verified" = true ] || fail '入口已分配，但本机通过公网未能读回问卷，暂不发群。可以换网络后重试。'
 if command -v caffeinate >/dev/null; then caffeinate -i -w "$server_pid" & awake_pid=$!; fi
 echo
-echo "发到 QQ 群的问卷网址：$public_url/"
-if printf '%s/' "$public_url" | pbcopy; then echo '链接已复制，现在可以去 QQ 群粘贴。'; fi
+if [ "$verified" = true ]; then
+  echo "发到 QQ 群的问卷网址：$public_url/"
+  if printf '%s/' "$public_url" | pbcopy; then echo '链接已复制，现在可以去 QQ 群粘贴。'; fi
+else
+  echo "手机自测网址（尚未验证）：$public_url/"
+  echo '窗口会保持连接。请用手机流量打开上面的网址。能填完且后台能看到自己的测试答卷后，再发给同伴。'
+fi
 echo
 echo "你自己的数据后台：$local_url/admin"
 echo '管理口令（请勿发群）：'
