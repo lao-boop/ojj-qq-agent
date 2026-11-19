@@ -13,7 +13,7 @@ for n in {1..40}; do
     open http://127.0.0.1:3020
     lan_ip=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
     if [ -n "$lan_ip" ]; then echo "同一局域网的参与者可打开：http://$lan_ip:3020"; fi
-    echo '点击网页的「数据后台」，登录口令如下：'
+    echo '数据后台 http://127.0.0.1:3020/admin ，登录口令如下：'
     cat data/admin-key.txt; echo
     break
   fi

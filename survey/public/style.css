@@ -3,9 +3,6 @@
 @media(max-width:650px){.nav,main,footer{padding-left:14px;padding-right:14px}.nav{height:60px}.brand span{display:none}.brand{font-size:21px}.nav nav{gap:16px}.hero{margin:16px 0;display:block}.intro{padding:25px 18px 18px}.hero h1{font-size:42px;position:relative;z-index:1}.intro p{font-size:13px;position:relative}.tags{margin-top:14px}.layout{display:flex;flex-direction:column}.layout .panel,aside{width:100%}aside{position:static}.scale span{min-height:40px;font-size:12px}.scale{gap:2px}.panel{padding:17px 14px}.ends{font-size:10px}.sectionlead h2{font-size:23px}#averages{grid-template-columns:1fr}.actions{flex-wrap:wrap}}
 
 .intro p{max-width:29em}
-@media (max-width:800px), (hover:none) and (pointer:coarse){
-  .nav nav a.admin-link{display:none}
-}
 @media (max-width:650px){
   .hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);padding:20px 16px;gap:12px 4px;align-items:center}
   .intro{display:contents}
