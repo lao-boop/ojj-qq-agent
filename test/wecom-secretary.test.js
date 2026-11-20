@@ -247,3 +247,39 @@ test('changing report recipient during model generation sends no stale report or
  finish({content:JSON.stringify({paragraphs:[{kind:'fact',text:'对方提到工作还在筹备。',sources:[id]}]})});
  await pending;assert.equal(x.sent.length,0);assert.equal(x.secretary.state.outbox,null);assert.equal(x.secretary.state.latestSources,undefined);
 });
+
+test('scheduled material keeps the original across interruptions; query material also sees a later correction', async t => {
+  const x = fixture(t);
+  const room = { chattype: 'group', chatid: 'group' };
+  const capture = (id, sender, text) => x.capture(message(id, sender, text, room));
+  const anchor = capture('A', 'tech', '复验留了23号的台位');
+  for (const sender of ['store', 'sales', 'buyer']) capture(sender, sender, '另一件事');
+  const correction = capture('C', 'tech', '那个台位改约25号，等邮件');
+  const unrelated = x.capture(message('private', 'tech', '同一发言人的私聊不能混入'));
+  const scheduled = x.secretary.briefingMaterial([x.secretary.byId.get(correction)]);
+  assert.ok(scheduled.some(row => row.id === anchor && row.contextOnly));
+  assert.ok(scheduled.some(row => row.id === correction && !row.contextOnly));
+  assert.ok(!x.secretary.briefingMaterial([x.secretary.byId.get(anchor)]).some(row => row.id === correction));
+  let inputs;
+  x.secretary.llm = { async chat({messages}) {
+    inputs = JSON.parse(messages[1].content).messages;
+    return { content: JSON.stringify({ paragraphs: [{kind:'fact',text:'25号待确认',sources:[anchor,correction]}] }) };
+  }};
+  assert.equal(await x.secretary.command('/查消息 复验','wecom:bot:private:owner'), '25号待确认');
+  assert.ok(inputs.some(row => row.id === correction));
+  assert.ok(inputs.every(row => row.id !== unrelated));
+});
+
+test('keyword tools return labeled neighbors without expanding explicitly filtered queries', async t => {
+  const x = fixture(t);
+  const id = x.capture(message('1', 'buyer', '工装费报四万，等签字'));
+  const signed = x.capture(message('2', 'buyer', '签字下来改为三万'));
+  const tools = x.secretary.wrapTools({ specs: [] });
+  const ctx = { chatKey: 'wecom:bot:private:owner' };
+  const result = JSON.parse(await tools.run('search_colleague_messages', {query:'工装费'}, ctx));
+  assert.deepEqual(result.messages.map(r => r.id), [id]);
+  assert.deepEqual(result.neighbors.map(r => r.id), [signed]);
+  assert.ok(ctx.evidence.some(r => r.id === signed));
+  const filtered = JSON.parse(await tools.run('search_colleague_messages', {query:'工装费', sender:'buyer'}, {chatKey:ctx.chatKey}));
+  assert.equal(filtered.neighbors, undefined);
+});

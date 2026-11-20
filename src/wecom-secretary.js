@@ -203,7 +203,15 @@ export class WeComSecretary {
         if (!self.isOwner(ctx.chatKey)) return '无权查询其他成员消息。';
         let result;
         try {
-          if (name === 'search_colleague_messages') result = self.search(args);
+          if (name === 'search_colleague_messages') {
+            result = self.search(args);
+            if (args.query?.trim() && !['since','until','sender','senderName','chatId','timeBasis','offset'].some(k => args[k])) {
+              const hits = result.messages.map(e => self.byId.get(e.id));
+              result.neighbors = self.neighboringRecords(hits, { following: true, limit: 4 })
+                .map(r => self.evidence(r, 0, 700));
+              if (result.neighbors.length) result.coverage += ' neighbors 是邻近原文，可能包含更正，也可能在谈别的事。';
+            }
+          }
           else if (name === 'read_colleague_context') result = self.context(args);
           else if (name === 'read_last_colleague_sources') result = self.lastSources(args.offset);
           else {
@@ -212,12 +220,16 @@ export class WeComSecretary {
               coverage: '查不到编号时不得编造内容。' };
           }
         } catch (err) { return err.message; }
-        const encoded = JSON.stringify(result);
         ctx.secretaryChars ??= 0;
+        let encoded = JSON.stringify(result);
+        if (result.neighbors?.length && ctx.secretaryChars + encoded.length > 60000) {
+          delete result.neighbors;
+          encoded = JSON.stringify(result);
+        }
         if (ctx.secretaryChars + encoded.length > 60000) return '本轮原文读取预算已到上限。依据已读材料回答，未检查的部分不要推断。';
         ctx.secretaryChars += encoded.length;
         ctx.evidence ??= [];
-        for (const e of result.messages) {
+        for (const e of [...result.messages, ...(result.neighbors || [])]) {
           if (!ctx.evidence.some(x => x.id === e.id && x.offset === e.offset)) ctx.evidence.push(e);
         }
         return encoded;
@@ -255,15 +267,39 @@ export class WeComSecretary {
     }).join('\n\n');
     return text + (offset+3<records.length ? `\n\n还有来源，发送 /来源 ${Math.floor(offset/3)+2} 继续。` : '');
   }
-  briefingMaterial(records) {
-    const ids = new Set(records.map(r=>r.id));
+  neighboringRecords(records, { following = false, limit = 12 } = {}) {
+    const selected = new Set(records.map(r => r.id));
     const context = [];
+    const add = r => {
+      if (!r || selected.has(r.id) || context.length >= limit) return;
+      selected.add(r.id);
+      context.push(r);
+    };
+    // A correction can omit the project name, especially when its author resumes a group thread.
+    // Scheduled batches may look backwards only. Query results can have later corrections.
+    const earliest = Math.min(...records.map(r => r.seq));
     for (const r of records) {
-      for (const prior of this.records.filter(p=>this.eligible(p) && p.chatId===r.chatId && p.group===r.group
-        && p.seq<records[0].seq && p.receivedAt>=r.receivedAt-86400000).slice(-3)) {
-        if (!ids.has(prior.id) && context.length<12) {ids.add(prior.id);context.push(prior);}
-      }
+      if (context.length >= limit) break;
+      const nearby = this.records.filter(p => this.eligible(p) && p.chatId === r.chatId && p.group === r.group
+        && p.sender === r.sender && Math.abs(p.receivedAt - r.receivedAt) <= 30 * 60000);
+      if (following) add(nearby.find(p => p.seq > r.seq));
+      add(nearby.findLast(p => p.seq < (following ? r.seq : earliest)));
     }
+    for (const r of records) {
+      if (context.length >= limit) break;
+      const peers = this.records.filter(p => this.eligible(p) && p.chatId === r.chatId && p.group === r.group);
+      if (following) {
+        const later = peers.filter(p => p.seq > r.seq && p.receivedAt - r.receivedAt <= 30 * 60000);
+        for (const p of later.filter(p => p.sender === r.sender).slice(0, 2)) add(p);
+        for (const p of later.slice(0, 2)) add(p);
+      }
+      for (const p of peers.filter(p => p.seq < (following ? r.seq : earliest)
+        && p.receivedAt >= r.receivedAt - (following ? 30 * 60000 : 86400000)).slice(-3).reverse()) add(p);
+    }
+    return context;
+  }
+  briefingMaterial(records, options) {
+    const context = this.neighboringRecords(records, options);
     return [...context,...records].sort((a,b)=>a.seq-b.seq).map(r=>{
       const e=this.evidence(r,0,records.includes(r)?Math.min(6000,Math.floor(18000/records.length)):1200);
       return {id:e.id,speaker:e.senderName || e.sender,speakerId:e.sender,department:e.department,
@@ -271,12 +307,12 @@ export class WeComSecretary {
         text:e.text,truncated:e.nextOffset!==null,contextOnly:!records.includes(r)};
     });
   }
-  async answerSummary(result, question, chatKey) {
+  async answerSummary(result, question, chatKey, following = false) {
     if (!result.messages.length) return '这次没有找到相关消息。可以换个关键词，或者告诉我大概是谁、哪段时间聊的。';
     const generation=this.generation;
     try {
       const records=result.messages.map(e=>this.byId.get(e.id)).filter(Boolean).sort((a,b)=>a.seq-b.seq);
-      const material=this.briefingMaterial(records);
+      const material=this.briefingMaterial(records, { following });
       const brief=await writeBriefing({llm:this.llm,messages:material,question,mode:'query'});
       if (generation!==this.generation || !this.isOwner(chatKey)) return '查询已停止，请重新发起。';
       this.rememberSources(brief.sources);
@@ -294,7 +330,7 @@ export class WeComSecretary {
     }
     const result = this.search({ query: rest.join(' '), limit: 10,
       ...(name === '/汇报' ? { since: new Date(this.now() - 86400000).toISOString() } : {}) });
-    return this.answerSummary(result, name === '/汇报' ? '给我讲讲最近24小时的同事消息重点。' : rest.join(' '), chatKey);
+    return this.answerSummary(result, name === '/汇报' ? '给我讲讲最近24小时的同事消息重点。' : rest.join(' '), chatKey, name === '/查消息' && rest.length > 0);
   }
   start() {
     if (this.running) return;

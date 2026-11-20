@@ -23,7 +23,7 @@
     },
     {
       "path": "src/wecom-main.js",
-      "sha256": "af7370427ce4cc41463f7078ba1360a9a4080c625c7ff7dbf2404db2a4253b00"
+      "sha256": "aefeda885bce7ab2acd13f1e5564160e6352a6b5110c2efbee2c0b946cc373a3"
     },
     {
       "path": "src/wecom-runtime.js",
@@ -31,7 +31,7 @@
     },
     {
       "path": "src/wecom-secretary.js",
-      "sha256": "cc5742a25fff2fc9e2d91f1221a7f199ababf71f6bdf3eb1a468793c63fac772"
+      "sha256": "47591031223d3b61141c584f997c0e4eab7b39b9b62d4de8b3c50817f3c82e52"
     },
     {
       "path": "scripts/build_office.py",
@@ -63,7 +63,7 @@
     },
     {
       "path": "src/wecom-briefing.js",
-      "sha256": "70365a459f088f31cc10ed6e5a06151b64495f5067a1999525076915248e1d91"
+      "sha256": "393e10fa4ee9fdaf6f80906dbe5d48a5d50727da5e65e07b9afa9da351286923"
     },
     {
       "path": "src/llm.js",
