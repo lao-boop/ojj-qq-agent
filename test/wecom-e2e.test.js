@@ -58,7 +58,9 @@ test('real WeCom app and SDK complete local chat and remember-tool round trips',
       llmRequests.push(body);
       const last = body.messages.at(-1);
       const isBrief = body.messages[0].content.includes('每段都在 sources');
-      const message = isBrief ? {role:'assistant',content:JSON.stringify({paragraphs:[{kind:'fact',text:'同事说喜欢乌龙茶，可以记下这个偏好。',sources:JSON.parse(body.messages[1].content).messages.map(m=>m.id)}]})} : last.role === 'tool' && last.tool_call_id === 'secretary-search'
+      const isScheduled = body.messages[1]?.content?.startsWith('{"stage":');
+      const scheduled = isScheduled ? (await import('../experiments/secretary/wiring-double.js')).wiringResponse(body, '同事说喜欢乌龙茶。') : null;
+      const message = scheduled ? {role:'assistant',content:scheduled.content} : isBrief ? {role:'assistant',content:JSON.stringify({paragraphs:[{kind:'fact',text:'同事说喜欢乌龙茶，可以记下这个偏好。',sources:JSON.parse(body.messages[1].content).messages.map(m=>m.id)}]})} : last.role === 'tool' && last.tool_call_id === 'secretary-search'
         ? { role: 'assistant', content: '同事说喜欢乌龙茶，日后招待时可以记一下这个偏好。' }
         : last.role !== 'tool' && last.content.includes('同事说了什么')
           ? { role: 'assistant', content: '', tool_calls: [{ id: 'secretary-search', type: 'function',

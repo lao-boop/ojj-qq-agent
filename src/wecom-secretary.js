@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { messageTimes } from './wecom-directory.js';
 import { writeBriefing } from './wecom-briefing.js';
+import { writeScheduledBriefing } from './wecom-scheduled-briefing.js';
 
 const hash = text => createHash('sha256').update(text).digest('hex');
 const scope = bot => `wecom:${encodeURIComponent(bot || 'unconfigured')}:`;
@@ -57,8 +58,8 @@ const SPECS = [
 ];
 
 export class WeComSecretary {
-  constructor({ cfg, sender, dataDir, logger, contacts, llm, now = Date.now }) {
-    Object.assign(this, { sender, dataDir, logger, contacts, llm, now });
+  constructor({ cfg, sender, dataDir, logger, contacts, llm, now = Date.now, scheduledWriter = writeScheduledBriefing }) {
+    Object.assign(this, { sender, dataDir, logger, contacts, llm, now, scheduledWriter });
     this.generation = 0;
     this.busy = false;
     this.running = false;
@@ -364,7 +365,7 @@ export class WeComSecretary {
         for (const records of batches) {
           const messages = this.briefingMaterial(records);
           let brief;
-          try { brief = await writeBriefing({llm:this.llm,messages}); }
+          try { brief = await this.scheduledWriter({llm:this.llm,messages,isCurrent:current}); }
           catch (error) { if (current()) { this.state.nextAt = this.now() + 60000; this.saveState(); } throw error; }
           if (!current()) return;
           pages.push({text:brief.text, cursor:records.at(-1).seq,

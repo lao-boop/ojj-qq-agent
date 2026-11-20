@@ -61,3 +61,16 @@ test('document upgrade preserves existing secretary choices and Python path whil
   assert.equal(next.office.imagesPerDeck, 0);
   assert.equal(next.office.imageDelayMs, 0);
 });
+
+test('code-only release preserves exact configuration bytes and backs them up without QQ migrations',async t=>{
+  const x=fixture(t);
+  const configPath=path.join(x.root,'config.json');
+  const cfg=JSON.parse(fs.readFileSync(configPath));
+  cfg.image.cooldownMs=12345;cfg.office={model:'deepseek-flash',imageDelayMs:12000};
+  cfg.wecom.secretary={enabled:true,ownerUserId:'HuangZiMing',intervalMinutes:60};
+  const original=JSON.stringify(cfg,null,4)+'\n';fs.writeFileSync(configPath,original);
+  const result=await installUpdate({...x,preserveConfig:true});
+  assert.equal(fs.readFileSync(configPath,'utf8'),original);
+  assert.equal(fs.readFileSync(path.join(result.backup,'config.json'),'utf8'),original);
+  assert.equal(fs.readFileSync(path.join(x.root,'src/wecom-secretary.js'),'utf8'),bytes.toString());
+});

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const ALLOWED = /^(src\/[a-z0-9-]+\.js|scripts\/build_office\.py|public\/index\.html|docs\/WECOM\.md)$/;
 
-export async function installUpdate({ root, manifest, fetchFile, ownerUserId }) {
+export async function installUpdate({ root, manifest, fetchFile, ownerUserId, preserveConfig = false }) {
   if (!ownerUserId || /[\s\x00-\x1f]/.test(ownerUserId)) throw new Error('请填写有效的汇报接收人 UserID');
   if (!fs.existsSync(path.join(root, 'package.json'))) throw new Error('请先进入小鲸鱼项目目录');
   if (!Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > 50) throw new Error('更新清单无效');
@@ -34,17 +34,23 @@ export async function installUpdate({ root, manifest, fetchFile, ownerUserId }) 
     }
     staged.push({ ...item, temp });
   }
-  // Keep credentials, Python environment paths, conversation data and all other settings.
-  config.wecom ??= {};
-  config.wecom.secretary ??= { enabled: true, ownerUserId, intervalMinutes: 60 };
-  config.office ??= {};
-  if (config.office.model === 'deepseek-flash') config.office.model = '';
-  if (config.office.imageDelayMs === 12000) config.office.imageDelayMs = 0;
-  config.image ??= {};
-  config.image.cooldownMs = 0;
-  const nextConfig = path.join(work, 'config.json');
-  fs.writeFileSync(nextConfig, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
-  staged.push({ path: 'config.json', temp: nextConfig });
+  // Local code-only releases keep configuration byte-for-byte, including custom QQ settings.
+  if (preserveConfig) {
+    fs.copyFileSync(configPath, path.join(backup, 'config.json'));
+    fs.chmodSync(path.join(backup, 'config.json'), 0o600);
+  } else {
+    // Historical updater migrations, retained for existing callers.
+    config.wecom ??= {};
+    config.wecom.secretary ??= { enabled: true, ownerUserId, intervalMinutes: 60 };
+    config.office ??= {};
+    if (config.office.model === 'deepseek-flash') config.office.model = '';
+    if (config.office.imageDelayMs === 12000) config.office.imageDelayMs = 0;
+    config.image ??= {};
+    config.image.cooldownMs = 0;
+    const nextConfig = path.join(work, 'config.json');
+    fs.writeFileSync(nextConfig, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+    staged.push({ path: 'config.json', temp: nextConfig });
+  }
   const applied = [];
   try {
     for (const item of staged) {

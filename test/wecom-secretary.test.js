@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { WeComSecretary } from '../src/wecom-secretary.js';
 import { wecomConversation } from '../src/wecom-runtime.js';
+import { wiringResponse } from '../experiments/secretary/wiring-double.js';
 
 const message = (msgid, sender, text, extra = {}) => ({ headers: { req_id: msgid }, body: {
   aibotid: 'bot', msgid, chattype: 'single', from: { userid: sender }, msgtype: 'text', text: { content: text }, ...extra,
@@ -16,10 +17,7 @@ function fixture(t) {
   const sent = [], instances = [];
   const sender = { async sendText(frame, text) { sent.push({ user: frame.body.from.userid, text }); } };
   const make = () => {
-    const secretary = new WeComSecretary({ cfg: structuredClone(cfg), llm: {chat: async ({messages}) => {
-      const rows=JSON.parse(messages[1].content).messages.filter(m=>!m.contextOnly);
-      return {content:JSON.stringify({paragraphs:[{kind:'fact',text:rows.map(m=>m.text.slice(0,25)).join('；').slice(0,210),sources:rows.map(m=>m.id)}]})};
-    }}, sender, dataDir, logger: { warn() {} }, now: () => now });
+    const secretary = new WeComSecretary({ cfg: structuredClone(cfg), llm: {chat: async options => wiringResponse(options)}, sender, dataDir, logger: { warn() {} }, now: () => now });
     instances.push(secretary); return secretary;
   };
   const secretary = make();

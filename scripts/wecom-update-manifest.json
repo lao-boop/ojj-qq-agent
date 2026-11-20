@@ -31,7 +31,7 @@
     },
     {
       "path": "src/wecom-secretary.js",
-      "sha256": "47591031223d3b61141c584f997c0e4eab7b39b9b62d4de8b3c50817f3c82e52"
+      "sha256": "444b0907e9281c479b6813782a5805467b3d0de914dea17b5af45dd7f92712c3"
     },
     {
       "path": "scripts/build_office.py",
@@ -43,7 +43,7 @@
     },
     {
       "path": "docs/WECOM.md",
-      "sha256": "594f12f3e1069b663f69b38443e40f64e4e38f50cd58d3976719e301cfbedc24"
+      "sha256": "10313ab995696f31e7fcbf375c17831654c3ce053721adcd3bb00d2b84bac28a"
     },
     {
       "path": "src/office-plan.js",
@@ -96,6 +96,10 @@
     {
       "path": "src/wecom-personality.js",
       "sha256": "2d029dd74a081fdd02f7d80b8ca29f5b06bb2d19a130c071c278a8de5213b4c2"
+    },
+    {
+      "path": "src/wecom-scheduled-briefing.js",
+      "sha256": "32f2809bda0f6567c610c9e1039ca760f1e6df873c7b61356fce47f1ba2882e3"
     }
   ]
 }

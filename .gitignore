@@ -16,6 +16,7 @@ config.json
 logs/
 tmp/
 temp/
+experiments/secretary/bundle-provenance.json
 
 # 系统
 .DS_Store
