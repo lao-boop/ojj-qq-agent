@@ -4,6 +4,8 @@
 
 标点、表情和口语接话的修复与实测见 [闲聊处理说明](docs/CASUAL-CHAT.md)，包含逐题回复及已知不足。
 
+要把现有QQ机器人完整转交给Windows用户，使用 [Windows接管说明](docs/WINDOWS-HANDOVER.md)。接管工具位于 `fix/windows-friend-test-bundle` 分支；私人配置和历史在原Mac本地导出，与公开代码包分开交接。
+
 一个跑在 QQ 上的拟人化 Agent：会聊天、有长期记忆、能发语音、唱歌、翻唱、画图、做 PPT/Word/Excel、发 QQ 空间动态，还带一个汽修配件识别模块。
 
 底层用 **DeepSeek**（OpenAI 兼容接口），QQ 协议端用 **SnowLuma / NapCat**（OneBot v11），图像用 **FLUX**，语音合成用 **Edge TTS**，变声用 **RVC**，语音识别用 **faster-whisper**（本地）或 **WhisperX**（云端）。

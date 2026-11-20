@@ -1,0 +1,40 @@
+现有QQ机器人 · Windows接管包
+
+这是把原机器人交给朋友继续运行的包，不需要创建另一个机器人QQ。
+此前确认的机器人：瘦鱼，QQ 3489314835。
+
+【原主人在Mac上做】
+1. 在旧机器人窗口按Control+C，停止旧主程序。
+2. 在原ojj-qq-agent目录运行 docs/WINDOWS-HANDOVER.md 里的四行导出命令。
+3. 把用户主目录生成的ojj-private-transfer-日期-编号.zip私下发给新主人。
+   这个私人包带真实配置、密钥、人设、记忆和聊天记录，不要公开上传。
+4. 协助新主人在他的电脑登录现有机器人QQ。
+5. 新主人上线后，你的Mac不再启动这套机器人。
+
+【新主人在Windows上做】
+1. 完整解压本公开ZIP，进入ojj-qq-agent文件夹。
+2. 安装Node.js 24 LTS：https://nodejs.org/en/download
+3. 把私人ZIP解压后的目录改名private-transfer，放进ojj-qq-agent里面。
+   它下面应直接有TRANSFER.json、config.json和data。
+4. 安装你们现用的QQ接入程序的Windows版，用现有机器人QQ登录。
+   开启OneBot v11正向WebSocket服务端：127.0.0.1:3001，并启用消息事件。
+   本包不包含QQ接入端安装器，旧发布入口的核对情况见详细说明。
+5. 双击setup-windows.cmd。个人QQ填“新主人发消息用的QQ”，不是机器人QQ。
+   有私人包可沿用模型配置；密钥输入隐藏。OneBot token须与接入端一致。
+6. 双击start-windows.cmd。看到机器人就绪后，私聊机器人发送/status和你好。
+7. 先测试句号、逗号、正常聊天与记忆。要测Word/PPT/Excel，再装Python 3.12并
+   双击install-office-windows.cmd。更多声音/图片功能按详细说明启用。
+
+【目录】
+ojj-qq-agent/                 完整代码、依赖锁、配置模板、脚本、测试、历史报告
+ojj-qq-agent/docs/WINDOWS-HANDOVER.md  双方详细步骤、功能依赖与排障
+ojj-qq-agent/setup-windows.cmd        安装并导入/创建配置
+ojj-qq-agent/start-windows.cmd        启动主程序
+ojj-qq-agent/check-windows.cmd        配置及模型接口检查
+ojj-qq-agent/diagnose-onebot-windows.cmd  QQ接入诊断
+ojj-qq-agent/self-test-windows.cmd    不连接真实QQ的本地自测
+MANIFEST.json / SHA256SUMS.txt       来源版本及完整性校验
+
+首次接管暂不开空间自动发布、传话及多媒体；原服务配置仍保留供核对。
+原有QQ登录票据、账号绑定、云服务额度、未上传的私人音色文件不能靠复制源代码自动转移。
+公开代码包不包含你们的真实密钥与聊天记录；它们只在Mac本地私人导出包里。
