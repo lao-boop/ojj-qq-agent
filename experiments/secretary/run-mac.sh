@@ -38,6 +38,36 @@ fi
 export PATH="$(dirname "$node_bin"):$PATH"
 npm ci --no-audit --no-fund
 mkdir -p "$PWD/tmp"
+if [ "${WHALE_SUITE_V3_50:-}" = 1 ]; then
+  state_file="$PWD/tmp/latest-v3-50.txt"
+  if [ -z "$resume_root" ] && [ "${WHALE_50_FRESH:-}" != 1 ] && [ -f "$state_file" ]; then
+    previous_result=$(cat "$state_file")
+    if [ -f "$previous_result/suite.json" ]; then resume_root="$previous_result"; fi
+  fi
+  result_dir=$(mktemp -d "$PWD/tmp/secretary-v3-50.XXXXXX")
+  printf '%s\n' "$result_dir" > "$state_file"
+  set -- --live --config "$runtime_dir/config.json" --out "$result_dir"
+  if [ -n "$resume_root" ]; then
+    printf '续跑：%s\n成功结果将复用；旧失败记录仍保留。\n' "$resume_root"
+    set -- "$@" --resume-from "$resume_root"
+  fi
+  finalize_fifty() {
+    tar -czf "$result_dir.tar.gz" -C "$result_dir" .
+    if [ -f "$result_dir/report.html" ]; then open "$result_dir/report.html" || true; fi
+    open -R "$result_dir.tar.gz" || true
+    printf '\n请上传Finder选中的完整结果包：\n%s.tar.gz\n再次运行同一入口会自动续跑。\n' "$result_dir"
+  }
+  trap 'finalize_fifty; exit 130' INT TERM
+  suite_status=0
+  if [ -f "$runtime_dir/.env" ]; then
+    NODE_USE_ENV_PROXY=1 "$node_bin" "--env-file=$runtime_dir/.env" scripts/evaluate-secretary-v3-50.mjs "$@" || suite_status=$?
+  else
+    NODE_USE_ENV_PROXY=1 "$node_bin" scripts/evaluate-secretary-v3-50.mjs "$@" || suite_status=$?
+  fi
+  trap - INT TERM
+  finalize_fifty
+  exit "$suite_status"
+fi
 if [ "${WHALE_ITERATION_V2:-}" = 1 ] || [ "${WHALE_ITERATION_V3:-}" = 1 ]; then
   iteration_version=v2
   if [ "${WHALE_ITERATION_V3:-}" = 1 ]; then iteration_version=v3; fi

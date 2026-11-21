@@ -21,6 +21,15 @@ npm run experiment:secretary -- --live --split fresh --cases-file experiments/se
 
 默认写入唯一的 `tmp/` 目录，包含manifest、逐次调用、原话、实际转告和review.md。`--case-id staffing --variant key --split holdout` 可选择单例；不带 `--live` 的文字都是模型替身输出，不能作为理解能力证据。
 
+## 扩展到50个输入（仅v3）
+
+```bash
+npm run experiment:secretary:50
+bash experiments/secretary/run-mac-v3-50.sh
+```
+
+第一条只用替身；第二条在Mac调用真实模型。16组三版加2个正常原版，共50例；保留原10例、新增40例，不改v3算法。支持暂停和自动续跑，细节见 [50例说明](SUITE-V3-50.md)。
+
 ## 验证了哪条路径
 
 使用实际 `runtime.handle → capture → tick → briefingMaterial → scheduledWriter → sender`；日常应答和收件人替换，不调用 `app.start()`，不会连接企业微信。模拟ACK丢失，检查确认前不推进游标、发送重试不再调用模型、无新增不重发，以及访问范围和历史原文进入当前输入。
