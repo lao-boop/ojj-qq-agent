@@ -21,8 +21,8 @@ test('business benchmark stops paid requests on transport failure and resumes ne
  });server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>{server.closeAllConnections();server.close();});
  const config=path.join(temp,'config.json');fs.writeFileSync(config,JSON.stringify({llm:{apiKey:'local-test',baseUrl:`http://127.0.0.1:${server.address().port}`,model:'local-test-only'}}));
  const env={...process.env};for(const k of ['DEEPSEEK_API_KEY','DEEPSEEK_BASE_URL','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy'])delete env[k];
- async function run(name,from){
-  const out=path.join(temp,name),args=['scripts/evaluate-business-v4.mjs','--live','--config',config,'--out',out];if(from)args.push('--resume-from',from);
+ async function run(name,from,full=false){
+  const out=path.join(temp,name),args=['scripts/evaluate-business-v4.mjs','--live','--config',config,'--out',out];if(from)args.push('--resume-from',from);if(full)args.push('--full-context');
   const child=spawn(process.execPath,args,{cwd:root,env,stdio:'pipe'});let log='';child.stdout.on('data',d=>log+=d);child.stderr.on('data',d=>log+=d);
   const [code]=await once(child,'close');return {out,code,log,suite:JSON.parse(fs.readFileSync(path.join(out,'suite.json')))};
  }
@@ -31,4 +31,6 @@ test('business benchmark stops paid requests on transport failure and resumes ne
  const interrupted=path.join(temp,'interrupted');fs.mkdirSync(interrupted);const partial={...second.suite,units:[]};fs.writeFileSync(path.join(interrupted,'suite.json'),JSON.stringify(partial));fs.cpSync(second.out,path.join(interrupted,'previous-attempt'),{recursive:true});
  const third=await run('third',interrupted);assert.equal(third.code,0,third.log);assert.equal(count,50,'No repeat paid calls after interrupted resume');assert.ok(third.suite.units.every(u=>u.reused));
  const metrics=JSON.parse(fs.readFileSync(path.join(second.out,'metrics.json')));assert.ok(metrics.rows.every(r=>r.correct===0&&r.questions===28));
+ const full=await run('full',null,true);assert.equal(full.code,0,full.log);assert.equal(full.suite.units.filter(u=>u.status==='budget-not-run').length,14);
+ const fullMetrics=JSON.parse(fs.readFileSync(path.join(full.out,'metrics.json')));assert.ok(fullMetrics.diagnostics.filter(u=>u.status==='budget-not-run').every(u=>u.correct===null&&u.answered===null),'Over-budget inputs are unmeasured, not incorrect');
 });

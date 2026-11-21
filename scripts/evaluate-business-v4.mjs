@@ -50,7 +50,7 @@ function report(){
     const legacy=units.flatMap(u=>u.legacyGrades||[]),n=bank.reduce((s,c)=>s+c.questions.length,0);
     return {size,questions:n,completed:units.filter(u=>u.status==='completed').length,planned:bank.length,sourceAvailable:grades.filter(g=>g.evidenceAvailable).length,legacySourceAvailable:legacy.filter(g=>g.evidenceAvailable).length,answered:o.live?grades.filter(g=>g.choice!==null).length:null,correct:o.live?grades.filter(g=>g.correct).length:null,grounded:o.live?grades.filter(g=>g.grounded).length:null,selectedMessages:units.map(u=>u.selectedCount)};
   });
-  const diagnostics=suite.units.filter(u=>u.kind!=='round').map(u=>({id:u.id,kind:u.kind,status:u.status,questions:u.grades?.length||0,answered:o.live?u.grades?.filter(g=>g.choice!==null).length:null,correct:o.live?u.grades?.filter(g=>g.correct).length:null,grounded:o.live?u.grades?.filter(g=>g.grounded).length:null,sourceAvailable:u.grades?.filter(g=>g.evidenceAvailable).length,selectedCount:u.selectedCount,characters:u.characters,seconds:(u.calls||[]).reduce((s,c)=>s+(c.elapsedMs||0),0)/1000,tokens:(u.calls||[]).some(c=>c.usage)?u.calls.reduce((s,c)=>s+(c.usage?.total_tokens||0),0):null}));
+  const diagnostics=suite.units.filter(u=>u.kind!=='round').map(u=>({id:u.id,kind:u.kind,status:u.status,questions:u.grades?.length||0,answered:o.live&&u.status==='completed'?u.grades?.filter(g=>g.choice!==null).length:null,correct:o.live&&u.status==='completed'?u.grades?.filter(g=>g.correct).length:null,grounded:o.live&&u.status==='completed'?u.grades?.filter(g=>g.grounded).length:null,sourceAvailable:u.grades?.filter(g=>g.evidenceAvailable).length,selectedCount:u.selectedCount,characters:u.characters,seconds:(u.calls||[]).reduce((s,c)=>s+(c.elapsedMs||0),0)/1000,tokens:(u.calls||[]).some(c=>c.usage)?u.calls.reduce((s,c)=>s+(c.usage?.total_tokens||0),0):null}));
   fs.writeFileSync(path.join(out,'metrics.json'),JSON.stringify({mode:suite.mode,rows,diagnostics,warning:'归档规模不等于模型实际读入条数；选择题诊断不等于自然汇报质量。7组相关题，不据此估计普适容量阈值。'},null,2));
   const tables=rows.map(r=>`<tr><td>${r.size}</td><td>${r.completed}/${r.planned}</td><td>${r.legacySourceAvailable}/${r.questions}</td><td>${r.sourceAvailable}/${r.questions}</td><td>${r.correct===null?'未测':r.correct+'/'+r.questions+(r.completed<r.planned?'（未跑完）':'')}</td><td>${r.answered===null?'未测':r.answered+'/'+r.questions}</td><td>${r.grounded===null?'未测':r.grounded+'/'+r.questions}</td><td>${r.selectedMessages.join(', ')}</td></tr>`).join('');
   const diagnosticTable=diagnostics.filter(u=>u.kind!=='selected').map(u=>`<tr><td>${escaped(u.id)}</td><td>${escaped(u.status)}</td><td>${u.selectedCount}</td><td>${u.characters??'—'}</td><td>${u.correct===null?'未测':u.correct+'/'+u.questions}</td><td>${u.tokens??'—'}</td><td>${u.seconds.toFixed(2)}</td></tr>`).join('');
@@ -71,9 +71,9 @@ async function request(u,input){
     call.content=r.content;call.usage=r.usage;call.attempts=r.attempts;return r;
   }catch(e){call.failure=requestFailure(e);if(![400,413,422].includes(call.failure.status)){stopped='模型请求失败，暂停后续付费调用；成功结果保留，可续跑。';}throw e;}finally{call.elapsedMs=Date.now()-start;save();}
 }
-function secretary(id){
+function secretary(id,start=base){
   const cfg={wecom:{botId:'business-'+id,secretary:{enabled:true,ownerUserId:'HuangZiMing',intervalMinutes:60}}};
-  const s=new WeComSecretary({cfg,dataDir:path.join(temp,id),logger,now:()=>Date.parse('2026-11-21T04:00:00Z'),sender:{async sendText(){throw Error('Test sender must be installed');}}});
+  const s=new WeComSecretary({cfg,dataDir:path.join(temp,id),logger,now:()=>start,sender:{async sendText(){throw Error('Test sender must be installed');}}});
   s.running=true;return s;
 }
 function receive(s,m,time){return s.capture({body:{msgid:m.id,msgtype:'text',text:{content:m.text}}},{userId:m.who,id:'wecom:'+s.cfg.wecom.botId+':group:'+m.chat,group:true,receivedAt:time,identity:{userId:m.who,name:NAMES[m.who]}});}
@@ -81,10 +81,10 @@ const base=Date.parse('2026-11-21T04:00:00Z');
 try{
   // Three successive scheduled sends, with originals preserved and ACK failure/retry tested each round.
   for(const c of bank){
-    const s=secretary(c.id+'-rounds');let now=base; s.now=()=>now;
+    const roundStart=base-4*3600000;const s=secretary(c.id+'-rounds',roundStart);let now=roundStart; s.now=()=>now;
     for(let round=0;round<c.rounds.length;round++){
       const u=unit(`${c.id}/round-${round+1}`,'round',{caseId:c.id,round:round+1,employee:c.rounds[round]});
-      now=base+round*3600000;c.rounds[round].forEach(m=>receive(s,m,now));
+      now=roundStart+round*3600000;c.rounds[round].forEach(m=>receive(s,m,now));
       if(stopped&&!u.reused){u.status='not-run';u.error=stopped;save();break;}
       if(u.reused){s.state.cursor=s.records.length;s.state.nextAt=now+3600000;s.saveState();continue;}
       u.status='running';s.llm={chat:input=>request(u,input)};
@@ -96,7 +96,7 @@ try{
         const calls=u.calls.length;await s.tick();assert.equal(u.calls.length,calls);assert.equal(s.state.cursor,s.records.length);
         u.text=delivered.join('\n\n');u.status='completed';u.ackVerified=true;
         u.selected=s.briefingMaterial(s.records.filter(r=>r.seq>cursor));
-        now=s.state.nextAt;await s.tick();assert.equal(delivered.length,1,'No new messages, no extra send');
+        if(round===c.rounds.length-1){now=s.state.nextAt;await s.tick();assert.equal(delivered.length,1,'No new messages, no extra send');}
       }catch(e){u.status='failed';u.error=u.calls.at(-1)?.failure?.message||'生成结构或链路检查失败，请检查该单元保存的输入、答复。';save();report();break;}
       save();report();
     }
