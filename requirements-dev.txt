@@ -1,0 +1,4 @@
+# Office binary-renderer tests; Python 3.12 is used in CI.
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5

@@ -43,7 +43,7 @@
     },
     {
       "path": "docs/WECOM.md",
-      "sha256": "10313ab995696f31e7fcbf375c17831654c3ce053721adcd3bb00d2b84bac28a"
+      "sha256": "02d89c932c5a1323c68d7e7f144b65d1157df274ab45a43387346052f58793c5"
     },
     {
       "path": "src/office-plan.js",
@@ -67,7 +67,7 @@
     },
     {
       "path": "src/llm.js",
-      "sha256": "30d082d6bb11f4343be33ab07a4fc4263c5bb1275d7a7e32c13848bb2a2ef828"
+      "sha256": "354ed2e6c171e4abd22716abe5bff3d4771302dc86d669429cdf6f8dab884923"
     },
     {
       "path": "src/doc-inbox.js",
@@ -99,7 +99,7 @@
     },
     {
       "path": "src/wecom-scheduled-briefing.js",
-      "sha256": "32f2809bda0f6567c610c9e1039ca760f1e6df873c7b61356fce47f1ba2882e3"
+      "sha256": "2488df32a8680c044bc2e2f2df55f834dabcaa8cfdc08ef0b95291124a662bdb"
     }
   ]
 }

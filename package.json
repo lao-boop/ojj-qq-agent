@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "QQ 机器人：DeepSeek 驱动的小鲸鱼，支持人格、记忆、分条聊天、出图，自带本地控制台",
+  "description": "小鲸鱼：企业微信 AI 秘书与 QQ 聊天机器人，支持原文追溯、定时汇报和本地控制台",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/start.js",
@@ -11,7 +11,12 @@
     "start:wecom": "node src/wecom-main.js",
     "test:wecom": "node --test test/*.test.js",
     "mock": "node src/mock-onebot.js",
-    "test:e2e": "node scripts/e2e.js"
+    "test:e2e": "node scripts/e2e.js",
+    "test": "node --test test/*.test.js",
+    "check:release": "node scripts/sync-wecom-manifest.mjs",
+    "manifest:sync": "node scripts/sync-wecom-manifest.mjs --write",
+    "test:secretary": "node scripts/iterate-secretary.mjs --v3 --full",
+    "experiment:secretary": "node scripts/experiment-secretary.mjs --algorithm upgraded --history-mode fixture --request-timeout-ms 60000 --request-attempts 1"
   },
   "engines": {
     "node": ">=20"

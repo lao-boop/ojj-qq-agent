@@ -74,3 +74,19 @@ test('code-only release preserves exact configuration bytes and backs them up wi
   assert.equal(fs.readFileSync(path.join(result.backup,'config.json'),'utf8'),original);
   assert.equal(fs.readFileSync(path.join(x.root,'src/wecom-secretary.js'),'utf8'),bytes.toString());
 });
+
+test('repository release manifest installs current v3 code while preserving runtime files',async t=>{
+  const x=fixture(t);
+  const root=path.resolve(import.meta.dirname,'..');
+  const manifest=JSON.parse(fs.readFileSync(path.join(root,'scripts/wecom-update-manifest.json'),'utf8'));
+  const originalConfig=fs.readFileSync(path.join(x.root,'config.json'),'utf8');
+  const result=await installUpdate({...x,manifest,preserveConfig:true,fetchFile:async file=>fs.readFileSync(path.join(root,file))});
+  assert.equal(result.updated,manifest.files.length);
+  for(const file of ['src/wecom-scheduled-briefing.js','src/llm.js','src/wecom-secretary.js']){
+    assert.ok(manifest.files.some(x=>x.path===file),`${file} must ship in an incremental update`);
+    assert.equal(fs.readFileSync(path.join(x.root,file),'utf8'),fs.readFileSync(path.join(root,file),'utf8'));
+  }
+  assert.match(fs.readFileSync(path.join(x.root,'src/wecom-scheduled-briefing.js'),'utf8'),/source-first-v3/);
+  assert.equal(fs.readFileSync(path.join(x.root,'config.json'),'utf8'),originalConfig);
+  assert.equal(fs.readFileSync(path.join(x.root,'data/history'),'utf8'),'keep history');
+});

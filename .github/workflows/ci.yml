@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, codex/wecom-integration]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node 24 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: npm ci --no-audit --no-fund
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Run regression tests including Office rendering
+        run: OFFICE_TEST_PYTHON="$(command -v python)" npm test
+      - run: npm run check:release
+      - name: Exercise the scheduled path with doubles only
+        run: npm run test:secretary -- --out tmp/ci-secretary
+      - name: Retain synthetic experiment records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secretary-wiring-${{ matrix.os }}
+          path: tmp/ci-secretary/
+          if-no-files-found: ignore
+          retention-days: 7

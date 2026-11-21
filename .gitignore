@@ -21,3 +21,11 @@ experiments/secretary/bundle-provenance.json
 # 系统
 .DS_Store
 Thumbs.db
+
+# 本地开发环境与更新备份
+.venv/
+__pycache__/
+*.py[cod]
+work/
+.env.*
+!.env.example

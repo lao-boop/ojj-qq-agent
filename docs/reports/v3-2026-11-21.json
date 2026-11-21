@@ -1,0 +1,354 @@
+{
+  "date": "2026-11-21",
+  "model": "deepseek-v4-pro",
+  "v3_commit": "09e43b1c3c314c68d8672e5ffedd0f11120f4732",
+  "v2_commit": "1df1a186363c1ba3f518bad4c5836c66a13bf867",
+  "request_timeout_ms": 60000,
+  "http_attempts": 1,
+  "history_mode": "fixture",
+  "recipient": "test-double",
+  "samples_per_input_per_algorithm": 1,
+  "dataset_type": "author-written synthetic employee reports",
+  "input_hashes": [
+    {
+      "file": "experiments/secretary/cases.json",
+      "sha256": "a831f74a18c937b15253580a3215c12c2384214b6d2a048804014a43797c59ed"
+    },
+    {
+      "file": "experiments/secretary/fresh-v3.json",
+      "sha256": "dad570bb3612cc6ec73dfebb38c7c6e7ad58d03c52a558804a2be297ef49abd9"
+    }
+  ],
+  "rows": [
+    {
+      "id": "routine-original",
+      "algorithm": "v2",
+      "status": "completed",
+      "seconds": 61.5,
+      "known_tokens": 6534,
+      "usage_complete": true,
+      "history": [],
+      "employee": [
+        "今天两份合同都按计划归档好了，客户也确认收到扫描件了。明天照原计划走，没别的变化。"
+      ],
+      "text": "小林今天两份合同都按计划归档好了，客户也确认收到扫描件了。明天照原计划走，没别的变化。",
+      "failed_stages": []
+    },
+    {
+      "id": "routine-original",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 11.621,
+      "known_tokens": 1605,
+      "usage_complete": true,
+      "history": [],
+      "employee": [
+        "今天两份合同都按计划归档好了，客户也确认收到扫描件了。明天照原计划走，没别的变化。"
+      ],
+      "text": "小林反馈，今天两份合同都按计划归档好了，客户也确认收到扫描件；明天照原计划走，没有其他变化。",
+      "failed_stages": []
+    },
+    {
+      "id": "staffing-original",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 36.557,
+      "known_tokens": 3538,
+      "usage_complete": true,
+      "history": [
+        "下周一客户验收，小周说能来负责演示。"
+      ],
+      "employee": [
+        "演示稿的字体换好了。小周刚说周一要去医院，能不能回来还不知道；我今天下班前问小何能不能替一下，还没定。"
+      ],
+      "text": "下周一客户验收，之前小周说能来负责演示，演示稿字体已换好；但现在小周刚说周一要去医院，能不能回来演示还不确定。小林今天下班前会去问小何能不能替补，还没定。",
+      "failed_stages": []
+    },
+    {
+      "id": "staffing-original",
+      "algorithm": "v2",
+      "status": "failed",
+      "seconds": 60.014,
+      "known_tokens": 0,
+      "usage_complete": false,
+      "history": [
+        "下周一客户验收，小周说能来负责演示。"
+      ],
+      "employee": [
+        "演示稿的字体换好了。小周刚说周一要去医院，能不能回来还不知道；我今天下班前问小何能不能替一下，还没定。"
+      ],
+      "text": "",
+      "failed_stages": [
+        "evidence"
+      ]
+    },
+    {
+      "id": "staffing-key",
+      "algorithm": "v2",
+      "status": "completed",
+      "seconds": 107.053,
+      "known_tokens": 10219,
+      "usage_complete": true,
+      "history": [
+        "下周一客户验收，小周说能来负责演示。"
+      ],
+      "employee": [
+        "演示稿的字体换好了。小周刚说周一要去医院，小何已经确认周一替他演示。"
+      ],
+      "text": "下周一客户验收的演示人员有变化：小周刚说周一要去医院，小何已经确认周一替小周演示。\n\n演示稿的字体换好了。",
+      "failed_stages": []
+    },
+    {
+      "id": "staffing-key",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 42.531,
+      "known_tokens": 4191,
+      "usage_complete": true,
+      "history": [
+        "下周一客户验收，小周说能来负责演示。"
+      ],
+      "employee": [
+        "演示稿的字体换好了。小周刚说周一要去医院，小何已经确认周一替他演示。"
+      ],
+      "text": "小林说，下周一客户验收的演示有变化：小周刚说周一要去医院，小何已确认周一替小周演示；演示稿字体已经换好。",
+      "failed_stages": []
+    },
+    {
+      "id": "staffing-irrelevant",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 26.145,
+      "known_tokens": 2867,
+      "usage_complete": true,
+      "history": [
+        "下周一客户验收，小周说能来负责演示。"
+      ],
+      "employee": [
+        "演示稿的字体和封面颜色换好了。小周刚说周一要去医院，能不能回来还不知道；我今天下班前问小何能不能替一下，还没定。"
+      ],
+      "text": "下周一客户验收的演示，小周原本说能来负责，现在刚说周一要去医院，能不能回来还不知道；小林今天下班前问小何能不能替，还没定。演示稿的字体和封面颜色已经换好了。",
+      "failed_stages": []
+    },
+    {
+      "id": "staffing-irrelevant",
+      "algorithm": "v2",
+      "status": "failed",
+      "seconds": 60.009,
+      "known_tokens": 0,
+      "usage_complete": false,
+      "history": [
+        "下周一客户验收，小周说能来负责演示。"
+      ],
+      "employee": [
+        "演示稿的字体和封面颜色换好了。小周刚说周一要去医院，能不能回来还不知道；我今天下班前问小何能不能替一下，还没定。"
+      ],
+      "text": "",
+      "failed_stages": [
+        "evidence"
+      ]
+    },
+    {
+      "id": "pilot-scope-original",
+      "algorithm": "v2",
+      "status": "failed",
+      "seconds": 60.006,
+      "known_tokens": 0,
+      "usage_complete": false,
+      "history": [
+        "北辰的年度服务合同还在谈，客户这周先做试用。"
+      ],
+      "employee": [
+        "接待室打扫好了，桌上摆了三盆花。北辰让我们先开十个试用账号，采购说这只是试用申请，不代表年度合同批了；我周二找采购确认合同审批进度。"
+      ],
+      "text": "",
+      "failed_stages": [
+        "evidence"
+      ]
+    },
+    {
+      "id": "pilot-scope-original",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 33.362,
+      "known_tokens": 3681,
+      "usage_complete": true,
+      "history": [
+        "北辰的年度服务合同还在谈，客户这周先做试用。"
+      ],
+      "employee": [
+        "接待室打扫好了，桌上摆了三盆花。北辰让我们先开十个试用账号，采购说这只是试用申请，不代表年度合同批了；我周二找采购确认合同审批进度。"
+      ],
+      "text": "北辰年度服务合同还在谈，客户这周先做试用。北辰让先开十个试用账号，采购说这只是试用申请，不代表年度合同批了；小林说他周二找采购确认合同审批进度。接待室已打扫好。",
+      "failed_stages": []
+    },
+    {
+      "id": "pilot-scope-key",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 33.649,
+      "known_tokens": 3418,
+      "usage_complete": true,
+      "history": [
+        "北辰的年度服务合同还在谈，客户这周先做试用。"
+      ],
+      "employee": [
+        "接待室打扫好了，桌上摆了三盆花。北辰采购刚确认年度合同已经获批，客户仍先开十个试用账号；我周二找采购确认签约安排。"
+      ],
+      "text": "北辰年度合同，小林说采购刚确认合同已经获批，客户仍先开十个试用账号；签约安排待确认，小林周二找采购确认。之前小林提过合同还在谈、客户这周先做试用，这次更新为已获批。",
+      "failed_stages": []
+    },
+    {
+      "id": "pilot-scope-key",
+      "algorithm": "v2",
+      "status": "failed",
+      "seconds": 59.814,
+      "known_tokens": 0,
+      "usage_complete": false,
+      "history": [
+        "北辰的年度服务合同还在谈，客户这周先做试用。"
+      ],
+      "employee": [
+        "接待室打扫好了，桌上摆了三盆花。北辰采购刚确认年度合同已经获批，客户仍先开十个试用账号；我周二找采购确认签约安排。"
+      ],
+      "text": "",
+      "failed_stages": [
+        "evidence"
+      ]
+    },
+    {
+      "id": "pilot-scope-irrelevant",
+      "algorithm": "v2",
+      "status": "completed",
+      "seconds": 93.546,
+      "known_tokens": 8821,
+      "usage_complete": true,
+      "history": [
+        "北辰的年度服务合同还在谈，客户这周先做试用。"
+      ],
+      "employee": [
+        "接待室打扫好了，桌上摆了五盆花。北辰让我们先开十个试用账号，采购说这只是试用申请，不代表年度合同批了；我周二找采购确认合同审批进度。"
+      ],
+      "text": "北辰的年度服务合同还在谈，客户这周先做试用。北辰让我们先开十个试用账号，采购说这只是试用申请，不代表年度合同批了；小林周二找采购确认合同审批进度。接待室打扫好了。",
+      "failed_stages": []
+    },
+    {
+      "id": "pilot-scope-irrelevant",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 26.288,
+      "known_tokens": 2999,
+      "usage_complete": true,
+      "history": [
+        "北辰的年度服务合同还在谈，客户这周先做试用。"
+      ],
+      "employee": [
+        "接待室打扫好了，桌上摆了五盆花。北辰让我们先开十个试用账号，采购说这只是试用申请，不代表年度合同批了；我周二找采购确认合同审批进度。"
+      ],
+      "text": "北辰让先开十个试用账号，采购说这只是试用申请，不代表年度合同批了；小林周二会找采购确认合同审批进度。北辰的年度服务合同还在谈，客户这周先做试用。",
+      "failed_stages": []
+    },
+    {
+      "id": "launch-scope-original",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 27.849,
+      "known_tokens": 3091,
+      "usage_complete": true,
+      "history": [
+        "东桥客户系统周五正式上线，我们周三先内部演练。"
+      ],
+      "employee": [
+        "今天值班表更新完了。小许说要改到下周，我还没问清他说的是内部演练还是客户正式上线；我下午两点找他核实。"
+      ],
+      "text": "小林说值班表今天已更新，并转告小许要把东桥客户系统相关安排改到下周，但还没确认改的是周三内部演练还是周五正式上线；小林说下午两点找小许核实。此前该客户系统安排为周五正式上线、周三先内部演练。",
+      "failed_stages": []
+    },
+    {
+      "id": "launch-scope-original",
+      "algorithm": "v2",
+      "status": "failed",
+      "seconds": 60.009,
+      "known_tokens": 0,
+      "usage_complete": false,
+      "history": [
+        "东桥客户系统周五正式上线，我们周三先内部演练。"
+      ],
+      "employee": [
+        "今天值班表更新完了。小许说要改到下周，我还没问清他说的是内部演练还是客户正式上线；我下午两点找他核实。"
+      ],
+      "text": "",
+      "failed_stages": [
+        "evidence"
+      ]
+    },
+    {
+      "id": "launch-scope-key",
+      "algorithm": "v2",
+      "status": "failed",
+      "seconds": 60.004,
+      "known_tokens": 0,
+      "usage_complete": false,
+      "history": [
+        "东桥客户系统周五正式上线，我们周三先内部演练。"
+      ],
+      "employee": [
+        "今天值班表更新完了。小许刚确认，改到下周的是内部演练，东桥客户系统正式上线仍是周五；我下午两点再找他确认演练安排。"
+      ],
+      "text": "",
+      "failed_stages": [
+        "evidence"
+      ]
+    },
+    {
+      "id": "launch-scope-key",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 28.503,
+      "known_tokens": 3028,
+      "usage_complete": true,
+      "history": [
+        "东桥客户系统周五正式上线，我们周三先内部演练。"
+      ],
+      "employee": [
+        "今天值班表更新完了。小许刚确认，改到下周的是内部演练，东桥客户系统正式上线仍是周五；我下午两点再找他确认演练安排。"
+      ],
+      "text": "东桥客户系统正式上线仍是周五，内部演练小许确认改到下周；具体演练安排小林下午两点还会再找小许确认。另外，今天的值班表已经更新完了。",
+      "failed_stages": []
+    },
+    {
+      "id": "launch-scope-irrelevant",
+      "algorithm": "v3",
+      "status": "completed",
+      "seconds": 20.87,
+      "known_tokens": 2563,
+      "usage_complete": true,
+      "history": [
+        "东桥客户系统周五正式上线，我们周三先内部演练。"
+      ],
+      "employee": [
+        "今天值班表更新完了，还换了个表头颜色。小许说要改到下周，我还没问清他说的是内部演练还是客户正式上线；我下午两点找他核实。"
+      ],
+      "text": "东桥客户系统原定周五正式上线、周三先内部演练，现在小许说要改到下周，但小林还没问清小许说的改期是内部演练还是客户正式上线；小林下午两点找小许核实。另，小林说值班表今天更新完了。",
+      "failed_stages": []
+    },
+    {
+      "id": "launch-scope-irrelevant",
+      "algorithm": "v2",
+      "status": "failed",
+      "seconds": 105.419,
+      "known_tokens": 4548,
+      "usage_complete": false,
+      "history": [
+        "东桥客户系统周五正式上线，我们周三先内部演练。"
+      ],
+      "employee": [
+        "今天值班表更新完了，还换了个表头颜色。小许说要改到下周，我还没问清他说的是内部演练还是客户正式上线；我下午两点找他核实。"
+      ],
+      "text": "",
+      "failed_stages": [
+        "compose"
+      ]
+    }
+  ]
+}
