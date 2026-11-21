@@ -149,6 +149,11 @@
             </div>
           </div>
           <div class="card">
+            <h3>企业微信</h3>
+            <div class="big"><span class="dot" id="dotWecom"></span><span id="wecomText">—</span></div>
+            <div class="muted" id="wecomMeta">—</div>
+          </div>
+          <div class="card">
             <h3>模型</h3>
             <div class="big" id="modelName">—</div>
             <div class="muted" id="modelMeta">—</div>
@@ -394,6 +399,13 @@
             ? (s.onebot.nickname || '-') + '（' + (s.onebot.selfId || '-') + '）'
             : s.onebot.lastError || s.onebot.wsUrl;
           $('subline').textContent = '模型 ' + s.llm.model + ' · 人格 ' + s.personaChars + ' 字 · ' + (on ? '在线' : '等待 NapCat/SnowLuma');
+
+          const w = s.wecom || {};
+          const wOn = Boolean(w.connected);
+          if ($('dotWecom')) $('dotWecom').className = 'dot ' + (wOn ? 'on' : 'off');
+          if ($('wecomText')) $('wecomText').textContent = wOn ? '正常' : (w.enabled ? '未连接' : '未配置');
+          if ($('wecomMeta')) $('wecomMeta').textContent = w.enabled ? ('bot ' + (w.botId || '')) : 'WECOM_BOT_ID 未配置';
+
           $('modelName').textContent = s.llm.model;
           $('modelMeta').textContent = (s.llm.hasKey ? '已配置 Key' : '缺少 API Key') + ' · 调用 ' + s.llm.stats.calls + ' 次';
           $('statReceived').textContent = s.stats.received;

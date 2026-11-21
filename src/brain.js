@@ -59,11 +59,13 @@ export class Brain {
       `- 聊天场景：${meta.scene}`,
       meta.peerName ? `- 对方：${meta.peerName}` : '',
       meta.groupName ? `- 群名：${meta.groupName}` : '',
+      meta.wecomRoster ? `- ${meta.wecomRoster}` : '',
       '',
       '【回复要求】',
       '- 直接说话，不要写「小鲸鱼：」这样的前缀，不要输出 Markdown、列表、标题、代码块。',
       '- 一条回复控制在 1~3 条短消息（用换行分隔），每条尽量一句话；想多说就分条，不要一大段。',
       '- 不要复述工具结果，不要报路径、文件名、链接；画完图一句话带走即可。',
+      '- 对方问“X 是谁 / 你认识 X 吗”时，先看上面的联系人；名单里有就直接说认识，不要说自己看不到列表。',
       '- 说到做到：对方要图/语音/文件/歌时，必须先调用对应工具，再回一句；没调工具就不要说“好/马上/在做”。',
       '- 偶尔可以用一个括号写动作（比如（尾巴拍了拍水）），但别每句都来。',
       '- 对方发来的图片如果看不出来，就直说没看清，不要瞎编。',
@@ -139,6 +141,8 @@ export class Brain {
           model: this.visionModel,
           maxTokens: 700,
           temperature: 0.2,
+          timeoutMs: 12000,
+          retries: 0,
         });
         let text = (res.content || '').trim();
         if (!text && res.message?.reasoning_content) {
@@ -146,11 +150,13 @@ export class Brain {
           text = String(res.message.reasoning_content).slice(-200).trim();
         }
         if (text) captions.push(list.length > 1 ? `图${i + 1}：${text}` : text);
+        else captions.push(list.length > 1 ? `图${i + 1}：没看清` : '这张图没看清');
       } catch (err) {
         this.logger.warn(`图片识别失败：${err.message}`);
+        captions.push(list.length > 1 ? `图${i + 1}：没看清` : '这张图没看清');
       }
     }
-    return captions.length ? `[对方发来的图片] ${captions.join(' / ')}` : '';
+    return captions.length ? `[对方发来的图片] ${captions.join(' / ')}` : '[对方发来的图片] 我没看清这张图。';
   }
 
   async #runLoop(messages, toolCtx, onProgress, countTool, toolSpecs) {
@@ -247,7 +253,7 @@ export class Brain {
 
     const producedImages = toolCtx.images;
     reply = sanitizeReply(reply);
-    if (!reply) reply = '唔……刚走神了，你再说一遍好不好。';
+    if (!reply) reply = '我在，你说。';
 
     const bubbles = toBubbles(reply, this.cfg.maxBubbles, MAX_BUBBLE_CHARS, CJK);
 
@@ -266,6 +272,7 @@ export class Brain {
       songs: toolCtx.songs,
       documents: toolCtx.documents,
       videos: toolCtx.videos,
+      files: toolCtx.files,
       toolCalls,
       ms: Date.now() - started,
     };

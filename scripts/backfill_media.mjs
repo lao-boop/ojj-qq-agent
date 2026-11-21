@@ -3,7 +3,11 @@ import path from 'node:path';
 import { DATA_DIR } from '../src/config.js';
 import { logMedia, recentMedia } from '../src/media-log.js';
 
-const OWNER_CHAT = 'private:123456789';
+const OWNER_CHAT = process.env.OWNER_CHAT;
+if (!OWNER_CHAT) {
+  console.error('请先设置 OWNER_CHAT=private:<你的QQ号>');
+  process.exit(1);
+}
 const FILES_DIR = path.join(DATA_DIR, 'files');
 
 function classify(name, ext) {

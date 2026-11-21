@@ -8,15 +8,20 @@
   "scripts": {
     "start": "node src/index.js",
     "mock": "node src/mock-onebot.js",
-    "test:e2e": "node scripts/e2e.js"
+    "test:e2e": "node scripts/e2e.js",
+    "test:score": "node scripts/score-tests.mjs results",
+    "test:init": "node scripts/score-tests.mjs --init",
+    "test:offline": "node scripts/selftest-offline.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "opencc-js": "^1.4.2",
-    "ws": "^8.18.0",
+    "@wecom/aibot-node-sdk": "^1.0.7",
+    "localtunnel": "^2.0.2",
     "mineflayer": "4.39.0",
-    "mineflayer-pathfinder": "2.4.5"
+    "mineflayer-pathfinder": "2.4.5",
+    "opencc-js": "^1.4.2",
+    "ws": "^8.18.0"
   }
 }

@@ -7,6 +7,8 @@ import { lookupPart } from './parts.js';
 import { listDocs, markSummarized, latestDoc } from './doc-inbox.js';
 import { addGlobalFact, isOwner, loadGlobal } from './global.js';
 import { addRelay, canRelay, findContact, markDelivered, peekPending } from './relay.js';
+import { cleanRelayContent, parseWhen } from './wecom-relay.js';
+import { addReminder, listReminders, cancelLatest } from './reminders.js';
 import { formatMediaList, searchMedia } from './media-log.js';
 import { searchBili, pickVideo, downloadBili, videoFileName } from './bilibili.js';
 import { findPython } from './tts.js';
@@ -398,12 +400,48 @@ const SPECS = {
       },
     },
   },
+  schedule_reminder: {
+    type: 'function',
+    function: {
+      name: 'schedule_reminder',
+      description:
+        '用户让你在某个时间提醒他/她时调用。例：“明天下午三点提醒我开会”“10分钟后提醒我喝水”。when 填原话里的时间表达，不要自己换算成时间戳。',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: '到点要提醒的内容，保留原话，不超过 100 字' },
+          when: { type: 'string', description: '时间表达，如“明天下午三点”“10分钟后”“周五上午9点”' },
+        },
+        required: ['text', 'when'],
+      },
+    },
+  },
+  list_reminders: {
+    type: 'function',
+    function: {
+      name: 'list_reminders',
+      description: '查看当前还有哪些提醒没到点。用户问“我有哪些提醒”时用。',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  cancel_reminder: {
+    type: 'function',
+    function: {
+      name: 'cancel_reminder',
+      description: '用户要取消提醒时用。知道提醒内容就把 keyword 填上；不知道就留空取消最近一条。',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: { type: 'string', description: '提醒内容里的关键词，如“收衣服”“开会”' },
+        },
+      },
+    },
+  },
   find_media: {
     type: 'function',
     function: {
       name: 'find_media',
-      description:
-        '在长期文件记忆里查历史收发的文件、图片、音频（含文件名和内容摘要）。对方问“我之前发你的那个表格”“上周那份报价单”“你发给我的那首歌”时用。',
+      description:        '在长期文件记忆里查历史收发的文件、图片、音频（含文件名和内容摘要）。对方问“我之前发你的那个表格”“上周那份报价单”“你发给我的那首歌”时用。',
       parameters: {
         type: 'object',
         properties: {
@@ -683,7 +721,7 @@ const QUALITY_SUFFIX =
  * 组装可用工具。
  * ctx: { chatKey, images: [], voices: [], memory }
  */
-export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify, friendNotify, jobTracker, logger }) {
+export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom, wecomDirectory, wecomUsers, relayNotify, friendNotify, jobTracker, logger }) {
   const stickers = scanStickers();
   const stickerCats = Object.keys(stickers);
   const specs = [SPECS.draw_image, SPECS.get_time, SPECS.remember, SPECS.sing, SPECS.search_history, SPECS.search_web];
@@ -701,6 +739,9 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     SPECS.relay_message,
     SPECS.relay_list,
     SPECS.relay_to_friend,
+    SPECS.schedule_reminder,
+    SPECS.list_reminders,
+    SPECS.cancel_reminder,
     SPECS.find_media,
     SPECS.fetch_video,
     SPECS.mc_connect,
@@ -760,13 +801,29 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
             const prompt = await toImagePrompt(llm, args.prompt, logger, cfg.llm?.helperModel);
             const finalPrompt = `${prompt}${QUALITY_SUFFIX}`;
             logger.info(`出图提示词：${finalPrompt.slice(0, 160)}`);
-            let img = await imageGen.generate({ prompt: finalPrompt, size: args.size });
+
+            // 瞬时失败静默重试：不要把“没画成”先丢给用户
+            const generate = async (p) => {
+              let last;
+              for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                  return await imageGen.generate({ prompt: p, size: args.size });
+                } catch (err) {
+                  last = err;
+                  logger.warn(`出图失败（第 ${attempt + 1} 次）：${err.message}`);
+                  if (attempt < 2) await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+                }
+              }
+              throw last;
+            };
+
+            let img = await generate(finalPrompt);
             // 质检：有多余物体/乱码文字就补画一张
             const qa = await checkImageQuality(llm, img.file, logger, cfg.llm?.visionModel);
             if (qa?.bad) {
               logger.warn(`出图质检不合格：${qa.issue}`);
               const retryPrompt = `${prompt}。严格避免以下问题：${qa.issue || '多余物体、肢体错误、乱码文字'}${QUALITY_SUFFIX}`;
-              const second = await imageGen.generate({ prompt: retryPrompt, size: args.size }).catch((err) => {
+              const second = await generate(retryPrompt).catch((err) => {
                 logger.warn(`补画失败，用第一张：${err.message}`);
                 return null;
               });
@@ -1032,6 +1089,21 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           return ok ? `记到公开记忆里了：${args.text}（以后所有人都能看到这条）` : '这条已经记过了。';
         }
         case 'relay_message': {
+          if (String(ctx.chatKey || '').startsWith('wecom:')) {
+            const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
+            const wx = getWecom?.();
+            const text = cleanRelayContent(args.text).slice(0, 200);
+            if (!text) return '要转告什么？';
+            if (!wx?.enabled) return '企微通道没接好。';
+            if (!bossId) return '还没设置老板的企微 userid（WECOM_OWNER_USERID），设好才能传话。';
+            if (String(ctx.peerName) === bossId) return '你就是老板，不用转告自己。';
+            try {
+              await wx.sendTo(bossId, `【传话】${ctx.peerName || '同事'}：${text}`);
+              return '已经转告老板了。';
+            } catch (err) {
+              return `没发出去：${err.message}`;
+            }
+          }
           const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
           const uin = m?.[1];
           if (!uin) return '群聊里不能传话，私聊找我才行。';
@@ -1063,9 +1135,36 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           return `还有 ${items.length} 条没转告：\n${items.map((i) => `- ${i.name || i.from}：${i.text}`).join('\n')}`;
         }
         case 'relay_to_friend': {
+          if (String(ctx.chatKey || '').startsWith('wecom:')) {
+            const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
+            const text = cleanRelayContent(args.text).slice(0, 200);
+            if (!text) return '内容为空。';
+            if (!bossId) return '还没设置老板的企微 userid（WECOM_OWNER_USERID）。';
+            if (String(ctx.peerName) !== bossId) return '只有老板能让我给同事带话。';
+
+            const local = wecomUsers?.findUser(args.to);
+            if (local) {
+              await getWecom?.().sendTo(local.userid, `【传话】老板：${text}`);
+              return `已经发给 ${local.name} 了。`;
+            }
+
+            if (wecomDirectory?.enabled) {
+              try {
+                const target = await wecomDirectory.resolve(args.to);
+                if (target) {
+                  await getWecom?.().sendTo(target.userid, `【传话】老板：${text}`);
+                  return `已经发给 ${target.name} 了。`;
+                }
+              } catch {
+                /* 通讯录不可用就退回本地名字 */
+              }
+            }
+
+            return `还不认识「${args.to}」。让他在企微里对我说一句“我叫${args.to}”，我记住后就能转。`;
+          }
           const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
           if (!isOwner(m?.[1], cfg)) return '只有主人能让我给别人带话。';
-          const text = String(args.text || '').trim().slice(0, 200);
+          const text = cleanRelayContent(args.text).slice(0, 200);
           if (!text) return '内容为空。';
           const c = findContact(args.to);
           if (!c) return `没找到「${args.to}」，直接给我 QQ 号，或者让对方先跟我说句话。`;
@@ -1073,6 +1172,44 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           const ownerName = loadGlobal()?.owner?.name || '主人';
           await friendNotify(c.uin, `【传话】${ownerName} 让我跟你说：${text}`);
           return `已经直接发给 ${c.name}（${c.uin}）了。回复里说一句“发过去了”就行。`;
+        }
+        case 'schedule_reminder': {
+          const text = String(args.text || '').trim().replace(/^提醒我?\s*/, '').slice(0, 100);
+          const whenText = String(args.when || '').trim();
+          if (!text) return '要提醒你什么？';
+          const when = parseWhen(whenText || text, new Date());
+          if (!when) return '要什么时候提醒？比如“明天下午三点”或“10分钟后”。';
+          if (when.at < Date.now() + 20000) return '这个时间已经过了，换一个将来的时间吧。';
+          const item = addReminder({ chatKey: ctx.chatKey, text, dueAt: when.at });
+          const d = new Date(when.at);
+          const label = d.toLocaleString('zh-CN', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          });
+          logger?.info?.(`提醒已登记：${item.id} ${label} ${text.slice(0, 30)}`);
+          return `定好了：${label} 提醒你「${text}」。回复里一句带过就行。`;
+        }
+        case 'list_reminders': {
+          const list = listReminders(ctx.chatKey);
+          if (!list.length) return '现在没有待到的提醒。';
+          return (
+            '待到的提醒：\n' +
+            list
+              .slice(-10)
+              .map((r) => {
+                const d = new Date(r.dueAt);
+                return `· ${d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} ${r.text}`;
+              })
+              .join('\n')
+          );
+        }
+        case 'cancel_reminder': {
+          const r = cancelLatest(ctx.chatKey, String(args.keyword || '').trim());
+          if (!r) return '没有可取消的提醒。';
+          return `取消了：${r.text}`;
         }
         case 'find_media': {
           const items = searchMedia(args.keyword || '', ctx.chatKey, 10);
@@ -1391,6 +1528,9 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     'search_web',
     'find_media',
     'remember_global',
+    'schedule_reminder',
+    'list_reminders',
+    'cancel_reminder',
   );
   const docSpecs = pick('make_ppt', 'make_docx', 'make_excel');
   const mcSpecs = specs.filter((s) => String(nameOf(s)).startsWith('mc_'));

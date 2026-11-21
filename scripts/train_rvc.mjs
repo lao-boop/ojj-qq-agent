@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const TOKEN = process.env.REPLICATE_API_TOKEN || 'YOUR_REPLICATE_TOKEN';
+const TOKEN = process.env.REPLICATE_API_TOKEN || '';
+if (!TOKEN) {
+  console.error('请设置 REPLICATE_API_TOKEN');
+  process.exit(1);
+}
 const DATASET = process.argv[2] || 'data/voice-dataset/xiaoyi.zip';
 const OUT = process.argv[3] || 'data/voice-dataset/train-result.json';
 const EPOCHS = Number(process.argv[4] || 15);

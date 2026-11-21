@@ -24,6 +24,7 @@ export class LLM {
     maxTokens = this.cfg.maxTokens,
     timeoutMs = this.cfg.timeoutMs,
     toolChoice,
+    retries = 4,
   }) {
     const body = {
       model,
@@ -39,7 +40,7 @@ export class LLM {
 
     const url = `${this.cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;
     let lastErr;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
       const started = Date.now();
       try {
         const res = await fetch(url, {
@@ -77,9 +78,10 @@ export class LLM {
         lastErr = err;
         this.stats.failures++;
         const retryable = !err.status || RETRYABLE.has(err.status) || err.name === 'TimeoutError';
-        this.logger.warn(`LLM 请求失败（第 ${attempt + 1} 次）：${err.message}`);
-        if (!retryable || attempt === 2) break;
-        await sleep(1200 * (attempt + 1));
+        const cause = err.cause?.code || err.cause?.message || '';
+        this.logger.warn(`LLM 请求失败（第 ${attempt + 1} 次）：${err.message}${cause ? `（${cause}）` : ''}`);
+        if (!retryable || attempt === retries) break;
+        await sleep(1000 * 2 ** attempt);
       }
     }
     throw lastErr;

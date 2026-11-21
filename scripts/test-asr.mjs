@@ -1,8 +1,16 @@
 import fs from 'node:fs';
 
-const TOKEN = 'YOUR_REPLICATE_TOKEN';
+const TOKEN = process.env.REPLICATE_API_TOKEN || '';
+if (!TOKEN) {
+  console.error('请设置 REPLICATE_API_TOKEN');
+  process.exit(1);
+}
 const H = { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' };
-const FILE = 'D:\\Music\\06一人一首成名曲 100首\\879.江南-林俊杰.mp3';
+const FILE = process.env.TEST_AUDIO_PATH || '';
+if (!FILE) {
+  console.error('请设置 TEST_AUDIO_PATH');
+  process.exit(1);
+}
 
 const buf = fs.readFileSync(FILE);
 console.log('size MB', (buf.length / 1024 / 1024).toFixed(1));
