@@ -8,13 +8,17 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { wiringResponse } from '../experiments/secretary/wiring-double.js';
 import { writeBriefing as baselineWriter } from '../experiments/secretary/baseline-briefing.js';
+import { writeScheduledBriefing as previousWriter } from '../experiments/secretary/previous-scheduled-briefing.js';
 import { requestFailure, expectAckLoss, checkResume, reuseCompleted } from '../experiments/secretary/support.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const { values: opts } = parseArgs({ options: { live: {type:'boolean'}, algorithm:{type:'string',default:'upgraded'}, split:{type:'string',default:'dev'}, out:{type:'string'}, config:{type:'string'}, 'resume-from':{type:'string'}, 'request-timeout-ms':{type:'string',default:'180000'} } });
-assert.ok(['dev','holdout'].includes(opts.split));
-assert.ok(['baseline','upgraded'].includes(opts.algorithm));
+const { values: opts } = parseArgs({ options: { live: {type:'boolean'}, algorithm:{type:'string',default:'upgraded'}, split:{type:'string',default:'dev'}, out:{type:'string'}, config:{type:'string'}, 'resume-from':{type:'string'}, 'request-timeout-ms':{type:'string',default:'180000'}, 'request-attempts':{type:'string'}, 'cases-file':{type:'string',default:'experiments/secretary/cases.json'}, 'case-id':{type:'string'}, variant:{type:'string'} } });
+assert.ok(['dev','holdout','fresh'].includes(opts.split));
+assert.ok(['baseline','previous','upgraded'].includes(opts.algorithm));
 const requestTimeoutMs=Number(opts['request-timeout-ms']);
 assert.ok(Number.isInteger(requestTimeoutMs) && requestTimeoutMs>=1000 && requestTimeoutMs<=300000);
+const requestAttempts=opts['request-attempts']===undefined?null:Number(opts['request-attempts']);
+assert.ok(requestAttempts===null || (Number.isInteger(requestAttempts) && requestAttempts>=1 && requestAttempts<=3));
+if(opts.variant)assert.ok(['original','key','irrelevant'].includes(opts.variant));
 const out = path.resolve(opts.out || path.join(root, 'tmp', `secretary-${opts.live?'live':'wiring'}-${opts.split}-${Date.now()}`));
 fs.mkdirSync(out, {recursive:true});
 assert.ok(!fs.existsSync(path.join(out,'manifest.json')), 'Use a new output directory; baseline must not be overwritten');
@@ -32,12 +36,20 @@ if (opts.live && !modelCfg.apiKey) {
   fs.rmSync(temp,{recursive:true,force:true});
   throw new Error('No model key: use --env-file with the existing runtime .env, or --config. No real answers obtained.');
 }
-const all = JSON.parse(fs.readFileSync(new URL('../experiments/secretary/cases.json',import.meta.url)));
-const cases = all.filter(c=>c.split===opts.split);
+const caseFile=path.resolve(root,opts['cases-file']);
+const all = JSON.parse(fs.readFileSync(caseFile));
+const cases = all.filter(c=>c.split===opts.split && (!opts['case-id'] || c.id===opts['case-id']));
+assert.ok(cases.length,'No matching cases');
 const sha = file => createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex');
+assert.equal(sha('experiments/secretary/previous-scheduled-briefing.js'),'32f2809bda0f6567c610c9e1039ca760f1e6df873c7b61356fce47f1ba2882e3','Frozen v1 must remain byte-identical to 4fc65d1');
 assert.equal(sha('experiments/secretary/baseline-briefing.js'),'393e10fa4ee9fdaf6f80906dbe5d48a5d50727da5e65e07b9afa9da351286923','Baseline must remain byte-identical to cf06a720');
 const manifest = {mode:opts.live?'real-model':'wiring-only, NOT model answers', algorithm:opts.algorithm, baselineCommit:'cf06a72084811d84cb8388c1bbf2a549e20b2f22', split:opts.split, model:opts.live?modelCfg.model:null, started:new Date().toISOString(), files:Object.fromEntries(['src/wecom-secretary.js','src/wecom-briefing.js','src/wecom-scheduled-briefing.js','experiments/secretary/baseline-briefing.js','scripts/experiment-secretary.mjs','experiments/secretary/cases.json'].map(f=>[f,sha(f)])),results:[]};
 manifest.requestTimeoutMs=requestTimeoutMs;
+manifest.requestAttempts=requestAttempts;
+manifest.caseHash=createHash('sha256').update(fs.readFileSync(caseFile)).digest('hex');
+manifest.caseSelection=opts['case-id'] || null;manifest.variantSelection=opts.variant || null;
+manifest.previousCommit='4fc65d1e0edad4cf63a03156bf40e7b0fa7d6700';
+manifest.files['experiments/secretary/previous-scheduled-briefing.js']=sha('experiments/secretary/previous-scheduled-briefing.js');
 manifest.modelOrigin=opts.live?new URL(modelCfg.baseUrl).origin:null;
 manifest.proxyEnvironmentPresent=['HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy'].some(k=>Boolean(process.env[k]));
 const save = () => fs.writeFileSync(path.join(out,'manifest.json'), JSON.stringify(manifest,null,2));
@@ -52,7 +64,7 @@ if(previous) {
 }
 save();
 let stopReason=null;
-for (const c of cases) for (const variant of ['original','key','irrelevant']) {
+for (const c of cases) for (const variant of (opts.variant?[opts.variant]:['original','key','irrelevant'])) {
   const id = `${c.id}-${variant}`;
   if(reuseCompleted(previous,resumeDir,out,id)) {
     manifest.results.push({id,status:'completed',reusedFrom:resumeDir});save();
@@ -68,6 +80,7 @@ for (const c of cases) for (const variant of ['original','key','irrelevant']) {
   app.runtime.brain = {async respond(){return {bubbles:['测试接收']};}};
   const s = app.secretary;
   if (opts.algorithm === 'baseline') s.scheduledWriter = baselineWriter;
+  if (opts.algorithm === 'previous') s.scheduledWriter = previousWriter;
   let now = Date.now(), seq = 0, stage = 'history', phase='receive';
   let failure=null;
   s.now = () => now;
@@ -76,7 +89,7 @@ for (const c of cases) for (const variant of ['original','key','irrelevant']) {
   const real = s.llm;
   s.llm = {async chat(options) {
     // Applies equally to both algorithms, only inside this isolated experiment.
-    const input = structuredClone({...options,timeoutMs:requestTimeoutMs});
+    const input = structuredClone({...options,timeoutMs:requestTimeoutMs,...(requestAttempts===null?{}:{maxAttempts:requestAttempts})});
     const call = {stage,input,startedAt:new Date().toISOString(),attempts:0};
     calls.push(call);
     const checkpoint = () => fs.writeFileSync(path.join(out,`${id}-calls.json`),JSON.stringify(calls,null,2));
@@ -85,11 +98,14 @@ for (const c of cases) for (const variant of ['original','key','irrelevant']) {
     console.log(`  ${stage}/${JSON.parse(input.messages[1].content).stage || 'single'}: 请求模型（单次上限${requestTimeoutMs/1000}秒）`);
     try { response = opts.live ? await real.chat(input) : wiringResponse(input,'测试替身仅确认摘要接口通路，不代表模型转告。'); }
     catch(error) {
+      call.attemptDetails=error.modelAttempts || [];
       call.errorDetails=requestFailure(error);call.error=call.errorDetails.message;
       call.elapsedMs=Date.now()-started;call.attempts=real.stats.failures-priorFailures;
       checkpoint();error.experimentRequestError=call.errorDetails;throw error;
     }
-    call.response=response;
+    // Keep final content and token counts; do not export provider reasoning text.
+    call.response={...response,message:response.message?Object.fromEntries(Object.entries(response.message).filter(([key])=>key!=='reasoning_content' && key!=='reasoning')):response.message};
+    call.attemptDetails=response.attempts || [];
     call.elapsedMs=Date.now()-started;
     call.attempts=opts.live?real.stats.failures-priorFailures+1:0;
     checkpoint();

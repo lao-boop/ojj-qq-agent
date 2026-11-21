@@ -10,8 +10,8 @@ const messages = [
 ];
 const fact = (id,text,status,source,quote) => ({id,text,status,evidence:[{source,quote}]});
 function plan() { return {importance:'substantive',items:[
-  {id:'I1',topic:'展会',priority:'normal',reason:'日常进展',updates:[],facts:[fact('F1','展会三十拨人','reported','M1',messages[1].text)]},
-  {id:'I2',topic:'本次续约',priority:'lead',reason:'签约状态已确认',updates:[{oldFact:'F0',newFact:'F2'}],facts:[
+  {id:'I1',topic:'展会',priority:'normal',context:[],updates:[],facts:[fact('F1','展会三十拨人','reported','M1',messages[1].text)]},
+  {id:'I2',topic:'本次续约',priority:'lead',context:[],updates:[{oldFact:'F0',newFact:'F2'}],facts:[
     fact('F0','本次合同原定明天签','superseded','M0',messages[0].text),
     fact('F2','员工确认本次合同已签，按月付问的是明年','confirmed','M2',messages[2].text),
   ]},
@@ -40,7 +40,7 @@ test('invented quotes, missing new records, duplicate facts and cross-issue repl
 });
 
 test('history alone cannot become a new report item', () => {
-  const p=plan(); p.items.push({id:'I3',topic:'历史',priority:'normal',reason:'旧闻',updates:[],facts:[fact('F3','原定明天','planned','M0',messages[0].text)]});
+  const p=plan(); p.items.push({id:'I3',topic:'历史',priority:'normal',context:[],updates:[],facts:[fact('F3','原定明天','planned','M0',messages[0].text)]});
   assert.throws(()=>validateEvidencePlan(p,messages),/历史背景/);
 });
 
@@ -91,7 +91,7 @@ test('context-only input makes no model call; malformed or truncated extraction 
 });
 
 test('source existence is not semantic entailment: guards deliberately do not claim to detect it',()=>{
-  const p=plan();p.items[1].facts[1].text='合同签了说明客户资金充足';
+  const p=plan();p.items[1].facts[1].status='planned';
   // Valid source IDs and literal quotes cannot prove this claim. Live review must catch it.
   assert.doesNotThrow(()=>validateEvidencePlan(p,messages));
 });

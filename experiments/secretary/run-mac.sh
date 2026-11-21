@@ -38,6 +38,22 @@ fi
 export PATH="$(dirname "$node_bin"):$PATH"
 npm ci --no-audit --no-fund
 mkdir -p "$PWD/tmp"
+if [ "${WHALE_ITERATION_V2:-}" = 1 ]; then
+  result_dir=$(mktemp -d "$PWD/tmp/secretary-iteration-v2.XXXXXX")
+  set -- --live --config "$runtime_dir/config.json" --out "$result_dir"
+  if [ -n "$resume_root" ]; then set -- "$@" --resume-from "$resume_root"; fi
+  iteration_status=0
+  if [ -f "$runtime_dir/.env" ]; then
+    NODE_USE_ENV_PROXY=1 "$node_bin" "--env-file=$runtime_dir/.env" scripts/iterate-secretary.mjs "$@" || iteration_status=$?
+  else
+    NODE_USE_ENV_PROXY=1 "$node_bin" scripts/iterate-secretary.mjs "$@" || iteration_status=$?
+  fi
+  tar -czf "$result_dir.tar.gz" -C "$result_dir" .
+  if [ -f "$result_dir/comparison.html" ]; then open "$result_dir/comparison.html"; fi
+  open -R "$result_dir.tar.gz"
+  printf '\n已保留全部结果（含失败）。请上传 Finder 选中的文件：\n%s.tar.gz\n' "$result_dir"
+  exit "$iteration_status"
+fi
 result_dir=$(mktemp -d "$PWD/tmp/secretary-compare.XXXXXX")
 
 # Explicit branches are compatible with macOS Bash 3.2 + set -u (no empty array expansion).

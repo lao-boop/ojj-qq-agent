@@ -8,7 +8,7 @@ import {once} from 'node:events';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {requestFailure,expectAckLoss,checkResume,reuseCompleted} from '../experiments/secretary/support.js';
-import {writeScheduledBriefing} from '../src/wecom-scheduled-briefing.js';
+import {writeScheduledBriefing} from '../experiments/secretary/previous-scheduled-briefing.js';
 const run=promisify(execFile);
 const root=path.resolve(import.meta.dirname,'..');
 
@@ -49,8 +49,16 @@ test('resume copies only complete results and preserves the old bytes',t=>{
   for(const file of fs.readdirSync(from))assert.equal(fs.readFileSync(path.join(from,file),'utf8'),fs.readFileSync(path.join(to,file),'utf8'));
 });
 
+test('resume rejects changed budget, case selection, or frozen comparison writer',()=>{
+ const files=Object.fromEntries(['src/wecom-secretary.js','src/wecom-briefing.js','src/wecom-scheduled-briefing.js','experiments/secretary/baseline-briefing.js','experiments/secretary/cases.json','experiments/secretary/previous-scheduled-briefing.js'].map(k=>[k,'same']));
+ const previous={mode:'real-model',algorithm:'previous',split:'fresh',model:'test',baselineCommit:'base',requestTimeoutMs:60000,requestAttempts:1,caseHash:'frozen-cases',caseSelection:'one',variantSelection:'original',files};
+ assert.doesNotThrow(()=>checkResume(previous,structuredClone(previous)));
+ for(const [key,value] of Object.entries({requestTimeoutMs:180000,requestAttempts:3,caseHash:'changed',caseSelection:'two',variantSelection:'key'}))assert.throws(()=>checkResume(previous,{...previous,[key]:value}));
+ assert.throws(()=>checkResume(previous,{...previous,files:{...files,'experiments/secretary/previous-scheduled-briefing.js':'changed'}}));
+});
+
 const snapshots=JSON.parse(fs.readFileSync(new URL('./fixtures/secretary-mac-responses.json',import.meta.url)));
-for(const fixture of snapshots)test(`Mac response replay: ${fixture.id} passes existing guards without relaxing them`,async()=>{
+for(const fixture of snapshots)test(`Frozen v1 Mac response replay: ${fixture.id} preserves the measured baseline`,async()=>{
   let count=0;
   const r=await writeScheduledBriefing({messages:fixture.messages,llm:{async chat(){return fixture.responses[count++];}}});
   assert.equal(count,2);assert.ok(r.text);assert.ok(r.sources.length);

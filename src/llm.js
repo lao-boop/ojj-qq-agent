@@ -24,7 +24,11 @@ export class LLM {
     maxTokens = this.cfg.maxTokens,
     timeoutMs = this.cfg.timeoutMs,
     toolChoice,
+    // Opt-in per call: scheduled briefs defer transport retries to their durable queue.
+    // Other callers keep the existing three-attempt policy.
+    maxAttempts = 3,
   }) {
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) throw new Error('Invalid model attempt limit');
     const body = {
       model,
       messages,
@@ -39,7 +43,8 @@ export class LLM {
 
     const url = `${this.cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;
     let lastErr;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const attemptLog = [];
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const started = Date.now();
       try {
         const res = await fetch(url, {
@@ -60,6 +65,7 @@ export class LLM {
         const json = await res.json();
         const message = json.choices?.[0]?.message ?? {};
         const usage = json.usage ?? {};
+        attemptLog.push({elapsedMs:Date.now()-started,status:res.status,ok:true});
         this.stats.calls++;
         this.stats.promptTokens += usage.prompt_tokens ?? 0;
         this.stats.completionTokens += usage.completion_tokens ?? 0;
@@ -73,16 +79,20 @@ export class LLM {
           usage,
           model,
           finishReason: json.choices?.[0]?.finish_reason || '',
+          attempts: attemptLog,
         };
       } catch (err) {
         lastErr = err;
         this.stats.failures++;
+        const code = err.cause?.code || err.code || err.name;
+        attemptLog.push({elapsedMs:Date.now()-started,ok:false,...(Number.isInteger(err.status)?{status:err.status}:{}),...(typeof code==='string' && /^[A-Za-z0-9_]{1,64}$/.test(code)?{code}:{})});
         const retryable = !err.status || RETRYABLE.has(err.status) || err.name === 'TimeoutError';
         this.logger.warn(`LLM 请求失败（第 ${attempt + 1} 次）：${err.message}`);
-        if (!retryable || attempt === 2) break;
+        if (!retryable || attempt === maxAttempts - 1) break;
         await sleep(1200 * (attempt + 1));
       }
     }
+    if (lastErr && typeof lastErr === 'object') lastErr.modelAttempts = attemptLog;
     throw lastErr;
   }
 }
