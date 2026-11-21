@@ -15,9 +15,9 @@
 - **日常对话与文档**：支持企微聊天、文件阅读、Office生成和文档收件箱；文档等扩展能力有额外依赖。
 - **QQ聊天**：保持原有 OneBot 入口，详细设置见 [QQ使用指南](docs/QQ.md)。
 
-当前定时生成器为 **v3（source-first-v3）**：一次模型请求生成短汇报及逐字原文依据。引用校验不等于事实核验，重要事项排序和简洁性仍在改进。
+当前源码为 **v4候选（source-first-v4）**：保留一次生成正文与逐字依据，补查相关项目原话，约束行动主体、时间关系与更正范围。**尚无v4真实模型成绩**，不表示Mac运行版已更新。引用校验不等于事实核验。
 
-[2026-11-21真实模型记录](docs/reports/v3-2026-11-21.md)：10个合成输入全部生成，三组更正与未定状态表达较好，但部分正文仍先讲旧背景或无关细节。这不是生产可用率或质量满分，测试收件人为替身。版本历史见 [CHANGELOG](CHANGELOG.md)。
+[50例真实输出复盘](docs/reports/v3-50-2026-11-21.md)：50例生成完成，发现计划变完成、寄送方向和执行人归属问题；不能将完成率当作理解正确率。[多人多轮与容量测试](experiments/secretary/BUSINESS-V4.md)同时记录原文是否选到、问题是否答对和实际汇报。版本历史见 [CHANGELOG](CHANGELOG.md)。
 
 ## 从源码启动企业微信
 
@@ -58,10 +58,10 @@ npm run test:secretary
 
 - `npm test`：本地模型/传输替身回归，不需要密钥；已有 `npm run test:wecom` 入口保留。
 - `npm run check:release`：检查安装更新清单是否与源码哈希一致，不联网、不安装。
-- `npm run test:secretary`：实际定时链路的42个运行单元，模型和收件人为替身，不是语言质量成绩。输出在新的 `tmp/` 目录。
+- `npm run test:secretary`：冻结v2/v3对照的42个运行单元，模型和收件人为替身，不是语言质量成绩。输出在新的 `tmp/` 目录。
 - Office二进制渲染测试需要Python库；本地缺少时会明确跳过。CI安装这些库并要求该项执行，配置见 [贡献指南](CONTRIBUTING.md)。
 
-真实模型测试会产生API调用。仅测试当前v3的开发场景：
+真实模型测试会产生API调用。测试当前v4候选的开发场景：
 
 ```bash
 npm run experiment:secretary -- --live --split dev --config /绝对路径/config.json
@@ -69,13 +69,15 @@ npm run experiment:secretary -- --live --split dev --config /绝对路径/config
 
 可通过环境变量 `DEEPSEEK_API_KEY` 提供密钥。实验采用60秒单请求预算、测试收件人和替身历史准备，不启动企业微信；结果含原话、实际正文、错误、耗时及usage。更完整的分组方法、Mac入口和可选历史对照见 [实验指南](experiments/secretary/README.md)。`npm run test:e2e` 是旧QQ真实模型烟测，会调用模型，不放进CI。
 
+多人多轮与不同历史规模：`npm run experiment:secretary:business` 为无密钥链路检查；追加 `-- --live --config /绝对路径/config.json` 才调用真实模型。Mac入口见[专项指南](experiments/secretary/BUSINESS-V4.md)。
+
 ## 项目结构
 
 | 目录 / 文件 | 用途 |
 | --- | --- |
 | `src/wecom-main.js` / `src/wecom-runtime.js` | 企业微信组装、访问控制与消息处理 |
 | `src/wecom-secretary.js` | 原文归档、上下文选取、定时汇报和发送确认 |
-| `src/wecom-scheduled-briefing.js` | 当前v3定时摘要生成器 |
+| `src/wecom-scheduled-briefing.js` | 当前v4候选定时摘要生成器 |
 | `src/wecom-briefing.js` | 主动查询汇报生成器 |
 | `src/index.js` / `src/llm.js` | QQ入口 / 共享模型客户端 |
 | `test/` | 自动化回归与明确标注的测试数据 |

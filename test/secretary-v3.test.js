@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import {once} from 'node:events';
 import {spawn} from 'node:child_process';
-import {validateDirectBriefing,writeScheduledBriefing} from '../src/wecom-scheduled-briefing.js';
+import {validateDirectBriefing,writeScheduledBriefing} from '../experiments/secretary/v3-scheduled-briefing.js';
 import {wiringResponse} from '../experiments/secretary/wiring-double.js';
 import {checkResume} from '../experiments/secretary/support.js';
 const messages=[{id:'old',contextOnly:true,text:'下周一客户验收，小周负责演示。'},{id:'new',contextOnly:false,text:'小周能否回来还没定，小林下班前找小何确认能否替班。'}];

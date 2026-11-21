@@ -17,7 +17,8 @@
     "manifest:sync": "node scripts/sync-wecom-manifest.mjs --write",
     "test:secretary": "node scripts/iterate-secretary.mjs --v3 --full",
     "experiment:secretary": "node scripts/experiment-secretary.mjs --algorithm upgraded --history-mode fixture --request-timeout-ms 60000 --request-attempts 1",
-    "experiment:secretary:50": "node scripts/evaluate-secretary-v3-50.mjs"
+    "experiment:secretary:50": "node scripts/evaluate-secretary-v3-50.mjs",
+    "experiment:secretary:business": "node scripts/evaluate-business-v4.mjs"
   },
   "engines": {
     "node": ">=20"

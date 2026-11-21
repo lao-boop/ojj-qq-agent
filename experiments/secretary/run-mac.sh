@@ -38,6 +38,34 @@ fi
 export PATH="$(dirname "$node_bin"):$PATH"
 npm ci --no-audit --no-fund
 mkdir -p "$PWD/tmp"
+if [ "${WHALE_BUSINESS_V4:-}" = 1 ]; then
+  state_file="$PWD/tmp/latest-business-v4.txt"
+  if [ -z "$resume_root" ] && [ "${WHALE_BUSINESS_FRESH:-}" != 1 ] && [ -f "$state_file" ]; then
+    previous_result=$(cat "$state_file")
+    if [ -f "$previous_result/suite.json" ]; then resume_root="$previous_result"; fi
+  fi
+  result_dir=$(mktemp -d "$PWD/tmp/secretary-business-v4.XXXXXX")
+  printf '%s\n' "$result_dir" > "$state_file"
+  set -- --live --config "$runtime_dir/config.json" --out "$result_dir"
+  if [ -n "$resume_root" ]; then set -- "$@" --resume-from "$resume_root"; fi
+  if [ "${WHALE_FULL_CONTEXT:-}" = 1 ]; then set -- "$@" --full-context --max-input-chars "${WHALE_MAX_INPUT_CHARS:-300000}"; fi
+  finalize_business() {
+    tar -czf "$result_dir.tar.gz" -C "$result_dir" .
+    if [ -f "$result_dir/report.html" ]; then open "$result_dir/report.html" || true; fi
+    open -R "$result_dir.tar.gz" || true
+    printf '\n请上传 Finder 选中的完整结果包：\n%s.tar.gz\n再次运行同一入口会自动续跑。\n' "$result_dir"
+  }
+  trap 'finalize_business; exit 130' INT TERM
+  suite_status=0
+  if [ -f "$runtime_dir/.env" ]; then
+    NODE_USE_ENV_PROXY=1 "$node_bin" "--env-file=$runtime_dir/.env" scripts/evaluate-business-v4.mjs "$@" || suite_status=$?
+  else
+    NODE_USE_ENV_PROXY=1 "$node_bin" scripts/evaluate-business-v4.mjs "$@" || suite_status=$?
+  fi
+  trap - INT TERM
+  finalize_business
+  exit "$suite_status"
+fi
 if [ "${WHALE_SUITE_V3_50:-}" = 1 ]; then
   state_file="$PWD/tmp/latest-v3-50.txt"
   if [ -z "$resume_root" ] && [ "${WHALE_50_FRESH:-}" != 1 ] && [ -f "$state_file" ]; then

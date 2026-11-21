@@ -36,6 +36,9 @@ export function checkResume(previous, current) {
   if(previous.files?.[frozen] || current.files?.[frozen])assert.equal(previous.files?.[frozen],current.files?.[frozen],'Frozen comparison writer changed');
   const v2='experiments/secretary/v2-scheduled-briefing.js';
   if(previous.files?.[v2] || current.files?.[v2])assert.equal(previous.files?.[v2],current.files?.[v2],'Frozen v2 changed');
+  for(const file of ['experiments/secretary/v3-scheduled-briefing.js','experiments/secretary/legacy-context-v3.js']){
+    if(previous.files?.[file] || current.files?.[file])assert.equal(previous.files?.[file],current.files?.[file],'Frozen v3 changed');
+  }
   if (previous.modelOrigin && current.modelOrigin) assert.equal(previous.modelOrigin,current.modelOrigin,'Model endpoint changed');
 }
 

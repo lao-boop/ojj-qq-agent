@@ -16,7 +16,7 @@ if(fs.existsSync(path.join(out,'suite.json')))throw Error('Use a new output dire
 const sha=file=>createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex');
 const read=file=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const hashes=Object.fromEntries([casesFile,'src/wecom-scheduled-briefing.js','src/wecom-secretary.js','src/llm.js','scripts/experiment-secretary.mjs','scripts/evaluate-secretary-v3-50.mjs'].map(f=>[f,sha(f)]));
+const hashes=Object.fromEntries([casesFile,'src/wecom-scheduled-briefing.js','experiments/secretary/v3-scheduled-briefing.js','experiments/secretary/legacy-context-v3.js','src/wecom-secretary.js','src/llm.js','scripts/experiment-secretary.mjs','scripts/evaluate-secretary-v3-50.mjs'].map(f=>[f,sha(f)]));
 const resume=o['resume-from']?path.resolve(o['resume-from']):null;
 if(resume){
  if(out.startsWith(resume+path.sep))throw Error("Output must not be inside the resumed directory");
@@ -66,7 +66,7 @@ save();report();let consecutiveFailures=0;
 try{
  for(const [index,c] of selected.entries()){
   const dest=path.join(out,c.id),old=priorCase(c.id);
-  const args=['scripts/experiment-secretary.mjs','--algorithm','upgraded','--history-mode','fixture','--split',c.split,'--case-id',c.caseId,'--variant',c.variant,'--cases-file',casesFile,'--out',dest,'--request-timeout-ms','60000','--request-attempts','1'];
+  const args=['scripts/experiment-secretary.mjs','--algorithm','v3','--history-mode','fixture','--split',c.split,'--case-id',c.caseId,'--variant',c.variant,'--cases-file',casesFile,'--out',dest,'--request-timeout-ms','60000','--request-attempts','1'];
   if(o.live)args.push('--live');if(o.config)args.push('--config',path.resolve(o.config));
   if(old && fs.existsSync(path.join(old,'manifest.json')))args.push('--resume-from',old);
   console.log(`\n[v3 ${index+1}/50] ${c.id}`);

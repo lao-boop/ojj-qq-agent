@@ -7,8 +7,8 @@ import {createHash} from 'node:crypto';
 const root=path.resolve(import.meta.dirname,'..');
 const {values:o}=parseArgs({options:{live:{type:'boolean'},out:{type:'string'},config:{type:'string'},full:{type:'boolean'},v3:{type:'boolean'},'resume-from':{type:'string'}}});
 const version=o.v3?'v3':'v2';
-const algorithms=o.v3?['v2','upgraded']:['previous','v2'];
-const labels=o.v3?{v2:'冻结v2（1df1a18）',upgraded:'候选v3'}:{previous:'冻结v1（4fc65d1）',v2:'冻结v2（1df1a18）'};
+const algorithms=o.v3?['v2','v3']:['previous','v2'];
+const labels=o.v3?{v2:'冻结v2（1df1a18）',v3:'冻结v3'}:{previous:'冻结v1（4fc65d1）',v2:'冻结v2（1df1a18）'};
 const out=path.resolve(o.out || path.join(root,'tmp',`secretary-${version}-${Date.now()}`));
 fs.mkdirSync(out,{recursive:true});
 if(fs.existsSync(path.join(out,'iteration.json')))throw new Error('Use a new output directory; never overwrite an experiment');
@@ -52,7 +52,7 @@ function summarize(){
 save();let stopped=false;
 try{
  for(const [index,c] of selected.entries()){
-  if(o.v3 && !o.full && c.split==='fresh' && core.some(c=>!run.runs.some(r=>r.id===`${c.id}-${c.variant}` && r.algorithm==='upgraded' && r.result?.status==='completed'))){
+  if(o.v3 && !o.full && c.split==='fresh' && core.some(c=>!run.runs.some(r=>r.id===`${c.id}-${c.variant}` && r.algorithm==='v3' && r.result?.status==='completed'))){
    run.stoppedReason='新版核心4个输入未全部生成，暂停新增场景以减少调用；完成也不等于质量通过';process.exitCode=1;break;
   }
   const id=`${c.id}-${c.variant}`;

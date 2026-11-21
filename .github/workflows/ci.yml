@@ -40,11 +40,15 @@ jobs:
       - run: npm run check:release
       - name: Exercise the scheduled path with doubles only
         run: npm run test:secretary -- --out tmp/ci-secretary
+      - name: Exercise multi-round and context selection without a model
+        run: npm run experiment:secretary:business -- --out tmp/ci-business
       - name: Retain synthetic experiment records
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: secretary-wiring-${{ matrix.os }}
-          path: tmp/ci-secretary/
+          path: |
+            tmp/ci-secretary/
+            tmp/ci-business/
           if-no-files-found: ignore
           retention-days: 7

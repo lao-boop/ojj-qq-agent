@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { messageTimes } from './wecom-directory.js';
 import { writeBriefing } from './wecom-briefing.js';
 import { writeScheduledBriefing } from './wecom-scheduled-briefing.js';
+import { relatedRecords } from './wecom-context.js';
 
 const hash = text => createHash('sha256').update(text).digest('hex');
 const scope = bot => `wecom:${encodeURIComponent(bot || 'unconfigured')}:`;
@@ -300,10 +301,13 @@ export class WeComSecretary {
     return context;
   }
   briefingMaterial(records, options) {
-    const context = this.neighboringRecords(records, options);
+    const neighbors = this.neighboringRecords(records, options);
+    // Query follow-up scope stays unchanged. Cross-chat recall requires an explicit project code.
+    const related = options ? [] : relatedRecords(records, this.records, {eligible:r=>this.eligible(r)});
+    const context = [...new Map([...neighbors.slice(0,4),...related,...neighbors].map(r=>[r.id,r])).values()].slice(0,12);
     return [...context,...records].sort((a,b)=>a.seq-b.seq).map(r=>{
       const e=this.evidence(r,0,records.includes(r)?Math.min(6000,Math.floor(18000/records.length)):1200);
-      return {id:e.id,speaker:e.senderName || e.sender,speakerId:e.sender,department:e.department,
+      return {id:e.id,speaker:e.senderName || e.sender,speakerId:e.sender,department:e.department,chatId:e.chatId,scene:e.scene,
         time:e.platformAt || e.receivedAt,timeKind:e.platformAt?'平台消息时间':'接收时间',
         text:e.text,truncated:e.nextOffset!==null,contextOnly:!records.includes(r)};
     });
