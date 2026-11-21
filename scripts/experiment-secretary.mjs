@@ -9,11 +9,13 @@ import { fileURLToPath } from 'node:url';
 import { wiringResponse } from '../experiments/secretary/wiring-double.js';
 import { writeBriefing as baselineWriter } from '../experiments/secretary/baseline-briefing.js';
 import { writeScheduledBriefing as previousWriter } from '../experiments/secretary/previous-scheduled-briefing.js';
+import { writeScheduledBriefing as v2Writer } from '../experiments/secretary/v2-scheduled-briefing.js';
 import { requestFailure, expectAckLoss, checkResume, reuseCompleted } from '../experiments/secretary/support.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const { values: opts } = parseArgs({ options: { live: {type:'boolean'}, algorithm:{type:'string',default:'upgraded'}, split:{type:'string',default:'dev'}, out:{type:'string'}, config:{type:'string'}, 'resume-from':{type:'string'}, 'request-timeout-ms':{type:'string',default:'180000'}, 'request-attempts':{type:'string'}, 'cases-file':{type:'string',default:'experiments/secretary/cases.json'}, 'case-id':{type:'string'}, variant:{type:'string'} } });
+const { values: opts } = parseArgs({ options: { live: {type:'boolean'}, algorithm:{type:'string',default:'upgraded'}, split:{type:'string',default:'dev'}, out:{type:'string'}, config:{type:'string'}, 'resume-from':{type:'string'}, 'request-timeout-ms':{type:'string',default:'180000'}, 'request-attempts':{type:'string'}, 'cases-file':{type:'string',default:'experiments/secretary/cases.json'}, 'case-id':{type:'string'}, variant:{type:'string'}, 'history-mode':{type:'string',default:'model'} } });
 assert.ok(['dev','holdout','fresh'].includes(opts.split));
-assert.ok(['baseline','previous','upgraded'].includes(opts.algorithm));
+assert.ok(['baseline','previous','v2','upgraded'].includes(opts.algorithm));
+assert.ok(['model','fixture'].includes(opts['history-mode']));
 const requestTimeoutMs=Number(opts['request-timeout-ms']);
 assert.ok(Number.isInteger(requestTimeoutMs) && requestTimeoutMs>=1000 && requestTimeoutMs<=300000);
 const requestAttempts=opts['request-attempts']===undefined?null:Number(opts['request-attempts']);
@@ -41,10 +43,12 @@ const all = JSON.parse(fs.readFileSync(caseFile));
 const cases = all.filter(c=>c.split===opts.split && (!opts['case-id'] || c.id===opts['case-id']));
 assert.ok(cases.length,'No matching cases');
 const sha = file => createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex');
+assert.equal(sha('experiments/secretary/v2-scheduled-briefing.js'),'700bf4755787cfb34fbe238380fca8c03bec343ca6fb7d61ff66764823a8070b','Frozen v2 must remain byte-identical to 1df1a18');
 assert.equal(sha('experiments/secretary/previous-scheduled-briefing.js'),'32f2809bda0f6567c610c9e1039ca760f1e6df873c7b61356fce47f1ba2882e3','Frozen v1 must remain byte-identical to 4fc65d1');
 assert.equal(sha('experiments/secretary/baseline-briefing.js'),'393e10fa4ee9fdaf6f80906dbe5d48a5d50727da5e65e07b9afa9da351286923','Baseline must remain byte-identical to cf06a720');
 const manifest = {mode:opts.live?'real-model':'wiring-only, NOT model answers', algorithm:opts.algorithm, baselineCommit:'cf06a72084811d84cb8388c1bbf2a549e20b2f22', split:opts.split, model:opts.live?modelCfg.model:null, started:new Date().toISOString(), files:Object.fromEntries(['src/wecom-secretary.js','src/wecom-briefing.js','src/wecom-scheduled-briefing.js','experiments/secretary/baseline-briefing.js','scripts/experiment-secretary.mjs','experiments/secretary/cases.json'].map(f=>[f,sha(f)])),results:[]};
-manifest.requestTimeoutMs=requestTimeoutMs;
+manifest.requestTimeoutMs=requestTimeoutMs;manifest.historyMode=opts['history-mode'];
+manifest.files['experiments/secretary/v2-scheduled-briefing.js']=sha('experiments/secretary/v2-scheduled-briefing.js');
 manifest.requestAttempts=requestAttempts;
 manifest.caseHash=createHash('sha256').update(fs.readFileSync(caseFile)).digest('hex');
 manifest.caseSelection=opts['case-id'] || null;manifest.variantSelection=opts.variant || null;
@@ -81,6 +85,7 @@ for (const c of cases) for (const variant of (opts.variant?[opts.variant]:['orig
   const s = app.secretary;
   if (opts.algorithm === 'baseline') s.scheduledWriter = baselineWriter;
   if (opts.algorithm === 'previous') s.scheduledWriter = previousWriter;
+  if (opts.algorithm === 'v2') s.scheduledWriter = v2Writer;
   let now = Date.now(), seq = 0, stage = 'history', phase='receive';
   let failure=null;
   s.now = () => now;
@@ -117,7 +122,7 @@ for (const c of cases) for (const variant of (opts.variant?[opts.variant]:['orig
     assert.equal(frame.body.chattype,'single');
     assert.equal(frame.body.from.userid,'HuangZiMing');
     if(failAck) { failAck=false; throw ackLost; }
-    deliveries.push({stage,recipient:'TEST DOUBLE (HuangZiMing)',text});
+    deliveries.push({stage,origin:stage==='history' && opts['history-mode']==='fixture'?'fixture-history':manifest.mode,recipient:'TEST DOUBLE (HuangZiMing)',text});
   }};
   const receive = async (text,user='employee') => {
     const msgid = `${id}-${++seq}`;
@@ -131,7 +136,11 @@ for (const c of cases) for (const variant of (opts.variant?[opts.variant]:['orig
     await due(); assert.equal(calls.length,0); assert.equal(deliveries.length,0);
     for(const text of c.history) await receive(text);
     phase='history-generation';
-    if(c.history.length) await due();
+    if(c.history.length) {
+      const writer=s.scheduledWriter;
+      if(opts['history-mode']==='fixture')s.scheduledWriter=async({messages})=>({text:'测试准备：历史原话已归档；此句是替身，不是模型答复。',sources:messages.filter(m=>!m.contextOnly).map(m=>m.id)});
+      try {await due();} finally {s.scheduledWriter=writer;}
+    }
     stage='current';
     for(const text of c[variant]) await receive(text);
     const before=calls.length;

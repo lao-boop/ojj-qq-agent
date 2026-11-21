@@ -4,7 +4,7 @@ import http from 'node:http';
 import {once} from 'node:events';
 import fs from 'node:fs';
 import {LLM} from '../src/llm.js';
-import {validateEvidencePlan,validateScheduledProse,writeScheduledBriefing} from '../src/wecom-scheduled-briefing.js';
+import {validateEvidencePlan,validateScheduledProse,writeScheduledBriefing} from '../experiments/secretary/v2-scheduled-briefing.js';
 
 // Authored fixtures exercise guards and request policy, not real-model understanding.
 const messages=[

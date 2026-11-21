@@ -38,9 +38,12 @@ fi
 export PATH="$(dirname "$node_bin"):$PATH"
 npm ci --no-audit --no-fund
 mkdir -p "$PWD/tmp"
-if [ "${WHALE_ITERATION_V2:-}" = 1 ]; then
-  result_dir=$(mktemp -d "$PWD/tmp/secretary-iteration-v2.XXXXXX")
+if [ "${WHALE_ITERATION_V2:-}" = 1 ] || [ "${WHALE_ITERATION_V3:-}" = 1 ]; then
+  iteration_version=v2
+  if [ "${WHALE_ITERATION_V3:-}" = 1 ]; then iteration_version=v3; fi
+  result_dir=$(mktemp -d "$PWD/tmp/secretary-iteration-$iteration_version.XXXXXX")
   set -- --live --config "$runtime_dir/config.json" --out "$result_dir"
+  if [ "$iteration_version" = v3 ]; then set -- "$@" --v3; fi
   if [ -n "$resume_root" ]; then set -- "$@" --resume-from "$resume_root"; fi
   iteration_status=0
   if [ -f "$runtime_dir/.env" ]; then

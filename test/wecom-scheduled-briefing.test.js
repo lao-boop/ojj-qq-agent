@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateEvidencePlan, validateScheduledProse, writeScheduledBriefing} from '../src/wecom-scheduled-briefing.js';
+import {validateEvidencePlan, validateScheduledProse, writeScheduledBriefing} from '../experiments/secretary/v2-scheduled-briefing.js';
 
+// Frozen v2 guard regression. Current v3 is tested in secretary-v3.test.js.
 // Hand-authored responses test guards, NOT a model's comprehension or summary quality.
 const messages = [
   {id:'M0',text:'本次合同原定明天签。',contextOnly:true},

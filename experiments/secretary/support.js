@@ -28,12 +28,14 @@ export async function expectAckLoss(action, sentinel) {
 }
 
 export function checkResume(previous, current) {
-  for (const key of ['mode','algorithm','split','model','baselineCommit','requestTimeoutMs','requestAttempts','caseHash','caseSelection','variantSelection']) assert.equal(previous[key],current[key],`Cannot reuse results with different ${key}`);
+  for (const key of ['mode','algorithm','split','model','baselineCommit','requestTimeoutMs','requestAttempts','caseHash','caseSelection','variantSelection','historyMode']) assert.equal(previous[key],current[key],`Cannot reuse results with different ${key}`);
   for (const file of ['src/wecom-secretary.js','src/wecom-briefing.js','src/wecom-scheduled-briefing.js','experiments/secretary/baseline-briefing.js','experiments/secretary/cases.json']) {
     assert.ok(previous.files?.[file] && previous.files[file]===current.files[file],`Cannot reuse results after changing ${file}`);
   }
   const frozen='experiments/secretary/previous-scheduled-briefing.js';
   if(previous.files?.[frozen] || current.files?.[frozen])assert.equal(previous.files?.[frozen],current.files?.[frozen],'Frozen comparison writer changed');
+  const v2='experiments/secretary/v2-scheduled-briefing.js';
+  if(previous.files?.[v2] || current.files?.[v2])assert.equal(previous.files?.[v2],current.files?.[v2],'Frozen v2 changed');
   if (previous.modelOrigin && current.modelOrigin) assert.equal(previous.modelOrigin,current.modelOrigin,'Model endpoint changed');
 }
 
