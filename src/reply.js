@@ -115,7 +115,7 @@ export class ReplySender {
   }
 
   /** 发文件（歌曲等大文件），QQ 里会显示成文件消息。 */
-  async sendFile(chat, filePath, name, text) {
+  async sendFile(chat, filePath, name, text, { allowVoiceFallback = true } = {}) {
     const buffer = fs.readFileSync(filePath);
     const fileName = name || path.basename(filePath);
     if (text) await this.#call(chat, [seg.text(text)]);
@@ -129,6 +129,7 @@ export class ReplySender {
       } catch (err) {
         this.logger.warn(`发送文件失败（第 ${attempt + 1} 次）：${err.message}`);
         if (attempt === 1) {
+          if (!allowVoiceFallback) throw err;
           // 文件发不出去就退回语音条（QQ 语音上限约 60 秒）
           try {
             await this.#call(chat, [{ type: 'record', data: { file: payload.file } }]);

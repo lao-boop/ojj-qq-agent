@@ -192,7 +192,7 @@ export function parseWhen(text, now = new Date()) {
 
 /**
  * 从一句话里解析收件人。
- * known：已知名字数组（含“老板/爵士/示例联系人”等别名）。
+ * known：已知名字数组（含“老板/爵士/Pay”等别名）。
  */
 export function parseTargets(text, known = []) {
   let rest = String(text || '').replace(/^[\s，,：:、]+/, '').trim();

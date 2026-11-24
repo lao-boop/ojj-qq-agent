@@ -107,7 +107,7 @@ export class WeComBot {
     const chatid = String(body.chatid || '');
     const from = String(body.from?.userid || '');
     if (!from) return;
-    if (chatid) this.chatIds.set(from, chatid);
+    if (chatid && chattype === 'single') this.chatIds.set(from, chatid);
 
     const chatKey = chattype === 'group' && chatid ? `wecom:group:${chatid}` : `wecom:user:${from}`;
     const title = chattype === 'group' ? `企微群 ${chatid.slice(-6)}` : `企微 ${from}`;
@@ -144,6 +144,7 @@ export class WeComBot {
         }
       } else {
         text = '（对方发来一张图片，下载失败）';
+        images.push({unavailable:true});
       }
     } else if (body.msgtype === 'file' && body.file?.url) {
       const saved = await this.#download(body.file);
@@ -221,10 +222,17 @@ export class WeComBot {
       const { buffer, filename } = await this.client.downloadFile(media.url, media.aeskey);
       const dir = path.join(DATA_DIR, 'files');
       fs.mkdirSync(dir, { recursive: true });
-      const name = `${Date.now()}-wecom-${(filename || 'media').replace(/[\\/:*?"<>|]/g, '_').slice(-40)}`;
-      const file = path.join(dir, name);
-      fs.writeFileSync(file, buffer);
-      return file;
+      const suffix = (filename || 'media').replace(/[\\/:*?"<>|]/g, '_').slice(-40);
+      // Do not overwrite an earlier upload with the same name in the same millisecond.
+      for (let stamp = Date.now(); ; stamp++) {
+        const file = path.join(dir, `${stamp}-wecom-${suffix}`);
+        try {
+          fs.writeFileSync(file, buffer, {flag:'wx'});
+          return file;
+        } catch (err) {
+          if (err.code !== 'EEXIST') throw err;
+        }
+      }
     } catch (err) {
       this.logger?.warn?.(`企微媒体下载失败：${err.message}`);
       return '';
@@ -258,7 +266,8 @@ export class WeComBot {
     const up = await this.client.uploadMedia(fs.readFileSync(file), { type: 'file', filename: fileName });
     const mediaId = up?.media_id || up?.mediaId;
     if (!mediaId) throw new Error('上传没有返回 media_id');
-    await this.client.sendMediaMessage(target, 'file', mediaId);
+    const ack = await this.client.sendMediaMessage(target, 'file', mediaId);
+    if (ack?.errcode !== 0) throw new Error(ack?.errmsg || '未收到文件发送成功回执');
     this.logger?.info?.(`企微已转发文件给 ${target}：${fileName}`);
     return true;
   }

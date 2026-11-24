@@ -34,7 +34,7 @@ export function rememberName(userid, name) {
   const n = clean(name);
   if (!id || n.length < 1) return false;
   if (['你', '我', '他', '她', '它'].includes(n)) return false;
-  if (['老板', '主人', '同事', '客服', '机器人', '小鲸鱼', '测试'].includes(n)) return false;
+  if (['老板', '主人', '同事', '客服', '机器人', '小安', '测试'].includes(n)) return false;
   const map = load();
   if (map[id]?.name === n) return false;
   map[id] = { name: n, at: Date.now() };

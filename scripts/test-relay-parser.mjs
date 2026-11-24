@@ -64,13 +64,13 @@ assert.equal(g('通知宣传组明天十点开会').content, '开会');
 assert.equal(g('给宣传组的所有员工发个消息，今晚加工资').content, '今晚加工资');
 
 // “给X传话/带话”
-assert.deepEqual(parseRelayToCommand('帮我给老传话说一下，他很帅').names, ['示例员工B']);
+assert.deepEqual(parseRelayToCommand('帮我给老传话说一下，他很帅').names, ['老']);
 assert.equal(parseRelayToCommand('帮我给老传话说一下，他很帅').content, '他很帅');
 assert.equal(parseRelayToCommand('给老带句话，辛苦了').content, '辛苦了');
 assert.equal(parseRelayToCommand('明天下午三点给老传话：开会').isSchedule, true);
 assert.equal(parseRelayToCommand('给老发个消息：你好').content, '你好');
-assert.equal(parseRelayToCommand('下午两点给示例员工A发消息：你好').isSchedule, true);
-assert.equal(parseRelayToCommand('下午两点给示例员工A发消息：你好').content, '你好');
+assert.equal(parseRelayToCommand('下午两点给一鸣发消息：你好').isSchedule, true);
+assert.equal(parseRelayToCommand('下午两点给一鸣发消息：你好').content, '你好');
 assert.equal(parseRelayToCommand('给宣传组发个消息：明天开会'), null);
 
 // 组归属

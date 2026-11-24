@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA_DIR } from './config.js';
-import { buildIndex, vectorScores } from './memory-index.js';
+import { buildIndex, tokenize, vectorScores } from './memory-index.js';
 
 const SESSION_DIR = path.join(DATA_DIR, 'sessions');
 const vecCache = new WeakMap();
@@ -128,14 +128,18 @@ export class Memory {
         .split(/\s+/)
         .filter((t) => t.length >= 2)
         .slice(0, 12);
-      if (tokens.length) {
-        // 本地向量检索：字级 2/3-gram + TF-IDF，能扛住“换个说法”
+      if (tokens.length || /[\u4e00-\u9fa5]/.test(query)) {
+        // 只索引直接上下文之前的消息。
         let vecIndex = vecCache.get(session);
-        if (!vecIndex || vecIndex.cutoff !== cutoff) {
-          vecIndex = { cutoff, data: buildIndex(session.turns.slice(0, cutoff)) };
+        const lastIndexed = session.turns[cutoff - 1];
+        if (!vecIndex || vecIndex.cutoff !== cutoff || vecIndex.lastIndexed !== lastIndexed) {
+          vecIndex = { cutoff, lastIndexed, data: buildIndex(session.turns.slice(0, cutoff)) };
           vecCache.set(session, vecIndex);
         }
         const vecs = vectorScores(vecIndex.data, query);
+        // 只在少量旧消息里出现的查询词比寒暄和通用问法更能定位话题。
+        const rareTerms = [...new Set(tokenize(query))].filter(term =>
+          vecIndex.data.idf.get(term) > 1 + Math.log(50));
         const scored = [];
         const qVec = bigrams(query);
         for (let i = 0; i < cutoff; i++) {
@@ -146,7 +150,8 @@ export class Memory {
           score += cosineSim(qVec, bigrams(t.content)) * 4;
           const v = vecs[i] || 0;
           score += v * 8;
-          if (score >= 0.8 || v >= 0.12) scored.push({ score, turn: t });
+          if (rareTerms.some(term => vecIndex.data.vectors[i].has(term))) score += 1;
+          if (score >= 0.8 || v >= 0.12) scored.push({ score, turn: t, i });
         }
         // 兜底：关键词一个没命中时，也按向量相似度取前 3 条，避免“完全想不起来”
         if (scored.length < 3) {
@@ -157,11 +162,18 @@ export class Memory {
             .slice(0, 3);
           for (const { i, v } of top) {
             const turn = session.turns[i];
-            if (turn && !scored.some((s) => s.turn === turn)) scored.push({ score: v * 8, turn });
+            if (turn && !scored.some((s) => s.turn === turn)) scored.push({ score: v * 8, turn, i });
           }
         }
         scored.sort((a, b) => b.score - a.score || (b.turn.ts || 0) - (a.turn.ts || 0));
-        result.recalled = scored.slice(0, this.cfg.recallLimit || 6).map((s) => ({
+        const seen = new Set();
+        const selected = scored.filter(({turn}) => {
+          const signature = turn.role + '\n' + turn.content;
+          if (seen.has(signature)) return false;
+          seen.add(signature);
+          return true;
+        }).slice(0, this.cfg.recallLimit || 6);
+        result.recalled = selected.sort((a,b) => a.i - b.i).map((s) => ({
           role: s.turn.role,
           content: String(s.turn.content).slice(0, 120),
         }));
@@ -282,7 +294,7 @@ export class Memory {
     const old = session.turns.slice(0, -keep);
     const recent = session.turns.slice(-keep);
     if (old.length < 4) return false;
-    const transcript = old.map((t) => `${t.role === 'user' ? '对方' : '小鲸鱼'}：${t.content}`).join('\n');
+    const transcript = old.map((t) => `${t.role === 'user' ? '对方' : '小安'}：${t.content}`).join('\n');
     try {
       const res = await this.llm.chat({
         messages: [

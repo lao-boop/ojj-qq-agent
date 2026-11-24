@@ -5,7 +5,7 @@ import { DATA_DIR } from './config.js';
 const FILE = path.join(DATA_DIR, 'memory-global.json');
 
 const DEFAULTS = {
-  bot: { name: '小鲸鱼', alias: 'ojj' },
+  bot: { name: '小安' },
   owner: { name: '主人', aliases: [], likes: [], relation: '这个 agent 的主人' },
   facts: [],
 };
@@ -32,7 +32,7 @@ export function saveGlobal(g) {
 export function formatGlobal() {
   const g = loadGlobal();
   const lines = ['【关于你自己和主人（可以对别人说）】'];
-  if (g.bot?.name) lines.push(`- 你叫${g.bot.name}${g.bot.alias ? `，QQ 上叫 ${g.bot.alias}` : ''}。`);
+  if (g.bot?.name) lines.push(`- 你叫${g.bot.name}。`);
   if (g.owner?.name) {
     const alias = (g.owner.aliases || []).filter(Boolean);
     lines.push(`- 你的主人叫 ${g.owner.name}${alias.length ? `，也可以叫他 ${alias.join('、')}` : ''}。`);

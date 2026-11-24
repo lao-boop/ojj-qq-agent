@@ -47,7 +47,7 @@ wss.on('connection', (ws) => {
     const { action, params = {}, echo } = req;
     let data = {};
     if (action === 'get_login_info') {
-      data = { user_id: selfQQ, nickname: '小鲸鱼（mock）' };
+      data = { user_id: selfQQ, nickname: '小安（mock）' };
     } else if (action === 'send_private_msg' || action === 'send_group_msg') {
       data = { message_id: ++msgId };
       handleOutgoing(action, params);

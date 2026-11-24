@@ -1,0 +1,73 @@
+{
+  "year": {
+    "votes": 1,
+    "whole": 1,
+    "witness": [
+      1
+    ],
+    "lead": -6,
+    "form": "any",
+    "signal": null
+  },
+  "percent": {
+    "votes": 1,
+    "whole": 0,
+    "witness": [],
+    "lead": -6,
+    "form": "any",
+    "signal": [
+      "lm",
+      0.0
+    ]
+  },
+  "classifier": {
+    "votes": 1,
+    "whole": 2,
+    "witness": [],
+    "lead": 0,
+    "form": "any",
+    "signal": null
+  },
+  "pronoun": {
+    "votes": 1,
+    "whole": 0,
+    "witness": [
+      5
+    ],
+    "lead": -6,
+    "form": "any",
+    "signal": null
+  },
+  "omission": {
+    "votes": 1,
+    "whole": 0,
+    "witness": [
+      2
+    ],
+    "lead": -6,
+    "form": "any",
+    "signal": [
+      "lm",
+      0.0
+    ]
+  },
+  "phrase": {
+    "votes": 1,
+    "whole": 1,
+    "witness": [],
+    "lead": 0,
+    "form": "any",
+    "signal": [
+      "acoustic",
+      1.0
+    ]
+  },
+  "lexical": {
+    "votes": 5,
+    "whole": 0,
+    "witness": [],
+    "lead": 0,
+    "form": "any",
+    "signal": null
+  }
+}

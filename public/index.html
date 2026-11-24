@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>小鲸鱼 · QQ 机器人控制台</title>
+    <title>小安 | 智能助手 · 控制台</title>
     <style>
       :root {
         --bg: #f5f8fb;
@@ -120,7 +120,7 @@
     <header>
       <div class="logo">🐋</div>
       <div>
-        <h1>小鲸鱼 · QQ 机器人</h1>
+        <h1>小安 | 智能助手</h1>
         <div class="sub" id="subline">正在读取状态…</div>
       </div>
       <div class="pill" id="busyPill">空闲</div>
@@ -233,7 +233,7 @@
               <input id="cfgAutoFriend" type="checkbox" style="width:auto" /> 自动通过好友申请
             </label>
             <label>通过好友后的欢迎语（留空不发）</label>
-            <input id="cfgGreeting" placeholder="嗨，我是小鲸鱼～" />
+            <input id="cfgGreeting" placeholder="嗨，我是小安，团队的智能助手～" />
 
             <h3 style="margin-top: 18px">聊天手感</h3>
             <div class="cols">
@@ -544,7 +544,7 @@
         box.insertAdjacentHTML('beforeend', '<div class="bubble me">' + esc(text) + '</div>');
         $('testInput').value = '';
         $('testBtn').disabled = true;
-        $('testMeta').textContent = '小鲸鱼正在想…';
+        $('testMeta').textContent = '小安正在想…';
         const started = Date.now();
         try {
           const d = await api('/api/test', { method: 'POST', body: JSON.stringify({ text }) });

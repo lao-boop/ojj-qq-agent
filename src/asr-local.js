@@ -22,5 +22,8 @@ export async function localTranscribe(filePath, { url = DEFAULT_URL, language = 
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(`本地 ASR ${res.status}: ${data?.error || ''}`);
-  return { text: String(data?.text || ''), ms: data?.ms || 0, language: data?.lang || language };
+  return { text: String(data?.text || ''), ms: data?.ms || 0, language: data?.lang || language,
+    questions: Array.isArray(data?.questions) ? data.questions : [],
+    primary: Array.isArray(data?.primary) ? data.primary.filter(t=>typeof t==='string' && t) : [],
+    readings: Array.isArray(data?.readings) ? data.readings.filter(t=>typeof t==='string') : [] };
 }

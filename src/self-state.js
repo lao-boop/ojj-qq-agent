@@ -58,7 +58,7 @@ export class ActionJournal {
 /** Explicit facts only: no credential values, no inference that enabled means reachable. */
 export function selfContext({ chatKey, cfg, journal, runtime = {} }) {
   const data = {
-    identity: { name: cfg.bot?.name || '小鲸鱼', role: '运行在 QQ 上的助手，使用工具和后台定时任务行动；人格设定不是实际经历' },
+    identity: { name: cfg.bot?.name || '小安', role: '团队业务接待助手 / 老板工作秘书；运行在 QQ 和企微上，使用工具和后台定时任务行动；人格设定不是实际经历' },
     capabilities: {
       qzone: { configured: Boolean(cfg.qzone?.enabled), initialized: Boolean(runtime.qzoneInitialized), automaticPosting: Boolean(cfg.qzone?.enabled && cfg.qzone?.autoPost), connected: Boolean(runtime.connected), note: '连接正常不代表空间扩展接口一定可用；以执行回执为准' },
       manager: Boolean(cfg.chat?.agents?.enabled), imageConfigured: Boolean(cfg.image?.enabled),

@@ -13,6 +13,7 @@ spec:
 """
 import json
 import os
+import re
 import sys
 from datetime import date
 
@@ -25,6 +26,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from docx import Document
 from docx.shared import Pt as DocPt, RGBColor as DocRGB, Inches as DocInches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
@@ -110,7 +112,7 @@ def build_pptx(spec, out_path):
     tf3 = textbox(slide, 1.3, 5.9, 8.0, 0.5)
     p3 = tf3.paragraphs[0]
     r3 = p3.add_run()
-    r3.text = f"{spec.get('author', '小鲸鱼')}  ·  {today}"
+    r3.text = f"{spec.get('author', '小安')}  ·  {today}"
     set_run(r3, 12, theme["muted"])
 
     # 正文
@@ -123,7 +125,7 @@ def build_pptx(spec, out_path):
         top_bar.fill.fore_color.rgb = rgb(theme["accent"])
         top_bar.line.fill.background()
 
-        has_img = bool(s.get("image") and os.path.exists(s["image"]))
+        has_img = bool(not s.get("chart") and s.get("image") and os.path.exists(s["image"]))
         chart = s.get("chart") or None
         cards = s.get("cards") or []
 
@@ -184,7 +186,7 @@ def build_pptx(spec, out_path):
                 text_left, text_w = 0.8, 7.1
                 pic_x, pic_w = 8.35, 4.25
             else:
-                text_left, text_w = 0.9, 11.3
+                text_left, text_w = 0.9, (6.9 if chart else 11.3)
                 pic_x, pic_w = 0, 0
 
             tf = textbox(slide, text_left, 0.7, text_w, 1.05)
@@ -287,7 +289,7 @@ def build_pptx(spec, out_path):
     p = tf.paragraphs[0]
     p.alignment = PP_ALIGN.CENTER
     r = p.add_run()
-    r.text = "谢 谢 观 看"
+    r.text = spec.get("closingTitle") or "谢 谢 观 看"
     set_run(r, 40, "FFFFFF", True)
     tf2 = textbox(slide, 0, 4.1, 13.333, 0.6)
     p2 = tf2.paragraphs[0]
@@ -317,7 +319,7 @@ def build_xlsx(spec, out_path):
         ws = wb.create_sheet(title=name)
         cols = [str(c) for c in (sh.get("columns") or [])]
         row = 1
-        if spec.get("title"):
+        if spec.get("title") and not spec.get("headerFirst"):
             span = max(1, len(cols))
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=span)
             cell = ws.cell(row=1, column=1, value=str(spec["title"])[:60])
@@ -355,11 +357,41 @@ def build_xlsx(spec, out_path):
     return out_path
 
 
+def set_word_styles(doc):
+    for name in ("Normal", "Heading 1", "List Bullet"):
+        style = doc.styles[name]
+        style.font.name = FONT
+        fonts = style.element.get_or_add_rPr().rFonts
+        for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+            fonts.attrib.pop(qn("w:" + attr), None)
+        for attr in ("ascii", "hAnsi", "eastAsia", "cs"):
+            fonts.set(qn("w:" + attr), FONT)
+        style.font.bold = name == "Heading 1"
+        style.font.cs_bold = name == "Heading 1"
+
+
+def add_word_text(paragraph, text, emphasis):
+    phrases = sorted({s for s in emphasis if isinstance(s, str) and s.strip() and s in text},
+                     key=len, reverse=True) if isinstance(emphasis, list) else []
+    if not phrases:
+        paragraph.add_run(text)
+        return
+    offset = 0
+    for match in re.finditer("|".join(re.escape(s) for s in phrases), text):
+        if offset < match.start():
+            paragraph.add_run(text[offset:match.start()])
+        run = paragraph.add_run(match.group())
+        run.bold = run.font.cs_bold = True
+        offset = match.end()
+    if offset < len(text):
+        paragraph.add_run(text[offset:])
+
+
 def build_docx(spec, out_path):
     theme = THEMES.get(spec.get("theme", "business"), THEMES["business"])
     doc = Document()
     style = doc.styles["Normal"]
-    style.font.name = FONT
+    set_word_styles(doc)
     style.font.size = DocPt(11)
     style.paragraph_format.line_spacing = 1.5
 
@@ -367,7 +399,7 @@ def build_docx(spec, out_path):
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r = title.add_run(spec.get("title", "未命名文档"))
     r.font.size = DocPt(24)
-    r.font.bold = True
+    r.bold = r.font.cs_bold = True
     r.font.name = FONT
 
     if spec.get("subtitle"):
@@ -380,21 +412,39 @@ def build_docx(spec, out_path):
 
     meta = doc.add_paragraph()
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    rm = meta.add_run(f"{spec.get('author', '小鲸鱼')} · {date.today().strftime('%Y-%m-%d')}")
+    rm = meta.add_run(f"{spec.get('author', '小安')} · {date.today().strftime('%Y-%m-%d')}")
     rm.font.size = DocPt(10)
     rm.font.name = FONT
     rm.font.color.rgb = DocRGB.from_string(theme["muted"])
 
-    for sec in spec.get("sections", []):
+    for index, sec in enumerate(spec.get("sections", [])):
         h = doc.add_heading(sec.get("heading", ""), level=1)
+        if index and spec.get("paginated"):
+            h.paragraph_format.page_break_before = True
         for run in h.runs:
             run.font.name = FONT
             run.font.color.rgb = DocRGB.from_string(theme["accent"])
+        if sec.get("requirement"):
+            required = doc.add_paragraph().add_run(sec["requirement"])
+            required.bold = required.font.cs_bold = True
         for para in sec.get("paragraphs", []) or []:
-            p = doc.add_paragraph(str(para))
+            p = doc.add_paragraph()
+            add_word_text(p, str(para), sec.get("emphasis"))
             p.paragraph_format.first_line_indent = DocInches(0.3)
         for b in sec.get("bullets", []) or []:
-            doc.add_paragraph(str(b), style="List Bullet")
+            add_word_text(doc.add_paragraph(style="List Bullet"), str(b), sec.get("emphasis"))
+        grid = sec.get("table") or {}
+        headers = grid.get("headers") or []
+        if headers:
+            table = doc.add_table(rows=1, cols=len(headers))
+            table.style = "Table Grid"
+            for cell, value in zip(table.rows[0].cells, headers):
+                cell.text = str(value)
+                for run in cell.paragraphs[0].runs:
+                    run.bold = run.font.cs_bold = True
+            for values in grid.get("rows") or []:
+                for cell, value in zip(table.add_row().cells, values):
+                    cell.text = "" if value is None else str(value)
 
     doc.save(out_path)
     return out_path

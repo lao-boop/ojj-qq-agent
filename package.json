@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "QQ 机器人：DeepSeek 驱动的小鲸鱼，支持人格、记忆、分条聊天、出图，自带本地控制台",
+  "description": "QQ 机器人：小安 | 智能助手：DeepSeek 驱动，支持人格、记忆、分条聊天、出图，自带本地控制台",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -11,17 +11,18 @@
     "test:e2e": "node scripts/e2e.js",
     "test:score": "node scripts/score-tests.mjs results",
     "test:init": "node scripts/score-tests.mjs --init",
-    "test:offline": "node scripts/selftest-offline.mjs"
+    "test:offline": "node scripts/selftest-offline.mjs",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "@wecom/aibot-node-sdk": "^1.0.7",
+    "china-area-data": "5.0.1",
     "localtunnel": "^2.0.2",
-    "mineflayer": "4.39.0",
-    "mineflayer-pathfinder": "2.4.5",
     "opencc-js": "^1.4.2",
+    "pinyin-pro": "3.27.0",
     "ws": "^8.18.0"
   }
 }

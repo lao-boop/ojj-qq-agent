@@ -10,10 +10,11 @@ import { Aligner } from '../src/asr.js';
 import { ffmpegBin } from '../src/media.js';
 
 const execFileAsync = promisify(execFile);
-const DATA_ROOT = process.env.AUTOREPAIR_DIR || 'C:\\Users\\潘旭忠\\Desktop\\auto_repair_multimodal_v1';
+const DATA_ROOT = process.env.AUTOREPAIR_DIR;
+if (!DATA_ROOT) throw new Error('请设置 AUTOREPAIR_DIR');
 const OUT_DIR = path.join(DATA_DIR, 'auto_repair');
 const CACHE_DIR = path.join(OUT_DIR, 'cache');
-const PYTHON = process.env.PYTHON_PATH || 'C:\\Users\\潘旭忠\\AppData\\Local\\AstrBot\\backend\\python\\python.exe';
+const PYTHON = process.env.PYTHON_PATH || 'python';
 
 fs.mkdirSync(CACHE_DIR, { recursive: true });
 fs.mkdirSync(OUT_DIR, { recursive: true });

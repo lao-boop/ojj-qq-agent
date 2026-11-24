@@ -1,6 +1,6 @@
 /**
  * 本地向量检索（稀疏向量 / TF-IDF）。
- * 不依赖模型下载：用字级 2-gram、3-gram 与英文词做特征，比单纯关键词更能扛住“换个说法”。
+ * 不依赖模型下载：用中文单字、二元组、三元组与英文词做特征。
  */
 const STOP = new Set(['的', '了', '是', '在', '我', '你', '他', '她', '它', '我们', '你们', '他们', '这', '那', '一个', '一下', '什么', '怎么', '就是', '还是', '然后', '因为', '所以', '但是', '可以', '没有']);
 
@@ -10,6 +10,8 @@ export function tokenize(text) {
   const latin = s.match(/[a-z0-9]{2,}/g) || [];
   for (const w of latin) tokens.push(w);
   const han = s.replace(/[^\u4e00-\u9fa5]/g, '');
+  // 单字也参与 IDF 加权，使短物品名在口语改写后仍有匹配机会。
+  for (const ch of han) tokens.push(ch);
   for (let i = 0; i < han.length - 1; i++) tokens.push(han.slice(i, i + 2));
   for (let i = 0; i < han.length - 2; i++) tokens.push(han.slice(i, i + 3));
   return tokens.filter((t) => t && !STOP.has(t));

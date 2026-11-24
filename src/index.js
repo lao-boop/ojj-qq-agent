@@ -7,27 +7,33 @@ import { OneBot } from './onebot.js';
 import { LLM, sleep } from './llm.js';
 import { ImageGen } from './image.js';
 import { peekPending, markDelivered, upsertContact, listContacts, findContact, canRelay } from './relay.js';
+import { isMessageDraft, composeMessageDraft } from './message-draft.js';
+import { forwardRecentFile } from './recent-file-forward.js';
+import { SemanticRelay } from './semantic-relay.js';
+import { BossRelayConversation } from './boss-relay-conversation.js';
+import { readEmployeeBossRelay, readRelayEnvelope } from './relay-envelope.js';
 import { parseRelayCommand, parseRelayToCommand, parseGroupCommand, cleanRelayContent, parseWhen, addJob, listJobs, cancelLatest, startRelayQueue } from './wecom-relay.js';
 import { loadGroups, addMember, removeMember, parseGroupAssignment } from './wecom-groups.js';
 import { startReminderQueue, addReminder, listReminders, cancelLatest as cancelLatestReminder } from './reminders.js';
 import { ActionJournal, selfContext } from './self-state.js';
 import { GameHub } from './games.js';
-import { logMc, formatMcDigest } from './mc-log.js';
 import { addDoc, latestDoc, listDocs } from './doc-inbox.js';
 import { WeComBot } from './wecom.js';
 import { WeComDirectory } from './wecom-directory.js';
 import * as wecomUsers from './wecom-users.js';
 import { logActivity, groupToday } from './wecom-activity.js';
-import { MC_KNOWLEDGE, mcStatusText } from './mc-knowledge.js';
-import { Minecraft } from './minecraft.js';
+import { archiveSource, listSources, backfillFromActivity } from './wecom-source-archive.js';
+import { writeStructuredReport } from './wecom-report.js';
+import { queryArchive } from './wecom-archive-query.js';
 import { logMedia, formatMediaDigest } from './media-log.js';
 import { searchBili, pickVideo, downloadBili, videoFileName } from './bilibili.js';
 import { findPython } from './tts.js';
 import { Memory } from './memory.js';
 import { createTools } from './tools.js';
 import { Brain } from './brain.js';
+import { makeSlideReport, wantsSlideReport } from './ppt-report.js';
 import { TTS } from './tts.js';
-import { FileReader } from './files.js';
+import { FileReader, asksAboutFile } from './files.js';
 import { renderHum } from './music.js';
 import { SongGen } from './song.js';
 import { VoiceConvert } from './cover.js';
@@ -36,6 +42,9 @@ import { MusicLibrary, extractSongQuery, parseCoverRequest, isCorrection, parseD
 import { webSearch } from './websearch.js';
 import { Aligner } from './asr.js';
 import { localAsrHealthy, localTranscribe } from './asr-local.js';
+import { VoiceClarifications, VoiceFollowups, conversationalFields, shiftDeferredFields } from './voice-clarification.js';
+import {reviewSentence,reviewAmbiguity,applyBusinessSentenceReview,listenAgain} from './voice-sentence-review.js';
+import { VoiceNames, placeEvidence, resolveVoiceVocabulary } from './voice-vocabulary.js';
 import * as OpenCC from 'opencc-js';
 import { Qzone } from './qzone.js';
 import { Office } from './office.js';
@@ -66,57 +75,6 @@ if (library.enabled) library.scan();
 const aligner = new Aligner({ ...cfg.asr, token: cfg.asr.token || cfg.song.token }, logger.child('asr'));
 let qzone = null;
 const games = new GameHub({ logger: logger.child('games') });
-const minecraft = new Minecraft({
-  cfg: cfg.mc,
-  logger: logger.child('mc'),
-  onChat: async (name, message) => {
-    const isOwnerName = String(name || '').toLowerCase() === String(cfg.mc?.ownerName || '').toLowerCase();
-    const text = String(message || '').trim();
-    // 游戏里的“停下/过来”直接处理，不等模型
-    if (minecraft.online) {
-      if (/^(停|停下|停手|别挖|别打了|别动|暂停)/.test(text)) {
-        minecraft.cancelTask();
-        try { minecraft.stopFollow(); } catch {}
-        try { minecraft.bot?.pathfinder?.setGoal(null); } catch {}
-        try { minecraft.say('好，停下了'); } catch {}
-        logMc({ kind: '听指令停下', detail: name });
-        return;
-      }
-      if (/^(过来|来我这|来我这边|回来|跟着我)/.test(text)) {
-        try {
-          const target = minecraft.bot?.players?.[name]?.entity;
-          if (target) {
-            await minecraft.moveTo(target.position.x, target.position.y, target.position.z).catch(() => {});
-            try { minecraft.say('来了'); } catch {}
-          }
-        } catch {}
-        logMc({ kind: '听指令过来', detail: name });
-        return;
-      }
-    }
-    try {
-      logMc({ kind: '公屏聊天', detail: `${name}：${String(message).slice(0, 80)}` });
-      const res = await brain.respond({
-        chatKey: isOwnerName ? `private:${cfg.access?.ownerQQ || ''}` : 'mc:server',
-        title: `MC ${name}`,
-        userText: (() => {
-          let state = '';
-          try {
-            if (minecraft.online) state = mcStatusText(minecraft.snapshot());
-          } catch {
-            state = '';
-          }
-          return `${isOwnerName ? '（这是我主人）' : ''}${state}\n${MC_KNOWLEDGE}\n[Minecraft 公屏] ${name}：${message}`;
-        })(),
-        meta: { scene: 'Minecraft 服务器', peerName: name },
-      });
-      const text = (res.bubbles || []).join(' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-      if (text) minecraft.say(text);
-    } catch (err) {
-      logger.warn(`MC 聊天回复失败：${err.message}`);
-    }
-  },
-});
 const actionJournal = new ActionJournal({ logger: logger.child('actions') });
 const memory = new Memory({ logger: logger.child('memory'), llm, cfg: cfg.chat });
 const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
@@ -125,7 +83,7 @@ const wecomDirectory = new WeComDirectory({
   secret: process.env.WECOM_SECRET || '',
   logger: logger.child('wecom-dir'),
 });
-let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
 const brain = new Brain({
   cfg: cfg.chat,
   llm,
@@ -143,6 +101,8 @@ const brain = new Brain({
 });
 const sender = new ReplySender({ onebot, cfg: cfg.chat, logger: logger.child('reply') });
 
+const semanticRelay = new SemanticRelay();
+const bossConversations = new BossRelayConversation();
 const wecom = new WeComBot({
   botId: process.env.WECOM_BOT_ID || '',
   secret: process.env.WECOM_BOT_SECRET || process.env.Secret || '',
@@ -150,11 +110,14 @@ const wecom = new WeComBot({
   fileReader,
   onFile: async ({ from, chattype, chatid, file, name }) => {
     const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-    if (!bossId) return '';
     const uid = String(from);
     const cleanName = String(name || '').replace(/^\d+-wecom-/, '');
-    lastWecomFile.set(uid, { type: 'file', path: file, name: cleanName, at: Date.now() });
-    if (uid !== bossId) {
+    const key = wecomFileKey(uid,chatid);
+    const prior = lastWecomFile.get(key);
+    const at = Date.now();
+    const position = prior?.type === 'file' && !prior.batchEnded && at - prior.at < 600000 ? (prior.position || 1) + 1 : 1;
+    lastWecomFile.set(key, { type: 'file', path: file, name: cleanName, chatid: String(chatid || ''), at, position });
+    if (bossId && uid !== bossId) {
       try {
         await wecom.sendFileTo(bossId, file, cleanName);
         return '（已把文件转给老板）';
@@ -169,7 +132,7 @@ const wecom = new WeComBot({
     const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
     if (!bossId) return '';
     const uid = String(from);
-    lastWecomFile.set(uid, { type: 'image', path: file, name: '图片', at: Date.now() });
+    lastWecomFile.set(wecomFileKey(uid,chatid), { type: 'image', path: file, name: '图片', at: Date.now() });
     if (uid !== bossId) {
       try {
         await wecom.sendImageTo(bossId, file, 'image.jpg');
@@ -181,7 +144,7 @@ const wecom = new WeComBot({
     }
     return '（图片收到。要转给同事就说“发给张三”）';
   },
-  onMessage: async ({ chatKey, title, text, images, from }) => {
+  onMessage: async ({ chatKey, title, text, images, from, chatid }) => {
     stats.received++;
     const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
     const allowIds = String(process.env.WECOM_ALLOW_USERIDS || '')
@@ -199,46 +162,146 @@ const wecom = new WeComBot({
         videos: [],
       };
     }
-    const learned = wecomUsers.learnNameFromText(from, text);
+    const ownerRequest = Boolean(bossId && String(from) === bossId);
+    const originalText = text;
+    const recentFile = lastWecomFile.get(wecomFileKey(from,chatid));
+    if (recentFile?.type === 'file') recentFile.batchEnded = true;
+    const attachmentResult = ownerRequest && String(chatKey).startsWith('wecom:user:') && !images?.length
+      ? await forwardRecentFile({text,chatid,file:recentFile,users:wecomUsers.listUsers(),groups:loadGroups(),send:sendRelayJob,llm}) : null;
+    const interpreted = attachmentResult || (ownerRequest && String(chatKey).startsWith('wecom:user:') && !images?.length
+      ? await semanticRelay.run(chatKey,{text:originalText,users:wecomUsers.listUsers(),groups:Object.keys(loadGroups()),llm,
+          deliver:(target,body)=>sendRelayJob({channel:'wecom',targets:[target],text:body})})
+      : null);
+    const draftRequested = !interpreted && ownerRequest && String(chatKey).startsWith('wecom:user:') && isMessageDraft(text);
+    const conversation = !interpreted && !draftRequested && ownerRequest && String(chatKey).startsWith('wecom:user:')
+      ? bossConversations.prepare(JSON.stringify([chatKey, from]),text,wecomUsers.listUsers())
+      : null;
+    const envelope = ownerRequest && !interpreted && !draftRequested && !conversation ? readRelayEnvelope(text, [...wecomKnownNames(), ...Object.keys(loadGroups())]) : null;
+    if (envelope?.head) text = envelope.head;
+    const employeeRelay = !ownerRequest && bossId && String(chatKey).startsWith('wecom:user:')
+      ? readEmployeeBossRelay(originalText, bossAliases())
+      : null;
+    const learned = interpreted || draftRequested || conversation || envelope || employeeRelay ? '' : wecomUsers.learnNameFromText(from, text);
     const say = (msg) => {
       stats.replied++;
       return { bubbles: [String(msg)], images: [], voices: [], files: [], documents: [], videos: [] };
     };
     const senderName = wecomUsers.findUser(from)?.name || from;
     const isGroup = String(chatKey || '').startsWith('wecom:group:');
+    const wecomOwner = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
+    const isWecomOwner = Boolean(wecomOwner && String(from) === wecomOwner);
+
+    // 老板查“员工发给机器人的原文”。只读、仅老板、默认私聊、最多 50 条。
+    // 只能看到员工主动发给机器人的内容，看不到员工之间的聊天。
+    {
+      const explicit = String(text || '').match(/^\/?查记录\s+([^\s，。]+)(?:\s+(\d{1,2}))?/);
+      const natural = String(text || '').match(
+        /(?:你)?(?:最近|刚才)?(?:和|跟)\s*([^\s，。]+?)\s*(?:私聊|聊过|聊了|说过|说了什么)/,
+      );
+      const asksArchive = explicit || (isWecomOwner && natural) || /查记录|私聊过什么/.test(String(text || ''));
+      if (asksArchive && !interpreted && !draftRequested && !conversation && !envelope && !employeeRelay) {
+        if (!isWecomOwner) return say('只有老板能查聊天记录。');
+        const person = String(explicit?.[1] || natural?.[1] || '')
+          .replace(/^(最近|刚才|一下)/, '')
+          .replace(/(最近|都|有|过什么|了什么)$/, '')
+          .trim();
+        if (!person) return say('要查哪位员工？例如：查记录 老 50');
+        const limit = Math.max(1, Math.min(50, Number(explicit?.[2]) || 20));
+        const result = queryArchive({
+          botId: process.env.WECOM_BOT_ID || '',
+          ownerUserId: wecomOwner,
+          person,
+          limit,
+          days: 7,
+          scope: 'private',
+        });
+        return say(result.ok ? result.text : result.error);
+      }
+    }
     logActivity({
       userid: from,
       name: senderName,
       chattype: isGroup ? 'group' : 'single',
       chatid: isGroup ? String(chatKey).split(':').pop() : '',
-      text,
+      text: originalText,
       kind: 'chat',
     });
+    archiveSource({
+      botId: process.env.WECOM_BOT_ID || '',
+      userid: from,
+      name: senderName,
+      chattype: isGroup ? 'group' : 'single',
+      chatid: isGroup ? String(chatKey).split(':').pop() : '',
+      text: originalText,
+      at: Date.now(),
+    });
+
+    if (interpreted) return say(interpreted.reply);
+    if (draftRequested) {
+      try {
+        return say(await composeMessageDraft(originalText,llm));
+      } catch (err) {
+        logger.warn('消息草稿生成失败：'+err.message);
+        return say('这次没生成完整草稿，请重试。尚未发送。');
+      }
+    }
+    if (conversation?.reply) return say(conversation.reply);
+    if (conversation?.items) {
+      const reports = [];
+      for (const {target,text:message} of conversation.items) {
+        const result = await sendRelayJob({channel:'wecom',targets:[target],text:message});
+        reports.push(result.ok ? '已发给 '+target.name+'。' : '发送结果：'+result.summary);
+      }
+      return say(reports.join('\n'));
+    }
+    if (employeeRelay) {
+      if (employeeRelay.reply) return say(employeeRelay.reply);
+      if (!employeeRelay.body.trim()) return say('要发什么给老板？');
+      const job = {
+        channel: 'wecom',
+        from: String(from),
+        targets: [{ userid: bossId, name: '老板' }],
+        text: employeeRelay.addressedByName ? '【传话】' + senderName + '：' + employeeRelay.body : employeeRelay.body,
+      };
+      if (employeeRelay.dueAt) {
+        addJob({ ...job, dueAt: employeeRelay.dueAt, label: employeeRelay.body });
+        return say('好的，' + fmtWhen(employeeRelay.dueAt) + ' 发给 老板。');
+      }
+      const result = await sendRelayJob(job);
+      return say(result.ok ? '已发给 老板。' : '发送结果：' + result.summary);
+    }
+    if (envelope?.reply) return say(envelope.reply);
 
     // 文件默认只收/转发；只有明确要求看内容时才解析正文
-    const pendingFile = lastWecomFile.get(String(from));
+    const pendingFile = lastWecomFile.get(wecomFileKey(from,chatid));
     if (
-      pendingFile?.type === 'file' &&
+      pendingFile?.type === 'file' && pendingFile.chatid === String(chatid || '') &&
       Date.now() - pendingFile.at < 10 * 60 * 1000 &&
-      /(总结|概括|解析|看看|看一下|内容|讲了什么|读一下|提取|要点|分析|翻译)/.test(text)
+      !envelope && asksAboutFile(text)
     ) {
       try {
-        const r = await fileReader.extractText({ path: pendingFile.path, name: pendingFile.name });
+        if (wantsSlideReport(pendingFile,text)) {
+          const report = await makeSlideReport(pendingFile,{python:fileReader.python,llm,model:cfg.llm.visionModel});
+          return {...say('逐页识别结果见附件。'),files:[report]};
+        }
+        const r = await fileReader.extractText(pendingFile, text);
+        if (r.answer != null) return say(r.answer);
+        images = [...(images || []), ...await fileReader.documentImages(pendingFile, text)];
         if (r?.ok && r.text) {
-          text = `${text}\n【文件内容：${pendingFile.name}】\n${String(r.text).slice(0, 6000)}`;
-          lastWecomFile.delete(String(from));
+          text = `${text}\n【文件内容：${pendingFile.name}】\n${r.text}`;
         } else {
           text = `${text}\n（这份文件我读不出正文：${r?.error || '格式不支持'}）`;
         }
       } catch (err) {
         logger.warn(`企微文件解析失败：${err.message}`);
+        if (wantsSlideReport(pendingFile, text)) return say('这份 PPT 的逐页报告未能生成或发送。请重新发送逐页识别请求。');
         text = `${text}\n（这份文件读取失败）`;
       }
     }
 
     // 组归属：我是宣传组的 / 把张三加到宣传组
     const bossSender = Boolean(bossId && String(from) === bossId);
-    const assign = parseGroupAssignment(text, { isBoss: bossSender });
+    const assign = !envelope && parseGroupAssignment(text, { isBoss: bossSender });
     if (assign) {
       if (assign.self && !bossSender) {
         addMember(assign.group, String(from));
@@ -318,6 +381,8 @@ const wecom = new WeComBot({
     }
 
     const groupCmd = parseGroupCommand(text, { groupNames: Object.keys(groups), now: new Date() });
+    if (groupCmd && envelope?.names?.length > 1) return say('涉及多个收件对象，请确认要发到哪个群。');
+    if (groupCmd && envelope) groupCmd.content = envelope.body;
     if (groupCmd) {
       if (!bossSender) return say('只有老板能给组发消息。');
       const g = groups[groupCmd.groupName] || {};
@@ -338,7 +403,10 @@ const wecom = new WeComBot({
       }
       if (!targets.length) return say(`「${groupCmd.groupName}」还没配置成员或群 chatid。`);
 
-      if (/^(这份|这个|刚才的?|那个|文件|图片|附件|材料)/.test(groupCmd.content)) {
+      const mediaReference = envelope
+        ? /^(这份|这个|刚才的?|那个)?(文件|图片|附件|材料)$/
+        : /^(这份|这个|刚才的?|那个|文件|图片|附件|材料)/;
+      if (mediaReference.test(groupCmd.content)) {
         groupCmd.content = '';
       }
 
@@ -346,12 +414,12 @@ const wecom = new WeComBot({
       const wantsMedia =
         !groupCmd.content || /(文件|图片|这份|这个|刚才|附件|材料)/.test(groupCmd.content);
       if (wantsMedia) {
-        let f = lastWecomFile.get(String(from));
+        let f = lastWecomFile.get(wecomFileKey(from,chatid));
         const before = f?.at || 0;
         if (!f || Date.now() - before > 5000) {
           for (let i = 0; i < 10; i++) {
             await new Promise((r) => setTimeout(r, 800));
-            const nf = lastWecomFile.get(String(from));
+            const nf = lastWecomFile.get(wecomFileKey(from,chatid));
             if (nf && nf.at > before) {
               f = nf;
               break;
@@ -405,10 +473,13 @@ const wecom = new WeComBot({
     // 传话：L2 多收件人 / L3 定时（老板与员工共用）
     const isBoss = Boolean(bossId && String(from) === bossId);
     const relayKnown = wecomKnownNames();
-    const relayCmd =
+    let relayCmd =
       parseRelayCommand(text, { isBoss, known: relayKnown, now: new Date() }) ||
       parseRelayToCommand(text, { now: new Date() });
 
+    if (envelope?.names && !/提醒/.test(text)) {
+      relayCmd = { ...relayCmd, action:'send', names:envelope.names, content:envelope.body };
+    }
     if (!/提醒/.test(text) && relayCmd?.action === 'cancel') {
       const job = cancelLatest();
       return say(
@@ -451,12 +522,12 @@ const wecom = new WeComBot({
         const wantsMedia =
           isBoss && (!relayCmd.content || /(文件|图片|这份|这个|刚才|附件|材料)/.test(relayCmd.content));
         if (wantsMedia) {
-          let f = lastWecomFile.get(String(from));
+          let f = lastWecomFile.get(wecomFileKey(from,chatid));
           const before = f?.at || 0;
           if (!f || Date.now() - before > 5000) {
             for (let i = 0; i < 10; i++) {
               await new Promise((r) => setTimeout(r, 800));
-              const nf = lastWecomFile.get(String(from));
+              const nf = lastWecomFile.get(wecomFileKey(from,chatid));
               if (nf && nf.at > before) {
                 f = nf;
                 break;
@@ -540,7 +611,7 @@ const wecom = new WeComBot({
       title,
       userText: text,
       images,
-      meta: { scene: '企业微信', peerName: senderName, wecomRoster: rosterText },
+      meta: { scene: '企业微信', senderId: from, peerName: senderName, wecomRoster: rosterText },
     });
     stats.replied++;
 
@@ -552,7 +623,7 @@ const wecom = new WeComBot({
     // 兜底：明确要 Word/PPT/Excel，模型只答应没调工具，就直接排任务
     if (!res.documents?.length && wantsDocCreation(text)) {
       const kind = wantDocType(text);
-      const topic = extractDocTopic(text, kind) || String(text).replace(/\[[^\]]*\]/g, '').trim().slice(0, 50);
+      const topic = kind === 'docx' ? text.trim() : extractDocTopic(text, kind) || String(text).replace(/\[[^\]]*\]/g, '').trim().slice(0, 50);
       if (topic) {
         res.documents = [
           {
@@ -570,6 +641,9 @@ const wecom = new WeComBot({
       }
     }
 
+    for (const job of res.documents ?? []) {
+      if (job.kind === 'docx') job.topic = wordRequest(text, job.topic);
+    }
     return res;
   },
   buildDocument: async (job) => {
@@ -759,7 +833,7 @@ function wantsDraw(text) {
 function extractDrawPrompt(text) {
   let t = String(text || '').trim();
   t = t.replace(/^(帮我|给我|麻烦|请|能不能|可以)?\s*(画|绘制|生成|来)\s*(一张|张|一只|只|一个|个|幅)?\s*/g, '');
-  return t.slice(0, 80) || '一只在海边的小鲸鱼';
+  return t.slice(0, 80) || '一只在海边的小安';
 }
 
 /** 按关键词猜一个表情分类，兜底用。 */
@@ -1076,7 +1150,7 @@ async function handleCommand(chat, text) {
     }
     case '/song': {
       if (!songGen.enabled) return '唱歌服务还没配好。';
-      const title = arg || '海边的小鲸鱼';
+      const title = arg || '海边的小安';
       const job = {
         title,
         style: 'gentle seaside folk, soft female vocal, acoustic guitar, warm',
@@ -1126,6 +1200,14 @@ async function handleCommand(chat, text) {
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
 /** 从话里判断要哪种文档。 */
+function wordRequest(message, resolvedTopic) {
+  const original = String(message || '').trim();
+  const resolved = String(resolvedTopic || '').trim();
+  if (!original) return resolved;
+  if (!resolved || original.includes(resolved) || /《[^》]+》/.test(original)) return original;
+  return original + '\n根据对话补充的主题：' + resolved;
+}
+
 function wantDocType(text) {
   const t = String(text || '');
   if (/(ppt|幻灯片|演示文稿|课件)/i.test(t)) return 'ppt';
@@ -1179,6 +1261,13 @@ const songUsage = new Map();
 const activeSongs = new Map();
 const coverUsage = new Map();
 const lastAudio = new Map();
+const voiceClarifications = new VoiceClarifications();
+const voiceFollowups = new VoiceFollowups();
+const voiceNames = new VoiceNames(path.join(DATA_DIR, 'voice-names.json'));
+function rememberVoiceName(key, name, heard) {
+  try { voiceNames.add(key, name, heard); return true; }
+  catch (err) { logger.warn(`语音人名未能保存：${err.message}`); return false; }
+}
 const prevAudio = new Map();
 const lastVideo = new Map();
 const lastCover = new Map();
@@ -1250,7 +1339,7 @@ async function runCoverJob(chat, audioPath, opts = {}) {
         ? pick(['唱好啦，这段有点长，发文件给你～', '录好啦，太长啦塞不进语音条，发文件给你～'])
         : pick(['唱好啦，听听看～', '献唱完毕，怎么样？', '唱完了，快夸我～']);
     const generic = /^(刚刚那段|学你唱|你发的这段|一段音频)$/.test(String(opts.title || ''));
-    const coverName = String((generic ? '小鲸鱼翻唱' : opts.title) || '小鲸鱼翻唱')
+    const coverName = String((generic ? '小安翻唱' : opts.title) || '小安翻唱')
       .replace(/[\\/:*?"<>|]/g, '')
       .slice(0, 40);
     await sender.sendAudio(chat, r.file, `${coverName}.mp3`, text, cfg.voice.sendAsVoice ?? true, seconds);
@@ -1450,6 +1539,22 @@ async function buildDailyDigest() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const docs = listDocs({ hours: 24, includeSummarized: true }).filter((d) => d.at >= start.getTime());
+
+  // 优先走“原文来源 + 逐字引用 + 结构校验”的汇报。
+  // 档案为空或模型两次都不合规时，才回退到旧的 Markdown 日报。
+  const botId = process.env.WECOM_BOT_ID || '';
+  const archived = listSources(botId, { since: start.getTime() }).filter((s) => s.userid !== bossId);
+  if (archived.length) {
+    const structured = await writeStructuredReport({
+      llm,
+      botId,
+      sources: archived,
+      logger: logger.child('wecom-report'),
+    });
+    if (structured) return structured.text;
+    logger.warn('企微结构化汇报未通过校验，回退旧日报');
+  }
+
   if (!groups.length && !docs.length) return '今天还没有员工消息或文档记录。';
 
   const records = groups
@@ -1552,10 +1657,14 @@ async function notifyFriend(uin, text) {
 }
 
 function bossAliases() {
-  return String(process.env.WECOM_BOSS_ALIASES || '老板,爵士,示例联系人,主人')
+  return String(process.env.WECOM_BOSS_ALIASES || '老板,爵士,Pay,主人')
     .split(/[,，]/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function wecomFileKey(from,chatid) {
+  return JSON.stringify([String(from),String(chatid || '')]);
 }
 
 function isBossAlias(name) {
@@ -1731,7 +1840,48 @@ async function onMessage(event) {
   }
 
   // 文档改需求：先停掉正在做的，再按新格式来
+  const voiceKey = JSON.stringify([chat.key, String(event.user_id)]);
+  if (!event.__batch && text && !audios.length && !images.length && !files.length && !videos.length &&
+      voiceClarifications.pending.has(voiceKey)) {
+    const answer = isPrivate ? text : stripWakeWord(text);
+    if (voiceClarifications.answer(voiceKey, answer)) return;
+    if ((isPrivate || mentioned) && /^(?:嗯|是的?|好的?|对|都不是)[。！!\s]*$/.test(answer.trim())) {
+      const label = voiceClarifications.pending.get(voiceKey).field.label;
+      await sender.send(chat, { bubbles: [`你可以说“第一个”或“第二个”。都不对的话，告诉我“${label}是……”就行。`] });
+      return;
+    }
+    if (isPrivate || mentioned) voiceClarifications.cancel(voiceKey);
+  }
   const msgText = String(text || '');
+  if (!event.__batch && text && !audios.length && !images.length && !files.length && !videos.length) {
+    const spokenToBot = isPrivate || (cfg.chat.group.replyOnAt && mentioned) ||
+      (cfg.chat.group.wakeWords ?? []).some(w => w && text.startsWith(w));
+    if (spokenToBot) {
+      const input = isPrivate ? text : stripWakeWord(text);
+      const register = /^(?:请|帮我)?记住(?:这个)?(?:人名|名字)[：:，, ]*(?:叫|是)?([\p{Script=Han}·]{2,8})[。！!]?$/u.exec(input.trim());
+      if (register) {
+        const saved=rememberVoiceName(voiceKey,register[1]);
+        await sender.send(chat,{bubbles:[saved ? `记住了，写作“${register[1]}”。` : '这次没存上，稍后再试一下。']});
+        return;
+      }
+      const correction = voiceFollowups.handle(voiceKey, input);
+      if (correction) {
+        if (correction.question) {
+          await sender.send(chat, {bubbles:[correction.question]});
+        } else {
+          if (correction.name) rememberVoiceName(voiceKey, correction.name, correction.heard);
+          await runSerial(chat.key, async () => {
+            const evidence = await placeEvidence(input, []);
+            const context = [correction.context, ...evidence.map(s => `相关地名检索结果：${s.title} ${s.url}`)].join('\n');
+            const reply = await brain.respond({chatKey:chat.key, title:isPrivate ? senderName : await groupName(event.group_id),
+              userText:context, meta:{scene:isPrivate?'私聊':'群聊',peerName:senderName},replyOnly:true});
+            await sender.send(chat, reply);
+          });
+        }
+        return;
+      }
+    }
+  }
   const stopDoc = /(别做|不要做|先不做|停|取消|别弄).{0,6}(ppt|幻灯片|word|文档|excel|表格)/.test(msgText) ||
     /(ppt|幻灯片).{0,6}(别做|不要|停|取消)/.test(msgText) ||
     /^(停|停下|别做了|取消|算了)$/.test(msgText.trim());
@@ -1874,6 +2024,7 @@ async function onMessage(event) {
             });
             return;
           } else {
+            let sentCount = 0;
             for (const t of targets) {
               try {
                 if (media) {
@@ -1881,10 +2032,15 @@ async function onMessage(event) {
                   else await sendQQFile(t.uin, media.path, media.name);
                 }
                 if (cmd.content) await notifyFriend(t.uin, cmd.content);
+                sentCount++;
               } catch (err) {
                 missing.push(`${t.name}（${err.message}）`);
               }
             }
+            logger.info(
+              `QQ 传话已发送：${sentCount}/${targets.length} → ${targets.map((t) => t.name).join('、')}` +
+                `${media ? `，附件《${media.name}》` : ''}${missing.length ? `；失败：${missing.join('、')}` : ''}`,
+            );
             await sender.send(chat, {
               bubbles: [
                 `已发给 ${targets.map((t) => t.name).join('、')}。${missing.length ? `\n失败：${missing.join('、')}` : ''}`,
@@ -1942,16 +2098,28 @@ async function onMessage(event) {
 
   // 刚收到、还没解析的文件：只有明确要求看内容时才解析
   const pendingRawFile = lastQQMedia.get(chat.key);
+  if (isPrivate && !files.length && pendingRawFile?.type === 'file-pending' &&
+      Date.now() - pendingRawFile.at < 10 * 60 * 1000 && asksAboutFile(text)) {
+    await sender.send(chat, { bubbles: [pendingRawFile.failed ? '上一个附件下载失败，请重新发送文件。' : '我还在接收刚发来的文件，请稍后再问。'] });
+    return;
+  }
   if (
-    isPrivate &&
+    isPrivate && !files.length &&
     pendingRawFile?.type === 'file' &&
     Date.now() - pendingRawFile.at < 10 * 60 * 1000 &&
-    /(总结|概括|解析|看看|看一下|内容|讲了什么|读一下|提取|要点|分析|翻译)/.test(String(text || ''))
+    asksAboutFile(text)
   ) {
     try {
-      const r = await fileReader.extractText({ path: pendingRawFile.path, name: pendingRawFile.name });
+      if (wantsSlideReport(pendingRawFile,text)) {
+        const report = await makeSlideReport(pendingRawFile,{python:fileReader.python,llm,model:cfg.llm.visionModel});
+        await sender.sendFile(chat,report.path,report.name,undefined,{allowVoiceFallback:false});
+        return;
+      }
+      const r = await fileReader.extractText(pendingRawFile, text);
+      const documentImages = r.answer == null ? await fileReader.documentImages(pendingRawFile, text) : [];
+      images.push(...documentImages);
       if (r?.ok && r.text) {
-        body = `${body}\n【文件内容：${pendingRawFile.name}】\n${String(r.text).slice(0, 6000)}`;
+        body = `${body}\n【文件内容：${pendingRawFile.name}】\n${r.text}`;
         addDoc({
           uin: String(event.user_id),
           senderName,
@@ -1960,20 +2128,28 @@ async function onMessage(event) {
           filePath: pendingRawFile.path,
           text: r.text,
           chars: r.chars,
-          images: 0,
+          images: documentImages.length,
         });
-        lastQQMedia.delete(chat.key);
+        if (r.answer != null) {
+          await sender.send(chat, { bubbles: [r.answer] });
+          return;
+        }
       } else {
         body = `${body}\n（这份文件我读不出正文：${r?.error || '格式不支持'}）`;
       }
     } catch (err) {
       logger.warn(`按需解析文件失败：${err.message}`);
+      if (wantsSlideReport(pendingRawFile, text)) {
+        await sender.send(chat, { bubbles: ['这份 PPT 的逐页报告未能生成或发送。请重新发送逐页识别请求。'] });
+        return;
+      }
       body = `${body}\n（这份文件读取失败）`;
     }
   }
   if (!isPrivate) {
     const hasWake = (cfg.chat.group.wakeWords ?? []).some((w) => w && text.includes(w));
-    const addressed = (cfg.chat.group.replyOnAt && mentioned) || hasWake;
+    const addressed = (cfg.chat.group.replyOnAt && mentioned) || hasWake ||
+      brain.hasPendingPart(chat.key, event.user_id);
     if (!addressed) {
       const chance = cfg.chat.group.chanceReply ?? 0;
       if (!(chance > 0 && Math.random() < chance)) return;
@@ -2061,17 +2237,22 @@ async function onMessage(event) {
   }
 
   // 文件默认只落盘/转发；明确要“总结/看看/解析”才读正文
-  const wantsParseFile = /(总结|概括|解析|看看|看一下|内容|讲了什么|读一下|提取|要点|分析|翻译)/.test(String(text || ''));
+  const wantsParseFile = asksAboutFile(text);
   if (files.length && !wantsParseFile) {
     const forwardOnly = Boolean(forwardMatch);
     const downloaded = [];
+    let currentBatch = {type:'file-pending',at:Date.now()};
+    if (files.some(f => f !== audioAttachment)) lastQQMedia.set(chat.key, currentBatch);
     for (const f of files.slice(0, 4)) {
       if (audioAttachment && f === audioAttachment) continue;
       const name = f.name || '文件';
       try {
         const d = await fileReader.download(onebot, f);
         if (d?.path) {
-          lastQQMedia.set(chat.key, { type: 'file', path: d.path, name, at: Date.now() });
+          if (lastQQMedia.get(chat.key) === currentBatch) {
+            currentBatch = { type: 'file', path: d.path, name, at: Date.now() };
+            lastQQMedia.set(chat.key, currentBatch);
+          }
           downloaded.push({ path: d.path, name });
         }
       } catch (err) {
@@ -2079,6 +2260,11 @@ async function onMessage(event) {
       }
     }
 
+    if (!downloaded.length && files.some(f => f !== audioAttachment)) {
+      currentBatch.failed = true;
+      await sender.send(chat, { bubbles: ['附件下载失败，请重新发送文件。'] });
+      return;
+    }
     if (forwardOnly) {
       const contact = findContact(forwardMatch[1]);
       if (!contact) {
@@ -2114,20 +2300,25 @@ async function onMessage(event) {
       if (audioAttachment && f === audioAttachment) continue;
       const name = f.name || '文件';
       try {
-        const r = await fileReader.read(onebot, f);
+        const r = await fileReader.read(onebot, f, text);
         if (r?.path) lastQQMedia.set(chat.key, { type: 'file', path: r.path, name, at: Date.now() });
+        if (files.length === 1 && !forwardMatch && wantsSlideReport(r,text)) {
+          const report = await makeSlideReport(r,{python:fileReader.python,llm,model:cfg.llm.visionModel});
+          await sender.sendFile(chat,report.path,report.name,undefined,{allowVoiceFallback:false});
+          return;
+        }
         if (r.ok && r.text) {
-          chunks.push(`【对方发来的文件：${name}】\n${r.text.slice(0, 6000)}`);
+          chunks.push(`【对方发来的文件：${name}】\n${r.text}`);
         } else {
           chunks.push(`【对方发来的文件：${name}】（我读不出里面的文字：${r.error || '格式不支持'}）`);
         }
         // Word/PPT/Excel 里的图片也抽出来一起看
         let docImages = 0;
         if (/\.(docx|pptx|xlsx)$/i.test(name)) {
-          const pics = await fileReader.extractImages(r);
+          const pics = r.answer == null ? await fileReader.documentImages(r, text) : [];
           docImages = pics.length;
           if (pics.length) {
-            effectiveImages = [...effectiveImages, ...pics.map((p) => ({ file: p }))];
+            effectiveImages = [...effectiveImages, ...pics];
             chunks.push(`（文件里还有 ${pics.length} 张图，已经一起看了）`);
             logger.info(`从 ${name} 抽出 ${pics.length} 张图`);
           }
@@ -2192,7 +2383,16 @@ async function onMessage(event) {
             chunks.push('（文件收到，但转发失败了）');
           }
         }
+        if (files.length === 1 && r.answer != null && !forwardMatch) {
+          await sender.send(chat, { bubbles: [r.answer] });
+          return;
+        }
       } catch (err) {
+        if (files.length === 1 && !forwardMatch && wantsSlideReport({name}, text)) {
+          logger.warn(`逐页报告失败：${err.message}`);
+          await sender.send(chat, { bubbles: ['这份 PPT 的逐页报告未能生成或发送。请重新发送逐页识别请求。'] });
+          return;
+        }
         chunks.push(`【对方发来的文件：${name}】（读取失败：${err.message}）`);
       }
     }
@@ -2238,16 +2438,26 @@ async function onMessage(event) {
           }
           const asrPath = await toMp3(asrSource, { ffmpeg: cfg.media?.ffmpegPath, tag: 'voice' }).catch(() => asrSource);
           let transcript = '';
+          let questions = [];
+          let readings = [];
+          let primary = [];
           // 优先用本地小模型（2~3 秒），不可用再走云端
           try {
             if (cfg.asr?.local?.enabled && (await localAsrHealthy(cfg.asr.local.url))) {
-              transcript = (await localTranscribe(asrPath, { url: cfg.asr.local.url })).text;
+              const result = await localTranscribe(asrPath, { url: cfg.asr.local.url });
+              transcript = result.text;
+              questions = result.questions;
+              readings = result.readings;
+              primary = result.primary;
               // 粤语：识别结果里出现粤语用字，就按粤语再认一遍
               if (transcript && /(嘅|咗|唔|係|佢|哋|乜|咁|喺|嚟|冇|畀|睇|啲|嗰)/.test(transcript)) {
                 try {
                   const yue = await localTranscribe(asrPath, { url: cfg.asr.local.url, language: 'yue' });
                   if (yue.text && yue.text.length >= transcript.length * 0.6) {
                     transcript = yue.text;
+                    questions = yue.questions;
+                    readings = yue.readings;
+                    primary = [];
                     logger.info('检测到粤语，已用粤语模型重认');
                   }
                 } catch (err) {
@@ -2267,6 +2477,37 @@ async function onMessage(event) {
               transcript = words.map((w) => w.word).join('').replace(/\s+/g, '');
             }
           }
+          const allFields = questions;
+          questions = conversationalFields(transcript, allFields);
+          const deferred = allFields.filter(f => !questions.includes(f)).map(f=>({...f}));
+          if (transcript && !questions.length && voiceClarifications.answer(voiceKey, transcript)) return;
+          const python=cfg.asr?.local?.pythonPath || cfg.office?.pythonPath || process.env.PYTHON_PATH ||
+            path.join(process.env.LOCALAPPDATA || '', 'AstrBot/backend/python/python.exe');
+          const confirmedWords=[];
+          let preview, review={status:'keep'};
+          if(transcript && primary.length && cfg.asr?.sentenceReview!==false) {
+            try {
+              const normalized=OpenCC.Converter({from:'tw',to:'cn'})(transcript.trim());
+              const previewFields=questions.length?allFields.filter(f=>f.label==='用词' || !questions.includes(f)):deferred;
+              preview=await resolveVoiceVocabulary(voiceNames,voiceKey,normalized,previewFields,undefined,{python,readings,primary});
+              review=await reviewSentence(llm,preview.text,primary,{listen:()=>listenAgain(asrPath,python)});
+              if(!questions.length && !preview.geoQuestions.length) review=await reviewAmbiguity(llm,preview.text,primary,review);
+            } catch {
+              logger.warn('语音整句复核不可用，沿用现有转写和追问');
+            }
+          }
+          if (transcript && questions.length) {
+            transcript = await voiceClarifications.confirm(voiceKey, transcript, questions,
+              question => sender.send(chat, { bubbles: [question] }),
+              (field, value) => {
+                shiftDeferredFields(deferred,field,value);
+                confirmedWords.push(value,...field.options);
+                if (field.label === '名字') rememberVoiceName(voiceKey,value,field.options[0]);
+              });
+            if (transcript === null) return;
+          } else if (transcript) {
+            voiceClarifications.cancel(voiceKey);
+          }
           transcript = String(transcript || '').trim();
           if (transcript) {
             try {
@@ -2276,14 +2517,38 @@ async function onMessage(event) {
             }
           }
           if (transcript) {
+            const vocabulary = (!questions.length && preview) || await resolveVoiceVocabulary(voiceNames,voiceKey,transcript,deferred,undefined,
+              {python:cfg.asr?.local?.pythonPath || cfg.office?.pythonPath, readings:questions.length ? [] : readings,
+               primary,confirmed:confirmedWords});
+            const protectedWords=[...confirmedWords,...vocabulary.placeEdits.map(e=>e.value),...vocabulary.culturalEdits.map(e=>e.value),...vocabulary.nameEdits.map(e=>e.value),...vocabulary.names,...vocabulary.geoQuestions.flatMap(f=>f.options)];
+            const revised=applyBusinessSentenceReview(review,vocabulary.text,{primary,allowQuestion:!questions.length,
+              protectedWords,pendingLocation:vocabulary.geoQuestions.length>0});
+            transcript = revised.text;
+            const followups=vocabulary.geoQuestions.length?vocabulary.geoQuestions:revised.field?[revised.field]:[];
+            if (!questions.length && followups.length) {
+              transcript = await voiceClarifications.confirm(voiceKey,transcript,followups,
+                question=>sender.send(chat,{bubbles:[question]}));
+              if (transcript===null) return;
+            }
             audioNote = `[对方语音转写] ${transcript}`;
+            voiceFollowups.remember(voiceKey, transcript);
+            const names = vocabulary.names;
+            if (names.length) audioNote += '\n本次对话已确认过的相关人名写法：' + names.join('、') + '。结合人物身份选用。';
+            for (const f of deferred) {
+              if (vocabulary.culturalEdits.some(e => e.start < f.end && f.start < e.end)) continue;
+              audioNote += '\n同一处的识别候选：' + f.options.join(' / ') + '。结合整句和上文理解，直接接话。';
+            }
+            const places = vocabulary.places;
+            if (places.length) audioNote += '\n专名检索来源（结合语音上下文核对）：' + places.map(p=>p.title + ' ' + p.url).join('；');
             logger.info(`语音转写：${transcript.slice(0, 60)}`);
           } else {
-            audioNote = '[对方发来一段语音，但没识别出内容]';
+            await sender.send(chat, { bubbles: ['这条语音我没听清，可以再说一遍，或者打字告诉我吗？'] });
+            return;
           }
         } catch (err) {
-          audioNote = '[对方发来一段语音，转写失败，可以请他再说一遍]';
           logger.warn(`语音转写失败：${err.message}`);
+          await sender.send(chat, { bubbles: ['这条语音没能转成文字，麻烦再发一次，或者打字告诉我。'] });
+          return;
         }
       }
     } catch (err) {
@@ -2552,6 +2817,7 @@ async function onMessage(event) {
   const peerName = String(senderInfo.card || senderInfo.nickname || event.user_id);
   const meta = {
     scene: isPrivate ? '私聊' : '群聊',
+    senderId: event.user_id,
     peerName: isPrivate ? peerName : `${peerName}（群友）`,
     groupName: isPrivate ? '' : await groupName(event.group_id),
   };
@@ -2567,16 +2833,6 @@ async function onMessage(event) {
     try {
       logger.info(`收到 ${chat.key}：${body.slice(0, 60)}${effectiveImages.length ? ` [图片x${effectiveImages.length}]` : ''}`);
       const isOwnerChat = chat.key === `private:${cfg.access?.ownerQQ || ''}`;
-      if (isOwnerChat && /(我的世界|minecraft|mc|游戏里|服务器)/i.test(userSay) && minecraft?.online) {
-        try {
-          body += `\n\n${MC_KNOWLEDGE}\n${mcStatusText(minecraft.snapshot())}`;
-        } catch {
-          /* ignore */
-        }
-      }
-      // 游戏动态只给主人看，避免其他聊天对象看到主人在 MC 的坐标与活动
-      const mcDigest = isOwnerChat ? formatMcDigest() : '';
-      if (mcDigest) body += `\n\n${mcDigest}`;
       const mediaDigest = formatMediaDigest(chat.key);
       if (mediaDigest) body += `\n\n${mediaDigest}`;
       let result = await brain.respond({
@@ -2584,6 +2840,7 @@ async function onMessage(event) {
         title: isPrivate ? `私聊 ${peerName}` : meta.groupName || `群 ${event.group_id}`,
         userText: body,
         images: effectiveImages,
+        imageDescription: userSay,
         meta,
         onProgress: async (ev) => {
           if (ev.type === 'draw_start') {
@@ -2730,7 +2987,7 @@ async function onMessage(event) {
       // 只是“提到/回忆某个文档”不算，别自作主张做文件
       const docKind = wantsDocCreation(userSay) ? wantDocType(userSay) : '';
       if (docKind && !(result.documents ?? []).length) {
-        const topic = extractDocTopic(body, docKind) || body.replace(/\[[^\]]*\]/g, '').trim().slice(0, 60);
+        const topic = docKind === 'docx' ? userSay.trim() : extractDocTopic(body, docKind) || body.replace(/\[[^\]]*\]/g, '').trim().slice(0, 60);
         if (topic) {
           result = {
             ...result,
@@ -2743,6 +3000,7 @@ async function onMessage(event) {
       }
 
       for (const job of result.documents ?? []) {
+        if (job.kind === 'docx') job.topic = wordRequest(userSay, job.topic);
         trackJob(`文档：${job.kind} ${job.topic || ''}`, runOfficeJob(chat, job)).catch((err) => logger.warn(`文档任务异常：${err.message}`));
       }
 
@@ -2752,7 +3010,7 @@ async function onMessage(event) {
         /(这就唱|唱给你|马上唱|写一首|写首歌|给你写|我写|这就写|在写|正在写|马上写|编一首|谱一首)/.test(said) ||
         (/(写|唱|编|谱)/.test(said) && /(歌|曲|段|首)/.test(said) && /(稍等|等我|一会儿|马上|很快|几分钟)/.test(said));
       if (!(result.songs?.length) && songGen.enabled && promised) {
-        const theme = body.replace(/\[[^\]]*\]/g, '').trim().slice(-80) || '海边的小鲸鱼';
+        const theme = body.replace(/\[[^\]]*\]/g, '').trim().slice(-80) || '海边的小安';
         const lyrics = await writeLyrics(theme);
         if (lyrics) {
           logger.info('模型口头答应唱歌但没调工具，自动补一首');
@@ -2848,7 +3106,7 @@ onebot.on('ready', ({ selfId, nickname }) => {
         journal: actionJournal,
       });
       qzone.startAuto();
-      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
     } else {
       qzone.updateConfig(cfg.qzone);
     }
@@ -2899,7 +3157,7 @@ async function applyConfig(rawPatch) {
   brain.updateConfig(cfg.chat);
   memory.updateConfig(cfg.chat);
   sender.updateConfig(cfg.chat);
-  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
   brain.tools = tools;
   if (cfg.llm.maxTokens) llm.cfg.maxTokens = cfg.llm.maxTokens;
 
@@ -2991,7 +3249,7 @@ const consoleServer = new ConsoleServer({
 // ---------- 启动 ----------
 
 logger.info('==========================================');
-logger.info(`  小鲸鱼 QQ 机器人启动（${cfg.bot.name}）`);
+logger.info(`  小安 | 智能助手启动（${cfg.bot.name}）`);
 logger.info(`  模型：${cfg.llm.model}  出图：${cfg.image.enabled ? cfg.image.provider : '关闭'}  语音：${cfg.tts.enabled ? tts.voice : '关闭'}`);
 logger.info('==========================================');
 
@@ -3030,6 +3288,8 @@ function startWecomDigest() {
 
 try {
   wecom.start();
+  const backfilled = backfillFromActivity({ botId: process.env.WECOM_BOT_ID || '', days: 7 });
+  if (backfilled) logger.info(`企微原文档案回填：${backfilled} 条`);
   startWecomDigest();
   startRelayQueue({ logger: logger.child('relay-queue'), send: sendRelayJob, onResult: notifyRelayResult });
   startReminderQueue({

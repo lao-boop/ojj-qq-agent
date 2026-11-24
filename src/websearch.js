@@ -81,3 +81,25 @@ export async function webSearch(query, { limit = 5, timeoutMs = 15000 } = {}) {
   cache.set(key, { at: Date.now(), items });
   return items.slice(0, limit);
 }
+
+export async function publicPlaceSearch(query, options) {
+  const key = 'place:' + query;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.items;
+  let items = [];
+  try {
+    const html = await fetchHtml('https://www.so.com/s?q=' + encodeURIComponent(query), options.timeoutMs);
+    for (const block of html.split(/<h3\b/i).slice(1)) {
+      const end=block.indexOf('</h3>');
+      if(end<0) continue;
+      const heading='<h3'+block.slice(0,end+5);
+      const url = heading.match(/\bdata-mdurl=["']([^"']+)["']/i)?.[1];
+      const title = decodeEntities(heading);
+      const snippet=decodeEntities(block.slice(end+5,end+4000).split(/<cite\b|<\/li>|<script\b/i)[0]).slice(0,350);
+      if (url && title) items.push({title,url:decodeEntities(url),snippet});
+    }
+  } catch { /* fall back to the ordinary search provider */ }
+  items.push(...await webSearch(query,options));
+  cache.set(key,{at:Date.now(),items});
+  return items;
+}

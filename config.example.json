@@ -1,6 +1,6 @@
 {
   "bot": {
-    "name": "小鲸鱼"
+    "name": "小安"
   },
   "onebot": {
     "wsUrl": "ws://127.0.0.1:3001",
@@ -12,6 +12,7 @@
     "apiKey": "",
     "model": "deepseek-v4-pro",
     "visionModel": "deepseek-flash",
+    "visionFallbackModel": "deepseek-v4-pro",
     "helperModel": "deepseek-flash",
     "temperature": 1.15,
     "maxTokens": 900,
@@ -36,7 +37,8 @@
     "group": {
       "replyOnAt": true,
       "wakeWords": [
-        "小鲸鱼",
+        "小安",
+        "安安",
         "鲸鱼",
         "小鱼"
       ],
@@ -57,7 +59,7 @@
     "allowAllWhenEmpty": false,
     "autoAcceptFriend": false,
     "autoAcceptGroupInvite": false,
-    "greeting": "嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。",
+    "greeting": "嗨，我是小安，团队的智能助手～有事直接说，能办的马上办，办不了的咱一起想办法。",
     "forwardFiles": false
   },
   "image": {
@@ -66,7 +68,9 @@
     "baseUrl": "",
     "apiBase": "",
     "apiKey": "",
-    "model": "black-forest-labs/flux-1.1-pro",
+    "model": "black-forest-labs/flux-2-pro",
+    "reviewModel": "google/gemini-3-flash",
+    "repairModel": "google/nano-banana-2",
     "defaultSize": "square",
     "timeoutMs": 90000,
     "cooldownMs": 45000,

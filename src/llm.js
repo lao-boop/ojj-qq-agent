@@ -24,6 +24,9 @@ export class LLM {
     maxTokens = this.cfg.maxTokens,
     timeoutMs = this.cfg.timeoutMs,
     toolChoice,
+    responseFormat,
+    directAnswer = false,
+    reasoning = false,
     retries = 4,
   }) {
     const body = {
@@ -33,9 +36,17 @@ export class LLM {
       max_tokens: maxTokens,
       stream: false,
     };
+    if (responseFormat) body.response_format = responseFormat;
     if (tools?.length) {
       body.tools = tools;
       body.tool_choice = toolChoice ?? 'auto';
+    }
+    if (directAnswer && new URL(this.cfg.baseUrl).hostname === 'api.deepseek.com' && /^deepseek-(v4|flash)/.test(model)) {
+      body.thinking = { type: 'disabled' };
+    }
+
+    if (reasoning && new URL(this.cfg.baseUrl).hostname === 'api.deepseek.com' && /^deepseek-v4/.test(model)) {
+      body.thinking = { type: 'enabled' };
     }
 
     const url = `${this.cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;

@@ -47,13 +47,15 @@ export function applyEnvOverrides(cfg) {
 }
 
 export const DEFAULTS = {
-  bot: { name: '小鲸鱼' },
+  bot: { name: '小安' },
   onebot: { wsUrl: 'ws://127.0.0.1:3001', accessToken: '', httpUrl: '' },
   llm: {
     baseUrl: 'https://api.deepseek.com/v1',
     apiKey: '',
     model: 'deepseek-v4-pro',
     visionModel: 'deepseek-flash',
+    visionFallbackModel: 'deepseek-v4-pro',
+    intentReviewModel: 'deepseek-v4-pro',
     helperModel: 'deepseek-flash',
     temperature: 1.15,
     maxTokens: 900,
@@ -71,7 +73,7 @@ export const DEFAULTS = {
     summaryTriggerChars: 9000,
     group: {
       replyOnAt: true,
-      wakeWords: ['小鲸鱼', '鲸鱼', '小鱼'],
+      wakeWords: ['小安', '安安', '鲸鱼', '小鱼'],
       chanceReply: 0.03,
       minIntervalMs: 4000,
     },
@@ -87,7 +89,7 @@ export const DEFAULTS = {
     allowAllWhenEmpty: false,
     autoAcceptFriend: true,
     autoAcceptGroupInvite: false,
-    greeting: '嗨，我是小鲸鱼～好友申请过啦。有事随时说，没事也可以来聊两句。',
+    greeting: '嗨，我是小安，团队的智能助手～有事直接说，能办的马上办，办不了的咱一起想办法。',
   },
   image: {
     enabled: true,
@@ -144,12 +146,12 @@ export const DEFAULTS = {
   console: { enabled: true, host: '127.0.0.1', port: 3010, token: '' },
   log: { level: 'info', file: true },
   media: { ffmpegPath: '' },
-  mc: { username: 'Xiaojingyu', host: '127.0.0.1', port: 25565, version: '26.1', ownerName: '' },
   office: { pythonPath: '', theme: 'history', model: 'deepseek-flash', maxImages: 8, imagesPerDeck: 0, imageDelayMs: 12000 },
   relay: { enabled: true, allow: [], dailyLimit: 5, maxLen: 200 },
   library: { enabled: true, dir: 'D:\\无损音乐', maxSeconds: 0 },
   asr: {
     enabled: true,
+    sentenceReview: true,
     token: '',
     model: 'victor-upmeet/whisperx',
     local: { enabled: true, url: 'http://127.0.0.1:8090', port: 8090, model: 'small', pythonPath: '' },
@@ -227,7 +229,7 @@ export function loadConfig() {
   if (!(cfg.llm?.temperature > 0)) cfg.llm.temperature = 1.15;
   if (!(cfg.llm?.maxTokens > 0)) cfg.llm.maxTokens = 900;
   if (!(cfg.chat?.maxBubbles > 0)) cfg.chat.maxBubbles = 3;
-  if (!cfg.chat?.group?.wakeWords?.length) cfg.chat.group.wakeWords = ['小鲸鱼', '鲸鱼', '小鱼'];
+  if (!cfg.chat?.group?.wakeWords?.length) cfg.chat.group.wakeWords = ['小安', '安安', '鲸鱼', '小鱼'];
   if (!cfg.tts?.voice) cfg.tts.voice = 'zh-CN-XiaoyiNeural';
   if (!cfg.image?.provider) cfg.image.provider = 'replicate';
   if (!cfg.access?.privateAllow?.length && cfg.access?.allowAllWhenEmpty === false) {

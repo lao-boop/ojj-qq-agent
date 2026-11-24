@@ -12,6 +12,10 @@ const FILES_DIR = path.join(DATA_DIR, 'files');
 const MAX_BYTES = 100 * 1024 * 1024; // QQ 文件常见 20~50MB，别卡在 20MB
 const DOWNLOAD_TIMEOUT_MS = 120000;
 
+export function asksAboutFile(text) {
+  return /总结|概括|解析|看看|看一下|内容|讲了什么|读一下|提取|要点|分析|翻译|原文|补全|单元格|工作表|图片|图中|图里|逐页|每一?页|每一?张幻灯片|第\s*\d+\s*[页段]|\b[A-Z]{1,3}\d+\b/i.test(text || '');
+}
+
 function safeName(name) {
   const base = String(name || 'file').replace(/[\\/:*?"<>|]/g, '_').slice(-80);
   return base || 'file';
@@ -82,10 +86,10 @@ export class FileReader {
     throw new Error('拿不到文件内容（OneBot 没给链接，get_file 也失败）');
   }
 
-  async extractText(file) {
+  async extractText(file, question = '') {
     const script = path.join(ROOT, 'scripts', 'extract_text.py');
     try {
-      const { stdout } = await execFileAsync(this.python, [script, file.path], {
+      const { stdout } = await execFileAsync(this.python, [script, file.path, String(question).slice(0, 4000)], {
         timeout: 60000,
         windowsHide: true,
         maxBuffer: 8 * 1024 * 1024,
@@ -97,9 +101,9 @@ export class FileReader {
     }
   }
 
-  async read(onebot, data) {
+  async read(onebot, data, question = '') {
     const file = await this.download(onebot, data);
-    const result = await this.extractText(file);
+    const result = await this.extractText(file, question);
     this.logger.info(
       `文件 ${file.name}（${Math.round(file.size / 1024)}KB）解析${result.ok ? `出 ${result.chars} 字` : `失败：${result.error}`}`,
     );
@@ -107,18 +111,32 @@ export class FileReader {
   }
 
   /** 抽出 Office 文件里内嵌的图片（docx/pptx/xlsx）。 */
-  async extractImages(file, limit = 3) {
+  async documentImages(file, question) {
+    const ordinal = /第\s*([1-9]\d*|[一二三四五六七八九十])\s*张(?:图|照片)/.exec(question || '')?.[1];
+    const index = Number(ordinal) || ('一二三四五六七八九十'.indexOf(ordinal) + 1);
+    return this.extractImages(file, index ? 1 : 3, question, index, true);
+  }
+
+  async extractImages(file, limit = 3, question = '', index = 0, includeContext = false) {
     if (!/\.(docx|pptx|xlsx)$/i.test(file.name || file.path || '')) return [];
     const outDir = path.join(FILES_DIR, 'media');
     const script = path.join(ROOT, 'scripts', 'extract_media.py');
     try {
-      const { stdout } = await execFileAsync(this.python, [script, file.path, outDir], {
+      const page = /第\s*(\d+)\s*(?:页|[张張]幻灯片)/.exec(question)?.[1] || '0';
+      const { stdout } = await execFileAsync(this.python, [script, file.path, outDir, page, String(index)], {
         timeout: 60000,
         windowsHide: true,
         maxBuffer: 4 * 1024 * 1024,
       });
       const json = JSON.parse(String(stdout).trim().split('\n').pop() || '{}');
-      return (json.images || []).slice(0, limit);
+      const paths = (json.images || []).slice(0, limit);
+      if (!includeContext) return paths;
+      // The reader already resolved these positions. They are not objects inside the image.
+      const visualQuestion = String(question || '')
+        .replace(/第\s*[\d一二三四五六七八九十]+\s*(?:页|[张張]幻灯片)(?:的)?/g, '')
+        .replace(/第\s*[\d一二三四五六七八九十]+\s*张(?:图片?|照片)/g, '这张图')
+        .slice(0, 500);
+      return paths.map(file => ({file, preview:json.previews?.[file], documentImage:true, question:visualQuestion, context:json.contexts?.[file]}));
     } catch (err) {
       this.logger.warn(`抽取文件图片失败：${String(err.stderr || err.message).slice(0, 120)}`);
       return [];

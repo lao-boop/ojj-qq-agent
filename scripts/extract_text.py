@@ -22,40 +22,10 @@ def main():
     ext = os.path.splitext(p)[1].lower()
     text = ""
     try:
-        if ext == ".docx":
-            import docx
-            d = docx.Document(p)
-            parts = [x.text for x in d.paragraphs if x.text and x.text.strip()]
-            for t in d.tables:
-                for row in t.rows:
-                    cells = [c.text.strip() for c in row.cells]
-                    if any(cells):
-                        parts.append(" | ".join(cells))
-            text = "\n".join(parts)
-        elif ext == ".pptx":
-            from pptx import Presentation
-            prs = Presentation(p)
-            chunks = []
-            for i, slide in enumerate(prs.slides, 1):
-                lines = ["第%d页:" % i]
-                for shape in slide.shapes:
-                    if getattr(shape, "has_text_frame", False):
-                        s = shape.text_frame.text.strip()
-                        if s:
-                            lines.append(s)
-                chunks.append("\n".join(lines))
-            text = "\n".join(chunks)
-        elif ext in (".xlsx", ".xlsm"):
-            import openpyxl
-            wb = openpyxl.load_workbook(p, read_only=True, data_only=True)
-            chunks = []
-            for ws in wb.worksheets:
-                chunks.append("[工作表 %s]" % ws.title)
-                for row in ws.iter_rows(values_only=True):
-                    vals = [str(v) for v in row if v is not None]
-                    if vals:
-                        chunks.append(" | ".join(vals))
-            text = "\n".join(chunks)
+        if ext in (".docx", ".pptx", ".xlsx", ".xlsm"):
+            from office_content import extract
+            emit(extract(p, ext, sys.argv[2] if len(sys.argv) > 2 else ""))
+            return
         elif ext == ".pdf":
             from pypdf import PdfReader
             reader = PdfReader(p)
