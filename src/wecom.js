@@ -1,365 +1,371 @@
-import fs from 'node:fs';
+import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import AiBot, { generateReqId } from '@wecom/aibot-node-sdk';
-import { DATA_DIR } from './config.js';
-import { ffmpegBin } from './media.js';
+import { WSClient } from '@wecom/aibot-node-sdk';
+import * as proxyAgent from 'https-proxy-agent';
+import { getProxyForUrl } from 'proxy-from-env';
 
-const execFileAsync = promisify(execFile);
+const HttpsProxyAgent = proxyAgent.HttpsProxyAgent ?? proxyAgent.default?.HttpsProxyAgent;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const STREAM_BYTES = 20480;
+const MARKDOWN_BYTES = 4096;
+const CONNECTION_KEYS = [
+  'enabled', 'botId', 'secret', 'wsUrl', 'reconnectInterval', 'maxReconnectAttempts',
+  'maxAuthFailureAttempts', 'heartbeatInterval', 'requestTimeout', 'maxReplyQueueSize',
+];
 
-const MAX_REPLY_BYTES = 20000;
-
-/** 去掉群消息里的 @机器人 前缀 */
-function stripMention(text) {
-  return String(text || '')
-    .replace(/^\s*@[^\s@]+\s*/g, '')
-    .replace(/\s*@[^\s@]+\s*$/g, '')
-    .trim();
+function safeMessage(value, secret = '') {
+  let text = value instanceof Error ? value.message : String(value ?? '');
+  if (secret) text = text.split(secret).join('***');
+  return text
+    .replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/gi, '[URL]')
+    .replace(/((?:secret|aeskey|access_token|authorization|token)["']?\s*[:=]\s*["']?)[^\s,"'}]+/gi, '$1***')
+    .slice(0, 1000);
 }
 
-/**
- * 企业微信智能机器人（长连接）。
- * 只负责收发，不碰业务：消息交给 onMessage，返回要发送的文本。
- */
-export class WeComBot {
-  constructor({ botId, secret, logger, onMessage, onFile, onImage, fileReader, buildDocument }) {
-    this.botId = String(botId || '').trim();
-    this.secret = String(secret || '').trim();
+function connectionKey(cfg) {
+  return JSON.stringify(CONNECTION_KEYS.map((key) => cfg?.[key]));
+}
+
+function webSocketOptions(wsUrl = 'wss://openws.work.weixin.qq.com') {
+  const target = new URL(wsUrl);
+  if (!['ws:', 'wss:'].includes(target.protocol)) throw new Error('企业微信连接地址必须使用 ws 或 wss');
+  // ws does not consume HTTP(S)_PROXY itself. Use the corresponding HTTP scheme
+  // so inherited proxy settings (including lowercase variants and NO_PROXY) apply.
+  target.protocol = target.protocol === 'wss:' ? 'https:' : 'http:';
+  const proxy = getProxyForUrl(target);
+  const options = { handshakeTimeout: 15000 };
+  if (proxy) {
+    let proxyUrl;
+    try { proxyUrl = new URL(proxy); } catch { throw new Error('企业微信网络代理地址无效'); }
+    if (!['http:', 'https:'].includes(proxyUrl.protocol)) throw new Error('企业微信网络代理仅支持 HTTP 或 HTTPS');
+    options.agent = new HttpsProxyAgent(proxyUrl);
+  }
+  return options;
+}
+
+/** Official smart-bot WebSocket client; this is separate from QQ/OneBot. */
+export class WeComTransport extends EventEmitter {
+  constructor({ cfg = {}, logger, clientFactory = (options) => new WSClient(options) } = {}) {
+    super();
+    this.cfg = { ...cfg };
     this.logger = logger;
-    this.onMessage = onMessage;
-    this.onFile = onFile || null;
-    this.onImage = onImage || null;
-    this.fileReader = fileReader || null;
-    this.buildDocument = buildDocument || null;
-    this.chatIds = new Map();
+    this.clientFactory = clientFactory;
     this.client = null;
-    this.seen = new Set();
-    this.started = false;
+    this.proxyAgent = null;
+    this.connected = false;
+    this.socketConnected = false;
+    this.stopped = true;
+    this.state = 'stopped';
+    this.lastError = '';
+    this.reconnectAttempts = 0;
   }
 
-  get enabled() {
-    return Boolean(this.botId && this.secret);
+  #log(level, message) {
+    this.logger?.[level]?.(safeMessage(message, this.cfg.secret));
   }
 
-  status() {
-    return {
-      enabled: this.enabled,
-      started: this.started,
-      connected: Boolean(this.client?.isConnected),
-      botId: this.botId ? `${this.botId.slice(0, 8)}…` : '',
-    };
+  #status() {
+    this.emit('status', this.status());
   }
 
   start() {
-    if (!this.enabled) {
-      this.logger?.warn?.('企业微信未配置 WECOM_BOT_ID / WECOM_BOT_SECRET，跳过');
+    if (!this.stopped && this.client) return false;
+    if (this.client || this.proxyAgent) this.stop();
+    if (this.cfg.enabled === false) {
+      this.state = 'disabled';
+      this.#status();
       return false;
     }
-    if (this.started) return true;
-    this.started = true;
+    if (!String(this.cfg.botId || '').trim() || !String(this.cfg.secret || '').trim()) {
+      this.state = 'unconfigured';
+      this.lastError = '企业微信智能机器人尚未配置 botId 和 secret';
+      this.#status();
+      return false;
+    }
+
+    this.stopped = false;
+    this.connected = false;
+    this.socketConnected = false;
+    this.state = 'connecting';
+    this.lastError = '';
+    this.reconnectAttempts = 0;
+    const secret = this.cfg.secret;
+    // SDK debug logs contain whole callbacks, including private text and AES keys.
+    const sdkLogger = { debug() {} };
+    for (const level of ['info', 'warn', 'error']) {
+      sdkLogger[level] = (message, ...args) => {
+        const parts = [message, ...args].map((item) => {
+          if (item && typeof item === 'object' && !(item instanceof Error)) return '[details omitted]';
+          return safeMessage(item, secret);
+        });
+        this.logger?.[level]?.(parts.join(' '));
+      };
+    }
 
     try {
-      this.client = new AiBot.WSClient({ botId: this.botId, secret: this.secret });
-
-      this.client.on('authenticated', () => this.logger?.info?.('企业微信长连接认证成功'));
-      this.client.on('disconnected', (reason) => this.logger?.warn?.(`企业微信断开：${reason || ''}`));
-      this.client.on('reconnecting', (n) => this.logger?.info?.(`企业微信重连中（第 ${n} 次）`));
-      this.client.on('error', (err) => this.logger?.warn?.(`企业微信错误：${err?.message || err}`));
-
-      this.client.on('message.text', (frame) => this.#handle(frame));
-      this.client.on('message.mixed', (frame) => this.#handle(frame));
-      this.client.on('message.voice', (frame) => this.#handle(frame));
-      this.client.on('message.image', (frame) => this.#handle(frame));
-      this.client.on('message.file', (frame) => this.#handle(frame));
-
-      this.client.connect();
-      this.logger?.info?.(`企业微信长连接已启动（bot ${this.botId.slice(0, 6)}…）`);
+      const options = { botId: this.cfg.botId, secret, logger: sdkLogger };
+      for (const key of CONNECTION_KEYS) {
+        if (!['enabled', 'botId', 'secret'].includes(key) && this.cfg[key] !== undefined) options[key] = this.cfg[key];
+      }
+      options.wsOptions = webSocketOptions(this.cfg.wsUrl || undefined);
+      this.proxyAgent = options.wsOptions.agent || null;
+      const client = this.clientFactory(options);
+      this.client = client;
+      const active = () => !this.stopped && this.client === client;
+      client.on('connected', () => {
+        if (!active()) return;
+        this.socketConnected = true;
+        this.state = 'authenticating';
+        this.#status();
+      });
+      client.on('authenticated', () => {
+        if (!active()) return;
+        this.connected = true;
+        this.socketConnected = true;
+        this.state = 'ready';
+        this.lastError = '';
+        this.reconnectAttempts = 0;
+        this.emit('authenticated');
+        this.emit('ready', { botId: this.cfg.botId });
+        this.#status();
+      });
+      client.on('message', (frame) => {
+        if (active() && this.connected) this.emit('message', frame);
+      });
+      client.on('event', (frame) => {
+        if (!active()) return;
+        if (frame?.body?.event?.eventtype === 'disconnected_event') {
+          // The SDK stops reconnecting when another instance takes this bot over.
+          this.stopped = true;
+          this.connected = false;
+          this.socketConnected = false;
+          this.state = 'replaced';
+          this.lastError = '同一机器人已在其他实例连接，当前连接停止自动重连';
+          this.proxyAgent?.destroy();
+          this.proxyAgent = null;
+          this.#status();
+        }
+        this.emit('event', frame);
+      });
+      client.on('disconnected', (reason) => {
+        if (!active()) return;
+        this.connected = false;
+        this.socketConnected = false;
+        this.state = 'disconnected';
+        this.lastError = safeMessage(reason, secret);
+        this.#status();
+      });
+      client.on('reconnecting', (attempt) => {
+        if (!active()) return;
+        this.connected = false;
+        this.socketConnected = false;
+        this.state = 'reconnecting';
+        this.reconnectAttempts = attempt;
+        this.#status();
+      });
+      client.on('error', (err) => {
+        if (!active()) return;
+        this.lastError = safeMessage(err, secret);
+        if (/EXHAUSTED/.test(err?.code || '')) this.state = 'failed';
+        this.#log('warn', `企业微信连接错误：${this.lastError}`);
+        if (this.listenerCount('error')) this.emit('error', new Error(this.lastError));
+        this.#status();
+      });
+      this.#status();
+      client.connect();
       return true;
     } catch (err) {
-      this.started = false;
-      this.logger?.warn?.(`企业微信启动失败：${err.message}`);
+      this.stop();
+      this.state = 'failed';
+      this.lastError = safeMessage(err, secret);
+      this.#log('warn', `企业微信连接失败：${this.lastError}`);
+      this.#status();
       return false;
     }
   }
 
   stop() {
-    try {
-      this.client?.disconnect();
-    } catch {
-      /* ignore */
-    }
+    const client = this.client;
+    this.stopped = true;
     this.client = null;
-    this.started = false;
+    this.connected = false;
+    this.socketConnected = false;
+    this.state = this.cfg.enabled !== false ? 'stopped' : 'disabled';
+    client?.removeAllListeners();
+    try { client?.disconnect(); } catch (err) { this.#log('warn', err); }
+    this.proxyAgent?.destroy();
+    this.proxyAgent = null;
+    this.#status();
   }
 
-  async #handle(frame) {
-    const body = frame?.body || {};
-    const msgid = String(body.msgid || frame?.headers?.req_id || '');
-    if (msgid) {
-      if (this.seen.has(msgid)) return;
-      this.seen.add(msgid);
-      if (this.seen.size > 800) this.seen = new Set([...this.seen].slice(-400));
-    }
-
-    const chattype = body.chattype === 'group' ? 'group' : 'single';
-    const chatid = String(body.chatid || '');
-    const from = String(body.from?.userid || '');
-    if (!from) return;
-    if (chatid) this.chatIds.set(from, chatid);
-
-    const chatKey = chattype === 'group' && chatid ? `wecom:group:${chatid}` : `wecom:user:${from}`;
-    const title = chattype === 'group' ? `企微群 ${chatid.slice(-6)}` : `企微 ${from}`;
-
-    // 取文本：text / mixed / voice / 引用
-    let text = '';
-    let skipBrain = false;
-    const images = [];
-
-    if (body.msgtype === 'text') {
-      text = body.text?.content || '';
-    } else if (body.msgtype === 'mixed') {
-      for (const item of body.mixed?.msg_item || []) {
-        if (item.msgtype === 'text') text += item.text?.content || '';
-        if (item.msgtype === 'image' && item.image?.url) {
-          const saved = await this.#download(item.image);
-          if (saved) images.push({ file: saved });
-        }
-      }
-    } else if (body.msgtype === 'voice') {
-      text = body.voice?.content || '';
-    } else if (body.msgtype === 'image' && body.image?.url) {
-      const saved = await this.#download(body.image);
-      if (saved) {
-        images.push({ file: saved });
-        text = '（对方发来一张图片）';
-        if (this.onImage) {
-          try {
-            const note = await this.onImage({ from, chattype, chatid, file: saved });
-            if (note) text += `\n${note}`;
-          } catch (err) {
-            this.logger?.warn?.(`企微图片转发失败：${err?.message || err}`);
-          }
-        }
-      } else {
-        text = '（对方发来一张图片，下载失败）';
-      }
-    } else if (body.msgtype === 'file' && body.file?.url) {
-      const saved = await this.#download(body.file);
-      if (saved) {
-        const name = path.basename(saved);
-        // 文件先只落盘，不解析正文；等用户明确说“总结/看看/解析”时再读。
-        // 这样“只转发文件”不会多出摘要，也不会白花解析成本。
-        text = `（对方发来一个文件：${name}）`;
-        if (this.onFile) {
-          try {
-            const note = await this.onFile({
-              from,
-              chattype,
-              chatid,
-              file: saved,
-              name: body.file.filename || name,
-            });
-            if (note) text = note;
-            skipBrain = true;
-          } catch (err) {
-            this.logger?.warn?.(`企微文件处理失败：${err.message}`);
-            text += '\n（文件处理失败）';
-          }
-        }
-      } else {
-        text = '（对方发来一个文件，下载失败）';
-      }
-    }
-
-    text = stripMention(text);
-    if (!text && !images.length) return;
-    if (skipBrain) {
-      await this.#reply(frame, text);
-      return;
-    }
-
-    this.logger?.info?.(`企微消息 ${chattype} ${from} chatid=${chatid || '-'}：${text.slice(0, 60)}`);
-
-    try {
-      const result = await this.onMessage({
-        chatKey,
-        title,
-        text,
-        images,
-        chattype,
-        from,
-        chatid,
-        frame,
-      });
-      const bubbles = Array.isArray(result) ? result : result?.bubbles || [];
-      const reply = bubbles.join('\n\n');
-      if (reply.trim()) await this.#reply(frame, reply);
-
-      if (result && !Array.isArray(result)) {
-        await this.#sendMedia(frame, result);
-
-        // 文档任务：异步生成，完成后主动发到当前会话
-        if (this.buildDocument && result.documents?.length) {
-          const target = chattype === 'group' && chatid ? chatid : from;
-          for (const job of result.documents) {
-            this.#buildAndSend(job, target).catch((err) =>
-              this.logger?.warn?.(`企微文档生成失败：${err.message}`),
-            );
-          }
-        }
-      }
-    } catch (err) {
-      this.logger?.warn?.(`企微处理失败：${err.message}`);
-      await this.#reply(frame, '我这边刚出了点问题。').catch(() => {});
-    }
-  }
-
-  async #download(media) {
-    try {
-      const { buffer, filename } = await this.client.downloadFile(media.url, media.aeskey);
-      const dir = path.join(DATA_DIR, 'files');
-      fs.mkdirSync(dir, { recursive: true });
-      const name = `${Date.now()}-wecom-${(filename || 'media').replace(/[\\/:*?"<>|]/g, '_').slice(-40)}`;
-      const file = path.join(dir, name);
-      fs.writeFileSync(file, buffer);
-      return file;
-    } catch (err) {
-      this.logger?.warn?.(`企微媒体下载失败：${err.message}`);
-      return '';
-    }
-  }
-
-  async sendImageTo(userid, file, name) {
-    const raw = String(userid || '').trim();
-    const target = this.chatIds.get(raw) || raw;
-    if (!target) throw new Error('缺少接收人 userid');
-    if (!fs.existsSync(file)) throw new Error('图片不存在');
-    const size = fs.statSync(file).size;
-    if (size > 10 * 1024 * 1024) throw new Error(`图片超过 10MB（${Math.round(size / 1024 / 1024)}MB）`);
-    const fileName = name || path.basename(file);
-    const up = await this.client.uploadMedia(fs.readFileSync(file), { type: 'image', filename: fileName });
-    const mediaId = up?.media_id || up?.mediaId;
-    if (!mediaId) throw new Error('上传没有返回 media_id');
-    await this.client.sendMediaMessage(target, 'image', mediaId);
-    this.logger?.info?.(`企微已转发图片给 ${target}`);
-    return true;
-  }
-
-  async sendFileTo(userid, file, name) {
-    const raw = String(userid || '').trim();
-    const target = this.chatIds.get(raw) || raw;
-    if (!target) throw new Error('缺少接收人 userid');
-    if (!fs.existsSync(file)) throw new Error('文件不存在');
-    const size = fs.statSync(file).size;
-    if (size > 50 * 1024 * 1024) throw new Error(`文件超过 50MB（${Math.round(size / 1024 / 1024)}MB）`);
-    const fileName = name || path.basename(file);
-    const up = await this.client.uploadMedia(fs.readFileSync(file), { type: 'file', filename: fileName });
-    const mediaId = up?.media_id || up?.mediaId;
-    if (!mediaId) throw new Error('上传没有返回 media_id');
-    await this.client.sendMediaMessage(target, 'file', mediaId);
-    this.logger?.info?.(`企微已转发文件给 ${target}：${fileName}`);
-    return true;
-  }
-
-  async sendTo(userid, text) {
-    const raw = String(userid || '').trim();
-    const target = this.chatIds.get(raw) || raw;
-    if (!target) throw new Error('缺少接收人 userid');
-    if (!this.client?.isConnected) throw new Error('企微长连接未连接');
-    const content = String(text || '').slice(0, 2000);
-    if (!content) throw new Error('内容为空');
-    await this.client.sendMessage(target, { msgtype: 'markdown', markdown: { content } });
-    this.logger?.info?.(`企微已发送文本给 ${target}`);
-  }
-
-  async #buildAndSend(job, target) {
-    const built = await this.buildDocument(job);
-    if (!built?.path || !fs.existsSync(built.path)) return;
-    const name = built.name || path.basename(built.path);
-    const up = await this.client.uploadMedia(fs.readFileSync(built.path), { type: 'file', filename: name });
-    const mediaId = up?.media_id || up?.mediaId;
-    if (!mediaId) throw new Error('上传没有返回 media_id');
-    await this.client.sendMediaMessage(target, 'file', mediaId);
-    this.logger?.info?.(`企微已发送文档：${name}`);
-  }
-
-  async #sendMedia(frame, result) {
-    for (const img of (result.images || []).slice(0, 4)) {
-      await this.#sendOne(frame, 'image', img.file, path.basename(img.file || 'image.jpg'));
-    }
-    for (const voice of result.voices || []) {
-      await this.#sendVoice(frame, voice.file);
-    }
-    for (const f of result.files || []) {
-      const file = f.path || f.file;
-      await this.#sendOne(frame, 'file', file, f.name || path.basename(file || 'file'));
-    }
-    for (const v of result.videos || []) {
-      await this.#sendOne(frame, 'video', v.file, v.name || path.basename(v.file || 'video.mp4'));
-    }
-  }
-
-  async #sendVoice(frame, file) {
-    if (!file) return;
-    let amr = '';
-    try {
-      amr = await this.#toAmr(file);
-    } catch (err) {
-      this.logger?.warn?.(`企微语音转 AMR 失败：${err.message}`);
-    }
-    if (amr) {
-      const size = fs.statSync(amr).size;
-      if (size > 2 * 1024 * 1024) {
-        // 企微语音上限约 2MB/60 秒，超了改发文件
-        this.logger?.warn?.(`企微语音超过 2MB（${Math.round(size / 1024)}KB），改发文件`);
-        await this.#sendOne(frame, 'file', amr, `${path.basename(file, path.extname(file))}.amr`);
-        fs.unlink(amr, () => {});
-        return;
-      }
-      await this.#sendOne(frame, 'voice', amr, path.basename(amr));
-      fs.unlink(amr, () => {});
+  updateConfig(cfg) {
+    const changed = connectionKey(this.cfg) !== connectionKey(cfg);
+    this.cfg = { ...cfg };
+    if (changed) {
+      this.stop();
+      this.start();
     } else {
-      await this.#sendOne(frame, 'file', file, path.basename(file));
+      this.#status();
     }
   }
 
-  async #sendOne(frame, type, file, name) {
-    if (!file || !fs.existsSync(file)) return;
-    const size = fs.statSync(file).size;
-    if (size > 50 * 1024 * 1024) {
-      this.logger?.warn?.(`企微媒体超过 50MB，跳过：${name}`);
-      return;
-    }
-    try {
-      const up = await this.client.uploadMedia(fs.readFileSync(file), { type, filename: name });
-      const mediaId = up?.media_id || up?.mediaId;
-      if (!mediaId) throw new Error('上传没有返回 media_id');
-      await this.client.replyMedia(frame, type, mediaId);
-      this.logger?.info?.(`企微已发送 ${type}：${name}`);
-    } catch (err) {
-      this.logger?.warn?.(`企微发送 ${type} 失败：${err.message}`);
-    }
+  reconnect() {
+    this.stop();
+    return this.start();
   }
 
-  async #toAmr(input) {
-    const out = path.join(os.tmpdir(), `wecom-${Date.now()}.amr`);
-    await execFileAsync(
-      ffmpegBin(''),
-      ['-y', '-loglevel', 'error', '-i', input, '-ac', '1', '-ar', '8000', '-c:a', 'libopencore_amrnb', '-b:a', '12.2k', out],
-      { timeout: 60000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
-    );
-    if (!fs.existsSync(out) || fs.statSync(out).size < 200) throw new Error('没有产出 AMR');
-    return out;
+  status() {
+    return {
+      enabled: this.cfg.enabled !== false,
+      configured: Boolean(this.cfg.botId && this.cfg.secret),
+      connected: this.connected,
+      authenticated: this.connected,
+      socketConnected: this.socketConnected,
+      botId: this.cfg.botId || '',
+      state: this.state,
+      reconnectAttempts: this.reconnectAttempts,
+      lastError: this.lastError,
+    };
   }
 
-  async #reply(frame, text) {
-    let content = String(text);
-    if (Buffer.byteLength(content, 'utf8') > MAX_REPLY_BYTES) {
-      content = content.slice(0, 6000) + '\n\n（内容太长，先说到这）';
+  requireClient() {
+    if (this.stopped || !this.connected || !this.client) throw new Error('企业微信机器人未连接或尚未认证');
+    return this.client;
+  }
+}
+
+export { WeComTransport as WeCom };
+
+/** Single chats use userid; group chats must never fall back to the sender. */
+export function wecomChatId(frame) {
+  const body = frame?.body || {};
+  const value = body.chattype === 'group' ? body.chatid : body.from?.userid;
+  if (typeof value !== 'string' || !value.trim()) throw new Error('企业微信消息缺少会话 ID');
+  return value;
+}
+
+function splitUtf8(text, limit) {
+  const parts = [];
+  let current = '';
+  let bytes = 0;
+  for (const char of String(text ?? '')) {
+    const size = Buffer.byteLength(char, 'utf8');
+    if (bytes + size > limit && current) {
+      parts.push(current);
+      current = '';
+      bytes = 0;
     }
-    const streamId = generateReqId('stream');
-    await this.client.replyStream(frame, streamId, content, true);
+    current += char;
+    bytes += size;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+/** Delivers only when explicitly called by the runtime handling a user's request. */
+export class WeComSender {
+  constructor({ transport, logger } = {}) {
+    this.transport = transport;
+    this.logger = logger;
+    this.chains = new Map();
+  }
+
+  #queue(frame, operation) {
+    const client = this.transport.requireClient();
+    const chatId = wecomChatId(frame);
+    const previous = this.chains.get(chatId) || Promise.resolve();
+    const next = previous.catch(() => {}).then(async () => {
+      if (this.transport.requireClient() !== client) throw new Error('企业微信连接已更换，取消旧连接上的发送');
+      return operation(client, chatId);
+    }).finally(() => {
+      if (this.chains.get(chatId) === next) this.chains.delete(chatId);
+    });
+    this.chains.set(chatId, next);
+    return next;
+  }
+
+  #checkClient(client) {
+    if (this.transport.requireClient() !== client) throw new Error('企业微信连接已更换，取消旧连接上的发送');
+  }
+
+  async replyText(frame, text, { finish = true, streamId = randomUUID() } = {}) {
+    if (!frame?.headers?.req_id) throw new Error('企业微信回复缺少 req_id');
+    if (Buffer.byteLength(String(text ?? ''), 'utf8') > STREAM_BYTES) throw new Error('企业微信流式回复超过 20480 字节');
+    await this.#queue(frame, (client) => client.replyStream(frame, streamId, String(text ?? ''), finish));
+    return streamId;
+  }
+
+  async sendText(frame, text) {
+    return this.#queue(frame, async (client, chatId) => {
+      for (const content of splitUtf8(text, MARKDOWN_BYTES)) {
+        this.#checkClient(client);
+        await client.sendMessage(chatId, { msgtype: 'markdown', markdown: { content } });
+      }
+    });
+  }
+
+  async #uploadAndSend(client, chatId, filePath, name, type, validate = () => true) {
+    if (!validate()) throw new Error('附件发送权限或任务状态已变化');
+    this.#checkClient(client);
+    const info = await fs.stat(filePath);
+    if (!info.isFile() || info.size === 0) throw new Error('企业微信附件为空或不是文件');
+    if (info.size > MAX_UPLOAD_BYTES) throw new Error('企业微信附件不能超过 50 MB');
+    const buffer = await fs.readFile(filePath);
+    const filename = path.basename(String(name || filePath)).replace(/[\\/:*?"<>|\r\n]/g, '_');
+    this.#checkClient(client);
+    const media = await client.uploadMedia(buffer, { type, filename });
+    if (!media?.media_id) throw new Error('企业微信上传未返回 media_id');
+    this.#checkClient(client);
+    if (!validate()) throw new Error('附件发送权限或任务状态已变化');
+    await client.sendMediaMessage(chatId, type, media.media_id, type === 'video' ? { title: filename } : undefined);
+    return media;
+  }
+
+  async sendFile(frame, filePath, name, {validate} = {}) {
+    return this.#queue(frame, (client, chatId) => this.#uploadAndSend(client, chatId, filePath, name, 'file', validate));
+  }
+
+  async sendResult(frame, result = {}, { streamId, proactive = false, deadlineAt, validate = () => true } = {}) {
+    return this.#queue(frame, async (client, chatId) => {
+      if (!validate()) throw new Error('回复权限已变化');
+      // A preceding upload may have consumed the callback's remaining lifetime.
+      const activeDelivery = proactive || (Number.isFinite(deadlineAt) && Date.now() >= deadlineAt);
+      const text = (result.bubbles || []).filter(Boolean).join('\n\n');
+      const chunks = splitUtf8(text, STREAM_BYTES);
+      if (activeDelivery) {
+        for (const content of splitUtf8(text, MARKDOWN_BYTES)) {
+          this.#checkClient(client);
+          await client.sendMessage(chatId, { msgtype: 'markdown', markdown: { content } });
+        }
+      } else if (chunks.length || streamId) {
+        if (!frame?.headers?.req_id) throw new Error('企业微信回复缺少 req_id');
+        await client.replyStream(frame, streamId || randomUUID(), chunks.shift() || '', true);
+        for (const chunk of chunks) {
+          for (const content of splitUtf8(chunk, MARKDOWN_BYTES)) {
+            this.#checkClient(client);
+            await client.sendMessage(chatId, { msgtype: 'markdown', markdown: { content } });
+          }
+        }
+      }
+      for (const item of result.images || []) {
+        const ext = path.extname(item.file || '').toLowerCase();
+        const type = ['.jpg', '.jpeg', '.png'].includes(ext) ? 'image' : 'file';
+        await this.#uploadAndSend(client, chatId, item.file, item.name, type);
+      }
+      // Existing Edge TTS/humming output is MP3/WAV, not the platform's AMR voice format.
+      for (const item of result.voices || []) {
+        const type = path.extname(item.file || '').toLowerCase() === '.amr' ? 'voice' : 'file';
+        await this.#uploadAndSend(client, chatId, item.file, item.name, type);
+      }
+      for (const item of result.videos || []) {
+        const type = path.extname(item.file || '').toLowerCase() === '.mp4' ? 'video' : 'file';
+        await this.#uploadAndSend(client, chatId, item.file, item.name, type);
+      }
+      for (const item of result.files || []) {
+        await this.#uploadAndSend(client, chatId, item.path, item.name, 'file', validate);
+      }
+    });
   }
 }

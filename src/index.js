@@ -1,23 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadConfig, saveConfig, deepMerge, writePersona, readPersona, ensureDirs, DATA_DIR, ROOT, applyEnvOverrides } from './config.js';
+import { loadConfig, saveConfig, deepMerge, writePersona, readPersona, ensureDirs, DATA_DIR, ROOT, applyEnvOverrides, normalizeConfig } from './config.js';
 import { Logger } from './logger.js';
 import { OneBot } from './onebot.js';
 import { LLM, sleep } from './llm.js';
 import { ImageGen } from './image.js';
-import { peekPending, markDelivered, upsertContact, listContacts, findContact, canRelay } from './relay.js';
-import { parseRelayCommand, parseRelayToCommand, parseGroupCommand, cleanRelayContent, parseWhen, addJob, listJobs, cancelLatest, startRelayQueue } from './wecom-relay.js';
-import { loadGroups, addMember, removeMember, parseGroupAssignment } from './wecom-groups.js';
-import { startReminderQueue, addReminder, listReminders, cancelLatest as cancelLatestReminder } from './reminders.js';
+import { peekPending, markDelivered, upsertContact, listContacts } from './relay.js';
 import { ActionJournal, selfContext } from './self-state.js';
 import { GameHub } from './games.js';
 import { logMc, formatMcDigest } from './mc-log.js';
-import { addDoc, latestDoc, listDocs } from './doc-inbox.js';
-import { WeComBot } from './wecom.js';
-import { WeComDirectory } from './wecom-directory.js';
-import * as wecomUsers from './wecom-users.js';
-import { logActivity, groupToday } from './wecom-activity.js';
+import { addDoc } from './doc-inbox.js';
 import { MC_KNOWLEDGE, mcStatusText } from './mc-knowledge.js';
 import { Minecraft } from './minecraft.js';
 import { logMedia, formatMediaDigest } from './media-log.js';
@@ -120,12 +113,7 @@ const minecraft = new Minecraft({
 const actionJournal = new ActionJournal({ logger: logger.child('actions') });
 const memory = new Memory({ logger: logger.child('memory'), llm, cfg: cfg.chat });
 const onebot = new OneBot({ wsUrl: cfg.onebot.wsUrl, accessToken: cfg.onebot.accessToken, logger: logger.child('onebot') });
-const wecomDirectory = new WeComDirectory({
-  corpId: process.env.WECOM_CORP_ID || '',
-  secret: process.env.WECOM_SECRET || '',
-  logger: logger.child('wecom-dir'),
-});
-let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+let tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
 const brain = new Brain({
   cfg: cfg.chat,
   llm,
@@ -143,466 +131,10 @@ const brain = new Brain({
 });
 const sender = new ReplySender({ onebot, cfg: cfg.chat, logger: logger.child('reply') });
 
-const wecom = new WeComBot({
-  botId: process.env.WECOM_BOT_ID || '',
-  secret: process.env.WECOM_BOT_SECRET || process.env.Secret || '',
-  logger: logger.child('wecom'),
-  fileReader,
-  onFile: async ({ from, chattype, chatid, file, name }) => {
-    const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-    if (!bossId) return '';
-    const uid = String(from);
-    const cleanName = String(name || '').replace(/^\d+-wecom-/, '');
-    lastWecomFile.set(uid, { type: 'file', path: file, name: cleanName, at: Date.now() });
-    if (uid !== bossId) {
-      try {
-        await wecom.sendFileTo(bossId, file, cleanName);
-        return '（已把文件转给老板）';
-      } catch (err) {
-        logger.warn(`企微转给老板失败：${err?.stack || err?.message || err}`);
-        return `（转给老板失败：${err?.message || err?.errmsg || '未知错误'}）`;
-      }
-    }
-    return '（文件收到。要转发就说“发给谁”；要看内容就说“总结这份文件”。）';
-  },
-  onImage: async ({ from, chattype, chatid, file }) => {
-    const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-    if (!bossId) return '';
-    const uid = String(from);
-    lastWecomFile.set(uid, { type: 'image', path: file, name: '图片', at: Date.now() });
-    if (uid !== bossId) {
-      try {
-        await wecom.sendImageTo(bossId, file, 'image.jpg');
-        return '（已把图片转给老板）';
-      } catch (err) {
-        logger.warn(`企微转图片给老板失败：${err?.stack || err?.message || err}`);
-        return `（转给老板失败：${err?.message || err?.errmsg || '未知错误'}）`;
-      }
-    }
-    return '（图片收到。要转给同事就说“发给张三”）';
-  },
-  onMessage: async ({ chatKey, title, text, images, from }) => {
-    stats.received++;
-    const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-    const allowIds = String(process.env.WECOM_ALLOW_USERIDS || '')
-      .split(/[,，\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (allowIds.length && String(from) !== bossId && !allowIds.includes(String(from))) {
-      logger.warn(`企微白名单拦截：${from}`);
-      return {
-        bubbles: [],
-        images: [],
-        voices: [],
-        files: [],
-        documents: [],
-        videos: [],
-      };
-    }
-    const learned = wecomUsers.learnNameFromText(from, text);
-    const say = (msg) => {
-      stats.replied++;
-      return { bubbles: [String(msg)], images: [], voices: [], files: [], documents: [], videos: [] };
-    };
-    const senderName = wecomUsers.findUser(from)?.name || from;
-    const isGroup = String(chatKey || '').startsWith('wecom:group:');
-    logActivity({
-      userid: from,
-      name: senderName,
-      chattype: isGroup ? 'group' : 'single',
-      chatid: isGroup ? String(chatKey).split(':').pop() : '',
-      text,
-      kind: 'chat',
-    });
-
-    // 文件默认只收/转发；只有明确要求看内容时才解析正文
-    const pendingFile = lastWecomFile.get(String(from));
-    if (
-      pendingFile?.type === 'file' &&
-      Date.now() - pendingFile.at < 10 * 60 * 1000 &&
-      /(总结|概括|解析|看看|看一下|内容|讲了什么|读一下|提取|要点|分析|翻译)/.test(text)
-    ) {
-      try {
-        const r = await fileReader.extractText({ path: pendingFile.path, name: pendingFile.name });
-        if (r?.ok && r.text) {
-          text = `${text}\n【文件内容：${pendingFile.name}】\n${String(r.text).slice(0, 6000)}`;
-          lastWecomFile.delete(String(from));
-        } else {
-          text = `${text}\n（这份文件我读不出正文：${r?.error || '格式不支持'}）`;
-        }
-      } catch (err) {
-        logger.warn(`企微文件解析失败：${err.message}`);
-        text = `${text}\n（这份文件读取失败）`;
-      }
-    }
-
-    // 组归属：我是宣传组的 / 把张三加到宣传组
-    const bossSender = Boolean(bossId && String(from) === bossId);
-    const assign = parseGroupAssignment(text, { isBoss: bossSender });
-    if (assign) {
-      if (assign.self && !bossSender) {
-        addMember(assign.group, String(from));
-        return say(`记住啦，你在${assign.group}。`);
-      }
-      if (!bossSender) return say('只有老板能给别人分组。');
-
-      const targets = [];
-      const missing = [];
-      for (const n of assign.names) {
-        const t = resolveWecomTarget(n, bossId);
-        if (t) targets.push(t);
-        else missing.push(n);
-      }
-      if (!targets.length) {
-        return say(`没找到「${assign.names.join('、')}」，先让他对我说“我叫X”。`);
-      }
-      for (const t of targets) {
-        if (assign.action === 'remove') removeMember(assign.group, t.userid);
-        else addMember(assign.group, t.userid);
-      }
-      const verb = assign.action === 'remove' ? '移出' : '加入';
-      return say(
-        `已把 ${targets.map((t) => t.name).join('、')} ${verb} ${assign.group}。` +
-          `${missing.length ? `\n没找到：${missing.join('、')}` : ''}`,
-      );
-    }
-
-    // “所有员工”群发：必须二次确认
-    const groups = loadGroups();
-    const mentionsConfiguredGroup = Object.keys(groups).some((n) => String(text).includes(n));
-    if (bossSender) {
-      const pending = pendingBroadcast.get(String(from));
-      if (pending) {
-        if (/^(确认|确认发送|发吧|发送|好，?发)/.test(String(text).trim())) {
-          const result = await sendRelayJob({ channel: 'wecom', targets: pending.targets, text: pending.text });
-          pendingBroadcast.delete(String(from));
-          return say(result.ok ? `已群发 ${pending.targets.length} 位员工。` : `群发结果：${result.summary}`);
-        }
-        if (/^(取消|算了|不发)/.test(String(text).trim())) {
-          pendingBroadcast.delete(String(from));
-          return say('好，不发了。');
-        }
-        if (/(哪|谁|名单|哪些|几个)/.test(String(text).trim())) {
-          return say(
-            `这次群发对象：${pending.targets.map((t) => t.name).join('、')}。\n` +
-              `内容：「${pending.text}」\n回复“确认发送”才发。`,
-          );
-        }
-      }
-
-      const allWords = /(所有|全体|全部|全员)/.test(text) && /(员工|同事|成员|人)/.test(text);
-      if (!mentionsConfiguredGroup && allWords && /(发|通知|告诉|转告)/.test(text)) {
-        const users = wecomUsers.listUsers().filter((u) => u.userid !== bossId);
-        if (!users.length) return say('还没有登记员工，先让他们自报名字。');
-        let content = String(text);
-        const sep = /[，,：:]\s*(.+)$/.exec(text);
-        if (sep) content = sep[1];
-        else content = text.replace(/^.*?(?:发个消息|发消息|通知一下|通知|告诉|转告|发)/, '').trim();
-        content = cleanRelayContent(content);
-        if (!content) return say('要发什么？比如：给所有员工发个消息：今晚加工资');
-        pendingBroadcast.set(String(from), {
-          text: content,
-          targets: users.map((u) => ({ userid: u.userid, name: u.name })),
-          at: Date.now(),
-        });
-        return say(`要给全部 ${users.length} 位员工群发「${content}」吗？\n回复“确认发送”。`);
-      }
-    }
-
-    // 组指令：给宣传组发个消息……
-    const queriedGroup = Object.keys(groups).find((n) => String(text).includes(n));
-    if (queriedGroup && /(有谁|谁在|成员|名单|哪些人|都有谁)/.test(text)) {
-      if (!bossSender) return say('只有老板能看组名单。');
-      const members = (groups[queriedGroup].members || []).map((m) => wecomUsers.findUser(m)?.name || m);
-      return say(`${queriedGroup}：${members.join('、') || '还没有成员'}`);
-    }
-
-    const groupCmd = parseGroupCommand(text, { groupNames: Object.keys(groups), now: new Date() });
-    if (groupCmd) {
-      if (!bossSender) return say('只有老板能给组发消息。');
-      const g = groups[groupCmd.groupName] || {};
-      if (!groupCmd.content) return say('要发什么？比如：给宣传组发个消息：明天十点开会');
-
-      const targets = [];
-      const missing = [];
-      if (g.chatid) {
-        targets.push({ chatid: String(g.chatid), name: groupCmd.groupName, type: 'group' });
-      } else {
-        for (const m of Array.isArray(g.members) ? g.members : []) {
-          const t =
-            resolveWecomTarget(m, bossId) ||
-            (/^[A-Za-z0-9_.-]{2,64}$/.test(String(m)) ? { userid: String(m), name: String(m) } : null);
-          if (t) targets.push(t);
-          else missing.push(m);
-        }
-      }
-      if (!targets.length) return say(`「${groupCmd.groupName}」还没配置成员或群 chatid。`);
-
-      if (/^(这份|这个|刚才的?|那个|文件|图片|附件|材料)/.test(groupCmd.content)) {
-        groupCmd.content = '';
-      }
-
-      let media = null;
-      const wantsMedia =
-        !groupCmd.content || /(文件|图片|这份|这个|刚才|附件|材料)/.test(groupCmd.content);
-      if (wantsMedia) {
-        let f = lastWecomFile.get(String(from));
-        const before = f?.at || 0;
-        if (!f || Date.now() - before > 5000) {
-          for (let i = 0; i < 10; i++) {
-            await new Promise((r) => setTimeout(r, 800));
-            const nf = lastWecomFile.get(String(from));
-            if (nf && nf.at > before) {
-              f = nf;
-              break;
-            }
-          }
-        }
-        if (f) media = { type: f.type, path: f.path, name: f.name };
-      }
-      if (!groupCmd.content && !media) return say('要发什么？把文字或文件/图片一起发给我。');
-
-      if (groupCmd.isSchedule) {
-        const job = addJob({
-          channel: 'wecom',
-          from: String(from),
-          targets,
-          text: groupCmd.content || '',
-          media,
-          dueAt: groupCmd.when.at,
-          label: `${groupCmd.groupName}：${groupCmd.content || media?.name || ''}`,
-        });
-        return say(
-          `好的，${fmtWhen(job.dueAt)} 发给 ${groupCmd.groupName}` +
-            `${media ? `（带${media.type === 'image' ? '图片' : `《${media.name}》`}）` : ''}` +
-            `${missing.length ? `（没找到：${missing.join('、')}）` : ''}。`,
-        );
-      }
-
-      const result = await sendRelayJob({ channel: 'wecom', targets, text: groupCmd.content || '', media });
-      if (result.ok) {
-        return say(
-          `已发给 ${groupCmd.groupName}。${missing.length ? `\n没找到：${missing.join('、')}` : ''}`,
-        );
-      }
-      return say(`发送结果：${result.summary}`);
-    }
-
-    // 老板要日报
-    if (bossId && String(from) === bossId && /(汇总|总结|日报|汇报).{0,10}(今天|今日|大家|员工|工作)|(今天|今日).{0,10}(汇总|总结|日报)/.test(text)) {
-      const digest = await buildDailyDigest();
-      stats.replied++;
-      return {
-        bubbles: [digest],
-        images: [],
-        voices: [],
-        files: [],
-        documents: [],
-        videos: [],
-      };
-    }
-
-    // 传话：L2 多收件人 / L3 定时（老板与员工共用）
-    const isBoss = Boolean(bossId && String(from) === bossId);
-    const relayKnown = wecomKnownNames();
-    const relayCmd =
-      parseRelayCommand(text, { isBoss, known: relayKnown, now: new Date() }) ||
-      parseRelayToCommand(text, { now: new Date() });
-
-    if (!/提醒/.test(text) && relayCmd?.action === 'cancel') {
-      const job = cancelLatest();
-      return say(
-        job
-          ? `取消了：${fmtWhen(job.dueAt)} 给 ${(job.targets || []).map((t) => t.name).join('、')}`
-          : '没有待发的定时消息。',
-      );
-    }
-    if (!/提醒/.test(text) && relayCmd?.action === 'list') {
-      const jobs = listJobs().filter((j) => j.channel === 'wecom' && j.status === 'pending');
-      return say(
-        jobs.length
-          ? jobs
-              .map(
-                (j) =>
-                  `· ${fmtWhen(j.dueAt)} → ${(j.targets || []).map((t) => t.name).join('、')}：${j.text || j.media?.name || ''}`,
-              )
-              .join('\n')
-          : '没有待发的定时消息。',
-      );
-    }
-
-    if (relayCmd?.action === 'send' && relayCmd.names.length) {
-      const targets = [];
-      const missing = [];
-      for (const n of relayCmd.names) {
-        const t = resolveWecomTarget(n, bossId);
-        if (!t) missing.push(n);
-        else if (!isBoss && bossId && t.userid !== bossId) missing.push(n);
-        else targets.push(t);
-      }
-
-      if (!targets.length) {
-        // 不是明确的“发给某人”，交给模型；只有明确发送指令才报找不到
-        if (isBoss && /^(?:发给|转给|传给|转发给)/.test(String(text).trim())) {
-          return say(`还不认识「${missing.join('、')}」。让他在企微里对我说一句“我叫${missing[0]}”。`);
-        }
-      } else {
-        let media = null;
-        const wantsMedia =
-          isBoss && (!relayCmd.content || /(文件|图片|这份|这个|刚才|附件|材料)/.test(relayCmd.content));
-        if (wantsMedia) {
-          let f = lastWecomFile.get(String(from));
-          const before = f?.at || 0;
-          if (!f || Date.now() - before > 5000) {
-            for (let i = 0; i < 10; i++) {
-              await new Promise((r) => setTimeout(r, 800));
-              const nf = lastWecomFile.get(String(from));
-              if (nf && nf.at > before) {
-                f = nf;
-                break;
-              }
-            }
-          }
-          if (f) media = { type: f.type, path: f.path, name: f.name };
-        }
-
-        if (!relayCmd.content && !media) {
-          return say('要发什么？把文字或文件/图片一起发给我。');
-        }
-
-        if (relayCmd.isSchedule) {
-          const job = addJob({
-            channel: 'wecom',
-            from: String(from),
-            targets,
-            text: relayCmd.content || '',
-            media,
-            dueAt: relayCmd.when.at,
-            label: relayCmd.content || media?.name || '传话',
-          });
-          logger.info(
-            `企微定时传话：${job.id} ${fmtWhen(job.dueAt)} → ${targets.map((t) => t.name).join('、')}`,
-          );
-          return say(
-            `好的，${fmtWhen(job.dueAt)} 发给 ${targets.map((t) => t.name).join('、')}` +
-              `${media ? `（带${media.type === 'image' ? '图片' : `《${media.name}》`}）` : ''}。\n要取消就说“取消定时”。`,
-          );
-        }
-
-        const result = await sendRelayJob({ channel: 'wecom', targets, text: relayCmd.content || '', media });
-        const suffix = missing.length ? `\n没找到：${missing.join('、')}` : '';
-        if (result.ok) {
-          return say(`已发给 ${targets.map((t) => t.name).join('、')}。${suffix}`);
-        }
-        return say(`发送结果：${result.summary}${suffix}`);
-      }
-    }
-
-    // 员工只喊“爵士，……”（没有动词）也要能转
-    if (!isBoss && bossId) {
-      const alias = bossAliases().find((a) => String(text).startsWith(a));
-      if (alias) {
-        const msg = String(text).slice(alias.length).replace(/^[\s，,：:]+/, '').trim();
-        if (msg) {
-          try {
-            await wecom.sendTo(bossId, `【传话】${wecomUsers.findUser(from)?.name || from}：${msg}`);
-            return say('已经转告老板了。');
-          } catch (err) {
-            return say(`没转告成功：${err?.message || err}`);
-          }
-        }
-      }
-    }
-
-    const rosterText = (() => {
-      if (!bossSender) {
-        const me = wecomUsers.findUser(from);
-        return me ? `你在企微登记的名字：${me.name}` : '';
-      }
-      const users = wecomUsers.listUsers();
-      const groups = loadGroups();
-      let text = users.length
-        ? `企微已知联系人：${users
-            .slice(-30)
-            .map((u) => u.name)
-            .join('、')}`
-        : '企微还没有登记联系人';
-      const gs = Object.entries(groups).map(([name, g]) => {
-        const members = (g.members || []).map((m) => wecomUsers.findUser(m)?.name || m);
-        return `${name}（${members.join('、') || '空'}）`;
-      });
-      if (gs.length) text += `；分组：${gs.join('；')}`;
-      return text;
-    })();
-
-    const res = await brain.respond({
-      chatKey,
-      title,
-      userText: text,
-      images,
-      meta: { scene: '企业微信', peerName: senderName, wecomRoster: rosterText },
-    });
-    stats.replied++;
-
-    if (learned) {
-      logger.info(`企微记住名字：${from} → ${learned}`);
-      res.bubbles = [`记住啦，${learned}。`, ...(res.bubbles || [])].slice(0, 3);
-    }
-
-    // 兜底：明确要 Word/PPT/Excel，模型只答应没调工具，就直接排任务
-    if (!res.documents?.length && wantsDocCreation(text)) {
-      const kind = wantDocType(text);
-      const topic = extractDocTopic(text, kind) || String(text).replace(/\[[^\]]*\]/g, '').trim().slice(0, 50);
-      if (topic) {
-        res.documents = [
-          {
-            kind,
-            topic,
-            pages: 12,
-            theme: cfg.office?.theme || 'history',
-            sections: 5,
-            rows: 10,
-            columns: 5,
-          },
-        ];
-        if (!res.bubbles?.length) res.bubbles = ['好，这就做，做好发你。'];
-        logger.info(`企微兜底生成 ${kind}：${topic}`);
-      }
-    }
-
-    return res;
-  },
-  buildDocument: async (job) => {
-    const jobId = beginJob('文档', `企微 ${job.kind} ${job.topic || ''}`.slice(0, 40));
-    try {
-      if (job.kind === 'pptx') {
-        const d = await office.makePpt({
-          topic: job.topic,
-          pages: job.pages || 12,
-          theme: job.theme,
-          withImages: false,
-        });
-        return { path: d.file, name: d.name };
-      }
-      if (job.kind === 'xlsx') {
-        const d = await office.makeExcel({ topic: job.topic, rows: job.rows, columns: job.columns });
-        return { path: d.file, name: d.name };
-      }
-      const d = await office.makeDocx({ topic: job.topic, sections: job.sections || 5 });
-      return { path: d.file, name: d.name };
-    } finally {
-      endJob(jobId);
-    }
-  },
-});
-
 const stats = { received: 0, replied: 0, ignored: 0, errors: 0, startedAt: Date.now() };
 const activeJobs = new Map();
 const docJobs = new Map();
 const lastDocTopic = new Map();
-const lastWecomFile = new Map();
-const pendingBroadcast = new Map();
-const lastQQMedia = new Map();
 
 /** 记一个正在执行的长任务（PPT/写歌/翻唱），控制台能看到。 */
 function beginJob(kind, label) {
@@ -792,51 +324,6 @@ function shouldBatch(text, isPrivate, hasAttachment = false) {
 const pendingEvents = new Map();
 
 /** 把私聊里连续发来的消息攒成一条，安静几秒后再处理。 */
-function fmtReminderTime(at) {
-  return new Date(at).toLocaleString('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-}
-
-function tryReminder(text, chatKey) {
-  const t = String(text || '').trim();
-  if (/(我有哪些提醒|查看提醒|待到的提醒)/.test(t)) {
-    const list = listReminders(chatKey);
-    if (!list.length) return '现在没有待到的提醒。';
-    return (
-      '待到的提醒：\n' +
-      list
-        .slice(-10)
-        .map((r) => '· ' + fmtReminderTime(r.dueAt) + ' ' + r.text)
-        .join('\n')
-    );
-  }
-  if (/(取消提醒|提醒取消|不用提醒了|取消.*?提醒)/.test(t)) {
-    const m = t.match(/取消\s*(.+?)\s*的?\s*提醒/);
-    const keyword = m ? m[1].replace(/^(一下|掉|那个|这条|这个)\s*/, '').trim() : '';
-    const r = cancelLatestReminder(chatKey, keyword);
-    return r ? '取消了：' + r.text : '没有可取消的提醒。';
-  }
-  if (!/(提醒我|叫我|到点提醒|别忘了)/.test(t)) return '';
-  const when = parseWhen(t, new Date());
-  if (!when || when.at <= Date.now() + 20000) return '';
-  let content = t;
-  for (const part of [when.dateText, when.timeText, when.matched]) {
-    if (part) content = content.split(part).join('');
-  }
-  content = content
-    .replace(/^(到点)?(提醒我|叫我|别忘了|提醒|记得)\s*/, '')
-    .replace(/[，,。！？!?\s]+$/, '')
-    .trim();
-  if (!content) return '要提醒你什么？';
-  addReminder({ chatKey, text: content, dueAt: when.at });
-  return '好，' + fmtReminderTime(when.at) + ' 提醒你「' + content + '」。';
-}
-
 function enqueueEvent(chatKey, event) {
   const entry = pendingEvents.get(chatKey) || { segments: [], timer: null, event };
   entry.segments.push(...(event.message || []).filter(Boolean));
@@ -846,10 +333,8 @@ function enqueueEvent(chatKey, event) {
   const text = segs.filter((s) => s.type === 'text').map((s) => s.data?.text || '').join('').trim();
   const hasAttach = segs.some((s) => s.type !== 'text');
   const looksDone = /[。！？!?…~]$/.test(text) || text.length >= 60;
-  // 等一小会儿，让“图片 + 两句话”这种连发尽量并成一次；
-  // 默认 2~3 秒，别让用户等 5~8 秒才看到“正在输入”。
-  const configured = Number(cfg.chat?.privateBufferMs);
-  const delay = configured > 0 ? configured : hasAttach ? 2500 : looksDone ? 2000 : 3000;
+  // 等久一点，让“图片 + 两句话”这种连发尽量并成一次
+  const delay = hasAttach ? 4000 : looksDone ? 5000 : 8000;
   entry.timer = setTimeout(() => {
     pendingEvents.delete(chatKey);
     onMessage({ ...entry.event, message: entry.segments, __batch: true }).catch((err) =>
@@ -1372,8 +857,8 @@ async function runOfficeJob(chat, job) {
       job.kind === 'docx'
         ? await office.makeDocx({ topic: job.topic, sections: job.sections, signal: controller.signal })
         : job.kind === 'excel'
-          ? await office.makeExcel({ topic: job.topic, rows: job.rows, columns: job.columns, signal: controller.signal })
-          : await office.makePpt({ topic: job.topic, pages: job.pages, theme: job.theme, withImages: true, signal: controller.signal });
+          ? await office.makeExcel({ ...job, signal: controller.signal })
+          : await office.makePpt({ ...job, withImages: true, signal: controller.signal });
     await sender.sendFile(chat, doc.file, doc.name, pick(['做好啦，看看行不行～', '出炉了，你看看要不要改～']));
     memory.append(chat.key, 'assistant', `[我刚做好并发给你一份文件：${doc.name}]`, chat.title);
     logMedia({ chatKey: chat.key, direction: 'out', kind: 'doc', name: doc.name, path: doc.file });
@@ -1390,99 +875,6 @@ async function runOfficeJob(chat, job) {
 }
 
 /** 白名单好友传话时，立刻私聊推给主人。 */
-/** 从会话文件里补今天的用户发言（活动日志上线前的也覆盖）。 */
-function todaySessionEntries() {
-  const root = path.join(DATA_DIR, 'sessions');
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const out = [];
-  try {
-    for (const f of fs.readdirSync(root)) {
-      let s;
-      try {
-        s = JSON.parse(fs.readFileSync(path.join(root, f), 'utf8'));
-      } catch {
-        continue;
-      }
-      const key = String(s.key || '');
-      if (!key.startsWith('wecom:')) continue;
-      const isGroup = key.startsWith('wecom:group:');
-      // 群消息已经由 logActivity 按真实发送者记过；这里再把群 chatid 当“员工”会
-      // 在日报里冒出一串 wr0... 的原始 ID。群会话不参与按人汇总。
-      if (isGroup) continue;
-      const uid = key.split(':').pop();
-      const name = wecomUsers.findUser(uid)?.name || uid;
-      for (const t of s.turns || []) {
-        if (t.role !== 'user' || !t.ts || t.ts < start.getTime()) continue;
-        out.push({ userid: uid, name, chattype: 'single', text: t.content });
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return out;
-}
-
-function mergeDailyEntries(entries) {
-  const map = new Map();
-  for (const e of entries) {
-    const uid = String(e.userid || '');
-    const text = String(e.text || '').trim();
-    if (!uid || !text) continue;
-    if (!map.has(uid)) map.set(uid, { userid: uid, name: e.name || uid, items: [], seen: new Set() });
-    const g = map.get(uid);
-    if (e.name && e.name !== uid) g.name = e.name;
-    if (g.seen.has(text)) continue;
-    g.seen.add(text);
-    g.items.push(e.chattype === 'group' ? `[群] ${text}` : e.chattype === 'single' ? `[私聊] ${text}` : text);
-  }
-  return [...map.values()];
-}
-
-/** 汇总今天员工的消息与文档，给老板。 */
-async function buildDailyDigest() {
-  const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-  const entries = [
-    ...groupToday().flatMap((g) => g.items.map((text) => ({ userid: g.userid, name: g.name, text }))),
-    ...todaySessionEntries(),
-  ];
-  const groups = mergeDailyEntries(entries).filter((g) => g.userid !== bossId);
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const docs = listDocs({ hours: 24, includeSummarized: true }).filter((d) => d.at >= start.getTime());
-  if (!groups.length && !docs.length) return '今天还没有员工消息或文档记录。';
-
-  const records = groups
-    .map((g) => `${g.name}（${g.userid}）：\n${g.items.slice(-20).join('\n').slice(0, 1200)}`)
-    .join('\n\n');
-  const docText = docs.map((d) => `${d.senderName || d.uin} 提交《${d.name}》`).join('\n');
-
-  try {
-    const res = await llm.chat({
-      model: cfg.office?.model || 'deepseek-flash',
-      messages: [
-        {
-          role: 'system',
-          content:
-            '你是老板的助理。根据今天的员工消息和提交的文档，写一份中文日报：\n' +
-            '1. 按员工分段，每人 2~4 条要点，写清做了什么、进展、需要老板关注的事；\n' +
-            '2. 最后一段总体概览，3~4 句；\n' +
-            '3. 不要编造，没提到的事不要写；不要提“根据记录”这类话。\n' +
-            '直接输出 Markdown。',
-        },
-        { role: 'user', content: `今天记录：\n${records}\n\n提交的文档：\n${docText || '无'}` },
-      ],
-      maxTokens: 6000,
-      temperature: 0.4,
-    });
-    const text = String(res.content || '').trim();
-    if (text) return text;
-  } catch (err) {
-    logger.warn(`生成日报失败：${err.message}`);
-  }
-  return `今天共 ${groups.length} 位同事发言、${docs.length} 份文档，详细内容我没整理出来。`;
-}
-
 async function notifyOwnerRelay(item) {
   const ownerId = Number(cfg.access?.ownerQQ || cfg.access?.adminQQ?.[0] || 0);
   if (!ownerId) return false;
@@ -1549,122 +941,6 @@ async function forwardFileToPeers({ fromName, fromUin, filePath, fileName, size 
 async function notifyFriend(uin, text) {
   await onebot.sendPrivate(Number(uin), [{ type: 'text', data: { text } }]);
   logger.info(`已给 ${uin} 发送传话`);
-}
-
-function bossAliases() {
-  return String(process.env.WECOM_BOSS_ALIASES || '老板,爵士,示例联系人,主人')
-    .split(/[,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function isBossAlias(name) {
-  return bossAliases().includes(String(name || '').trim());
-}
-
-function wecomKnownNames() {
-  return [...new Set([...wecomUsers.listUsers().map((u) => u.name), ...bossAliases()])];
-}
-
-function resolveWecomTarget(name, bossId) {
-  if (isBossAlias(name)) return bossId ? { userid: bossId, name: '老板' } : null;
-  return wecomUsers.findUser(name);
-}
-
-function qqKnownNames() {
-  return [...new Set([...listContacts().map((c) => c.name), ...bossAliases()])];
-}
-
-function resolveQQTarget(name) {
-  if (isBossAlias(name)) {
-    const uin = String(cfg.access?.ownerQQ || '');
-    return uin ? { uin, name: '主人' } : null;
-  }
-  return findContact(name);
-}
-
-function fmtWhen(at) {
-  const d = new Date(at);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  if (sameDay) return `今天 ${time}`;
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${time}`;
-}
-
-async function sendQQFile(uin, file, name) {
-  if (!fs.existsSync(file)) throw new Error('文件不存在');
-  const size = fs.statSync(file).size;
-  if (size > 50 * 1024 * 1024) throw new Error(`文件超过 50MB（${Math.round(size / 1024 / 1024)}MB）`);
-  const buffer = fs.readFileSync(file);
-  await onebot.call(
-    'upload_private_file',
-    { user_id: Number(uin), file: `base64://${buffer.toString('base64')}`, name },
-    180000,
-  );
-}
-
-async function sendQQImage(uin, source, name) {
-  let file = String(source || '');
-  if (!file) throw new Error('图片不存在');
-  if (!/^https?:/i.test(file)) {
-    if (!fs.existsSync(file)) throw new Error('图片不存在');
-    const size = fs.statSync(file).size;
-    if (size > 10 * 1024 * 1024) throw new Error(`图片超过 10MB（${Math.round(size / 1024 / 1024)}MB）`);
-    file = `base64://${fs.readFileSync(file).toString('base64')}`;
-  }
-  await onebot.sendPrivate(Number(uin), [{ type: 'image', data: { file } }]);
-}
-
-/** 执行一条定时/群发传话任务。 */
-async function sendRelayJob(job) {
-  const results = [];
-  for (const target of job.targets || []) {
-    try {
-      if (job.channel === 'wecom') {
-        if (target.type === 'group') {
-          if (job.media?.type === 'image') await wecom.sendImageTo(target.chatid, job.media.path, 'image.jpg');
-          else if (job.media?.type === 'file') await wecom.sendFileTo(target.chatid, job.media.path, job.media.name);
-          if (job.text) await wecom.sendTo(target.chatid, job.text);
-        } else {
-          if (job.media?.type === 'image') await wecom.sendImageTo(target.userid, job.media.path, 'image.jpg');
-          else if (job.media?.type === 'file') await wecom.sendFileTo(target.userid, job.media.path, job.media.name);
-          if (job.text) await wecom.sendTo(target.userid, job.text);
-        }
-      } else {
-        if (job.media) {
-          if (job.media.type === 'image') await sendQQImage(target.uin, job.media.path, job.media.name);
-          else await sendQQFile(target.uin, job.media.path, job.media.name);
-        }
-        if (job.text) await notifyFriend(target.uin, job.text);
-      }
-      results.push({ target, ok: true });
-    } catch (err) {
-      results.push({ target, ok: false, error: err?.message || String(err) });
-      logger.warn(`定时传话给 ${target.name || target.userid || target.uin} 失败：${err?.message || err}`);
-    }
-  }
-  const ok = results.length > 0 && results.every((r) => r.ok);
-  const summary = results
-    .map((r) => `${r.target.name || r.target.userid || r.target.uin}：${r.ok ? '已发送' : `失败（${r.error}）`}`)
-    .join('；');
-  return { ok, results, summary };
-}
-
-async function notifyRelayResult(job, result) {
-  if (!result || result.ok) return;
-  const text = `【定时传话】有发送失败：${result.summary}`;
-  try {
-    if (job.channel === 'wecom') {
-      const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-      if (bossId) await wecom.sendTo(bossId, text);
-    } else {
-      const owner = String(cfg.access?.ownerQQ || '');
-      if (owner) await notifyFriend(owner, text);
-    }
-  } catch {
-    /* ignore */
-  }
 }
 
 /** 确保本地 faster-whisper 服务在跑（不在就拉起来）。 */
@@ -1783,194 +1059,7 @@ async function onMessage(event) {
     return;
   }
 
-  // 明确说“传给 / 转给 / 发给 某人”：有刚收到的文件就直接转，不经过模型
-  // QQ 传话：L2 多收件人 / L3 定时
-  if (isPrivate && !String(text || '').trim().startsWith('/')) {
-    const ownerQQ = String(cfg.access?.ownerQQ || '');
-    const isOwner = String(event.user_id) === ownerQQ;
-    if (isOwner || canRelay(String(event.user_id), cfg)) {
-      const cmd =
-        parseRelayCommand(text, { isBoss: isOwner, known: qqKnownNames(), now: new Date() }) ||
-        parseRelayToCommand(text, { now: new Date() });
-      if (!/提醒/.test(text) && cmd?.action === 'cancel') {
-        const job = cancelLatest();
-        await sender.send(chat, {
-          bubbles: [
-            job
-              ? `取消了：${fmtWhen(job.dueAt)} 给 ${(job.targets || []).map((t) => t.name).join('、')}`
-              : '没有待发的定时消息。',
-          ],
-        });
-        return;
-      }
-      if (!/提醒/.test(text) && cmd?.action === 'list') {
-        const jobs = listJobs().filter((j) => j.channel === 'qq' && j.status === 'pending');
-        await sender.send(chat, {
-          bubbles: [
-            jobs.length
-              ? jobs
-                  .map(
-                    (j) =>
-                      `· ${fmtWhen(j.dueAt)} → ${(j.targets || []).map((t) => t.name).join('、')}：${j.text || ''}`,
-                  )
-                  .join('\n')
-              : '没有待发的定时消息。',
-          ],
-        });
-        return;
-      }
-      if (cmd?.action === 'send' && cmd.names.length) {
-        const wantsMedia = !cmd.content || /(文件|图片|这份|这个|刚才|附件|材料)/.test(cmd.content);
-        let media = null;
-        if (wantsMedia) {
-          let m = lastQQMedia.get(chat.key);
-          const before = m?.at || 0;
-          if (!m || Date.now() - before > 5000) {
-            for (let i = 0; i < 10; i++) {
-              await new Promise((r) => setTimeout(r, 800));
-              const nf = lastQQMedia.get(chat.key);
-              if (nf && nf.at > before) {
-                m = nf;
-                break;
-              }
-            }
-          }
-          if (m) media = { type: m.type, path: m.path, name: m.name };
-        }
-
-        if (cmd.content || media) {
-          const targets = [];
-          const missing = [];
-          for (const n of cmd.names) {
-            const t = resolveQQTarget(n);
-            if (!t) missing.push(n);
-            else if (!isOwner && t.uin !== ownerQQ) missing.push(n);
-            else targets.push(t);
-          }
-
-          if (!targets.length) {
-            if (isOwner && /^(?:发给|转给|传给|转发给)/.test(String(text).trim())) {
-              await sender.send(chat, {
-                bubbles: [`没找到「${missing.join('、')}」。给我 QQ 号，或让对方先跟我说句话。`],
-              });
-              return;
-            }
-          } else if (cmd.isSchedule) {
-            const job = addJob({
-              channel: 'qq',
-              from: String(event.user_id),
-              targets,
-              text: cmd.content || '',
-              media,
-              dueAt: cmd.when.at,
-              label: cmd.content || media?.name || '传话',
-            });
-            logger.info(`QQ 定时传话：${job.id} ${fmtWhen(job.dueAt)} → ${targets.map((t) => t.name).join('、')}`);
-            await sender.send(chat, {
-              bubbles: [
-                `好的，${fmtWhen(job.dueAt)} 发给 ${targets.map((t) => t.name).join('、')}` +
-                  `${media ? `（带${media.type === 'image' ? '图片' : `《${media.name}》`}）` : ''}。\n要取消就说“取消定时”。`,
-              ],
-            });
-            return;
-          } else {
-            for (const t of targets) {
-              try {
-                if (media) {
-                  if (media.type === 'image') await sendQQImage(t.uin, media.path, media.name);
-                  else await sendQQFile(t.uin, media.path, media.name);
-                }
-                if (cmd.content) await notifyFriend(t.uin, cmd.content);
-              } catch (err) {
-                missing.push(`${t.name}（${err.message}）`);
-              }
-            }
-            await sender.send(chat, {
-              bubbles: [
-                `已发给 ${targets.map((t) => t.name).join('、')}。${missing.length ? `\n失败：${missing.join('、')}` : ''}`,
-              ],
-            });
-            return;
-          }
-        }
-      }
-
-    }
-  }
-
-  const forwardMatch =
-    isPrivate && String(event.user_id) === String(cfg.access?.ownerQQ)
-      ? /(?:传给|转给|发给)\s*([^\s，。,.!?！？]{1,24})/.exec(String(text || ''))
-      : null;
-  if (forwardMatch && !files.length) {
-    // 刚收到、还没解析的原始文件：只转发，不读正文
-    const rawFile = lastQQMedia.get(chat.key);
-    if (rawFile?.type === 'file' && Date.now() - rawFile.at < 10 * 60 * 1000) {
-      const contact = findContact(forwardMatch[1]);
-      if (contact) {
-        try {
-          await sendQQFile(contact.uin, rawFile.path, rawFile.name);
-          await sender.send(chat, { bubbles: [`已发给 ${contact.name}。`] });
-          logger.info(`按指令转发原始文件（不解析）：${rawFile.name} → ${contact.name}`);
-          lastQQMedia.delete(chat.key);
-          return;
-        } catch (err) {
-          logger.warn(`原始文件转发失败：${err.message}`);
-        }
-      }
-    }
-    const doc = latestDoc({ chatKey: chat.key, hours: 0.5 });
-    if (doc) {
-      try {
-        const res = await tools.run('forward_file', { to: forwardMatch[1], file: doc.name }, {
-          chatKey: chat.key,
-          peerName: senderName,
-          files: [],
-          images: [],
-          voices: [],
-        });
-        await sender.send(chat, { bubbles: [res] });
-        logger.info(`按指令转发：${doc.name} → ${forwardMatch[1]}`);
-        return;
-      } catch (err) {
-        logger.warn(`按指令转发失败：${err.message}`);
-      }
-    }
-  }
-
   let body = text;
-
-  // 刚收到、还没解析的文件：只有明确要求看内容时才解析
-  const pendingRawFile = lastQQMedia.get(chat.key);
-  if (
-    isPrivate &&
-    pendingRawFile?.type === 'file' &&
-    Date.now() - pendingRawFile.at < 10 * 60 * 1000 &&
-    /(总结|概括|解析|看看|看一下|内容|讲了什么|读一下|提取|要点|分析|翻译)/.test(String(text || ''))
-  ) {
-    try {
-      const r = await fileReader.extractText({ path: pendingRawFile.path, name: pendingRawFile.name });
-      if (r?.ok && r.text) {
-        body = `${body}\n【文件内容：${pendingRawFile.name}】\n${String(r.text).slice(0, 6000)}`;
-        addDoc({
-          uin: String(event.user_id),
-          senderName,
-          chatKey: chat.key,
-          name: pendingRawFile.name,
-          filePath: pendingRawFile.path,
-          text: r.text,
-          chars: r.chars,
-          images: 0,
-        });
-        lastQQMedia.delete(chat.key);
-      } else {
-        body = `${body}\n（这份文件我读不出正文：${r?.error || '格式不支持'}）`;
-      }
-    } catch (err) {
-      logger.warn(`按需解析文件失败：${err.message}`);
-      body = `${body}\n（这份文件读取失败）`;
-    }
-  }
   if (!isPrivate) {
     const hasWake = (cfg.chat.group.wakeWords ?? []).some((w) => w && text.includes(w));
     const addressed = (cfg.chat.group.replyOnAt && mentioned) || hasWake;
@@ -1987,15 +1076,6 @@ async function onMessage(event) {
   // 用户自己说的话：只用来判断意图（点歌/画图/文档…），
   // 后面会把文件正文、图片说明等拼进 body，那些内容不能触发点歌。
   const userSay = String(body || '');
-
-  // 提醒：确定性解析，避免模型嘴上答应却不登记
-  {
-    const rem = tryReminder(userSay, chat.key);
-    if (rem) {
-      await sender.send(chat, { bubbles: [rem] });
-      return;
-    }
-  }
 
   // 自动记笔记：行程、考试、承诺、偏好这类信息，直接写进长期记忆
   const noteHints = /(下周|这周|本周|明天|后天|周[一二三四五六日天]|考试|截止|ddl|deadline|proposal|presentation|\bpre\b|作业|论文|报告|会议|面试|约好|答应|提醒我|我喜欢|我讨厌|我住|我在准备|养了|生日)/i;
@@ -2030,7 +1110,6 @@ async function onMessage(event) {
       });
       img.url = `file:///${f.path.replace(/\\/g, '/')}`;
       logger.info(`图片文件已下载：${f.name}（${Math.round((f.size || 0) / 1024)}KB）`);
-      lastQQMedia.set(chat.key, { type: 'image', path: f.path, name: f.name, at: Date.now() });
       logMedia({ chatKey: chat.key, direction: 'in', kind: 'image', name: f.name, path: f.path });
     } catch (err) {
       logger.warn(`图片文件下载失败：${err.message}`);
@@ -2060,53 +1139,6 @@ async function onMessage(event) {
     }
   }
 
-  // 文件默认只落盘/转发；明确要“总结/看看/解析”才读正文
-  const wantsParseFile = /(总结|概括|解析|看看|看一下|内容|讲了什么|读一下|提取|要点|分析|翻译)/.test(String(text || ''));
-  if (files.length && !wantsParseFile) {
-    const forwardOnly = Boolean(forwardMatch);
-    const downloaded = [];
-    for (const f of files.slice(0, 4)) {
-      if (audioAttachment && f === audioAttachment) continue;
-      const name = f.name || '文件';
-      try {
-        const d = await fileReader.download(onebot, f);
-        if (d?.path) {
-          lastQQMedia.set(chat.key, { type: 'file', path: d.path, name, at: Date.now() });
-          downloaded.push({ path: d.path, name });
-        }
-      } catch (err) {
-        logger.warn(`文件下载失败：${err.message}`);
-      }
-    }
-
-    if (forwardOnly) {
-      const contact = findContact(forwardMatch[1]);
-      if (!contact) {
-        await sender.send(chat, { bubbles: [`没找到「${forwardMatch[1]}」。`] });
-        return;
-      }
-      let sent = 0;
-      for (const d of downloaded) {
-        try {
-          await sendQQFile(contact.uin, d.path, d.name);
-          sent++;
-        } catch (err) {
-          logger.warn(`转发文件给 ${contact.name} 失败：${err.message}`);
-        }
-      }
-      await sender.send(chat, {
-        bubbles: [sent ? `已发给 ${contact.name}。` : '文件转发失败。'],
-      });
-      logger.info(`按指令转发文件（不解析）：${downloaded.map((d) => d.name).join('、')} → ${contact.name}`);
-      return;
-    }
-
-    await sender.send(chat, {
-      bubbles: ['文件收到。要转发就说“发给谁”；要看内容就说“总结这份文件”。'],
-    });
-    return;
-  }
-
   // 文件消息：下载下来抽文字，塞进上下文；读不出来也要回应，不能装死
   if (files.length) {
     const chunks = [];
@@ -2115,7 +1147,6 @@ async function onMessage(event) {
       const name = f.name || '文件';
       try {
         const r = await fileReader.read(onebot, f);
-        if (r?.path) lastQQMedia.set(chat.key, { type: 'file', path: r.path, name, at: Date.now() });
         if (r.ok && r.text) {
           chunks.push(`【对方发来的文件：${name}】\n${r.text.slice(0, 6000)}`);
         } else {
@@ -2135,7 +1166,7 @@ async function onMessage(event) {
         } else {
           logMedia({ chatKey: chat.key, direction: 'in', kind: 'doc', name, detail: `${r.chars || 0} 字`, path: r.path, snippet: String(r.text || '').slice(0, 200) });
         }
-        if (isPrivate && r.ok) {
+        if (isPrivate && r.path && /\.(docx|pptx|xlsx|doc|ppt|xls|pdf|txt|md|csv)$/i.test(name)) {
           const added = addDoc({
             uin: String(event.user_id),
             senderName,
@@ -2147,24 +1178,6 @@ async function onMessage(event) {
             images: docImages,
           });
           if (added) chunks.push('（这份文件已经放进待汇总箱，老板要汇总时可以用上）');
-        }
-
-        // 随文件一起来的“传给某某”，直接转发这份文件
-        if (forwardMatch) {
-          try {
-            const res = await tools.run('forward_file', { to: forwardMatch[1], file: name }, {
-              chatKey: chat.key,
-              peerName: senderName,
-              files: [],
-              images: [],
-              voices: [],
-            });
-            await sender.send(chat, { bubbles: [res] });
-            logger.info(`按指令转发（随文件）：${name} → ${forwardMatch[1]}`);
-            return;
-          } catch (err) {
-            logger.warn(`随文件转发失败：${err.message}`);
-          }
         }
 
         // 自动转发默认关闭；只有把 access.forwardFiles 设为 true 才会对白名单广播
@@ -2848,7 +1861,7 @@ onebot.on('ready', ({ selfId, nickname }) => {
         journal: actionJournal,
       });
       qzone.startAuto();
-      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+      tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
     } else {
       qzone.updateConfig(cfg.qzone);
     }
@@ -2870,7 +1883,7 @@ async function applyConfig(rawPatch) {
   if (patch?.image?.apiKey && patch.image.apiKey.includes('••••')) delete patch.image.apiKey;
   if (patch?.song?.token && patch.song.token.includes('••••')) delete patch.song.token;
 
-  const next = deepMerge(cfg, patch);
+  const next = normalizeConfig(deepMerge(cfg, patch));
   const oldWs = cfg.onebot.wsUrl;
   const oldToken = cfg.onebot.accessToken;
 
@@ -2899,7 +1912,7 @@ async function applyConfig(rawPatch) {
   brain.updateConfig(cfg.chat);
   memory.updateConfig(cfg.chat);
   sender.updateConfig(cfg.chat);
-  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom: () => wecom, wecomDirectory, wecomUsers, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
+  tools = createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify: notifyOwnerRelay, friendNotify: notifyFriend, jobTracker: { begin: beginJob, end: endJob }, logger: logger.child('tools') });
   brain.tools = tools;
   if (cfg.llm.maxTokens) llm.cfg.maxTokens = cfg.llm.maxTokens;
 
@@ -2917,7 +1930,6 @@ function status() {
   const s = onebot.status();
   return {
     onebot: s,
-    wecom: wecom.status(),
     llm: { model: cfg.llm.model, baseUrl: cfg.llm.baseUrl, hasKey: Boolean(cfg.llm.apiKey), stats: llm.stats },
     stats: { ...stats, uptimeMs: Date.now() - stats.startedAt, jobs: busyList() },
     personaChars: readPersona().length,
@@ -2997,65 +2009,6 @@ logger.info('==========================================');
 
 onebot.start();
 consoleServer.start();
-
-/** 每天定时把日报发给老板（WECOM_DAILY_DIGEST_TIME，默认 21:00）。 */
-function startWecomDigest() {
-  if (String(process.env.WECOM_DAILY_DIGEST || 'on') === 'off') return;
-  const at = String(process.env.WECOM_DAILY_DIGEST_TIME || '21:00').trim();
-  if (!/^\d{1,2}:\d{2}$/.test(at)) return;
-  const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-  if (!bossId) return;
-  const sentFile = path.join(DATA_DIR, 'wecom-digest.json');
-  setInterval(async () => {
-    const now = new Date();
-    const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-    if (hhmm !== at) return;
-    const day = now.toLocaleDateString('zh-CN');
-    try {
-      const last = JSON.parse(fs.readFileSync(sentFile, 'utf8')).last || '';
-      if (last === day) return;
-    } catch {
-      /* 第一次 */
-    }
-    try {
-      const text = await buildDailyDigest();
-      await wecom.sendTo(bossId, text);
-      fs.writeFileSync(sentFile, JSON.stringify({ last: day, at: Date.now() }), 'utf8');
-      logger.info('企微日报已发送给老板');
-    } catch (err) {
-      logger.warn(`企微日报发送失败：${err.message}`);
-    }
-  }, 60 * 1000);
-}
-
-try {
-  wecom.start();
-  startWecomDigest();
-  startRelayQueue({ logger: logger.child('relay-queue'), send: sendRelayJob, onResult: notifyRelayResult });
-  startReminderQueue({
-    logger: logger.child('reminders'),
-    send: async (job) => {
-      const key = String(job.chatKey || '');
-      const text = `⏰ 提醒你：${job.text}`;
-      try {
-        if (key.startsWith('private:')) {
-          await onebot.sendPrivate(Number(key.split(':')[1]), [{ type: 'text', data: { text } }]);
-        } else if (key.startsWith('wecom:user:')) {
-          await wecom.sendTo(key.split(':')[2], text);
-        } else if (key.startsWith('wecom:group:')) {
-          await wecom.sendTo(key.split(':')[2], `⏰ 提醒：${job.text}`);
-        } else {
-          return { ok: false, error: `未知会话：${key}` };
-        }
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, error: err.message };
-      }
-    },
-  });
-} catch (err) {
-  logger.warn(`企业微信启动失败：${err.message}`);
-}
 
 let stopping = false;
 function shutdown(signal) {

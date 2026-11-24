@@ -115,6 +115,11 @@ export class ConsoleServer {
         }
         case 'GET /api/logs':
           return sendJson(res, 200, { ok: true, lines: this.hooks.logs(Number(url.searchParams.get('limit') ?? 200)) });
+        case 'POST /api/wecom/contact': {
+          if (!this.hooks.lookupContact) return sendJson(res, 404, { ok: false, error: '当前渠道没有通讯录查询' });
+          const body = await readJson(req);
+          return sendJson(res, 200, { ok: true, ...await this.hooks.lookupContact(body.userId) });
+        }
         case 'POST /api/reconnect':
           this.hooks.reconnect();
           return sendJson(res, 200, { ok: true });
@@ -135,6 +140,10 @@ export class ConsoleServer {
     if (c.console?.token) c.console.token = maskSecret(c.console.token);
     if (c.image?.apiKey) c.image.apiKey = maskSecret(c.image.apiKey);
     if (c.song?.token) c.song.token = maskSecret(c.song.token);
+    if (c.voice?.token) c.voice.token = maskSecret(c.voice.token);
+    if (c.asr?.token) c.asr.token = maskSecret(c.asr.token);
+    if (c.wecom?.secret) c.wecom.secret = maskSecret(c.wecom.secret);
+    if (c.wecom?.directorySecret) c.wecom.directorySecret = maskSecret(c.wecom.directorySecret);
     return c;
   }
 

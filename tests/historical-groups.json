@@ -1,0 +1,634 @@
+[
+ {
+  "name": "云岸12组",
+  "question": "关于濠江标牌轮换，按现在分工汇总各组实际数量，单位为套。分栏：等内部岗位先办、经办人还未确定、员工自行办理、需要老板决定，空栏也报零。单说云岸12组，谁先办理？",
+  "topic": "濠江标牌轮换",
+  "labels": [
+   "等内部岗位先办",
+   "经办人还未确定",
+   "员工自行办理",
+   "需要老板决定"
+  ],
+  "amount": 155,
+  "request": "c7d2430fd216a323a41465b54188562c36c2de303247b3c9badd9bf186758e59",
+  "messages": [
+   {
+    "ref": "Mc2f20aba3595f895683d.1",
+    "speaker": "同事霜原190号",
+    "text": "我会做后续登记"
+   },
+   {
+    "ref": "M3555dc15851634de8aa8.1",
+    "speaker": "同事霜原190号",
+    "text": "会务组先签明细"
+   },
+   {
+    "ref": "M3555dc15851634de8aa8.2",
+    "speaker": "同事霜原190号",
+    "text": "我拿到后才登记"
+   }
+  ],
+  "original": {
+   "name": "云岸12组",
+   "tasks": [
+    {
+     "anchor": "Mc2f20aba3595f895683d.1",
+     "state": "self",
+     "basis": "Mc2f20aba3595f895683d.1",
+     "withdrawal": null
+    }
+   ]
+  },
+  "records": [
+   {
+    "id": "M735e6efed88278a36a2d",
+    "speaker": "同事霜原190号",
+    "text": "濠江标牌轮换【云岸12组】首次登记实数是67套。"
+   },
+   {
+    "id": "Mc2f20aba3595f895683d",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单B另有新入账的2套，请追加。我会做后续登记。",
+    "quotedSource": "M735e6efed88278a36a2d"
+   },
+   {
+    "id": "M37d72047e0e54128caf7",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单C另有新入账的1套，请追加。",
+    "quotedSource": "Mc2f20aba3595f895683d"
+   },
+   {
+    "id": "M6ad2800362116bcd2866",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单D另有新入账的4套，请追加。",
+    "quotedSource": "M37d72047e0e54128caf7"
+   },
+   {
+    "id": "M4d25b9edbe1b4a599e03",
+    "speaker": "同事霜原190号",
+    "text": "濠江标牌轮换【云岸12组】交接凭单E另有新入账的4套，请追加。"
+   },
+   {
+    "id": "Md212791840f5ccc6f3ea",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单F另有新入账的4套，请追加。",
+    "quotedSource": "M4d25b9edbe1b4a599e03"
+   },
+   {
+    "id": "M2bc97d3ef3e13a494e07",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单G另有新入账的2套，请追加。",
+    "quotedSource": "Md212791840f5ccc6f3ea"
+   },
+   {
+    "id": "M67d00c01c6da8b232dae",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单H另有新入账的8套，请追加。",
+    "quotedSource": "M2bc97d3ef3e13a494e07"
+   },
+   {
+    "id": "M399a9f39b5b3f2fb848b",
+    "speaker": "同事霜原190号",
+    "text": "濠江标牌轮换【云岸12组】交接凭单I另有新入账的3套，请追加。"
+   },
+   {
+    "id": "M1e3faa2cdd1c0eb41c87",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单J另有新入账的2套，请追加。",
+    "quotedSource": "M399a9f39b5b3f2fb848b"
+   },
+   {
+    "id": "M8e5e0ec4fe66e617f77d",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单K另有新入账的4套，请追加。",
+    "quotedSource": "M1e3faa2cdd1c0eb41c87"
+   },
+   {
+    "id": "M010886f18fa99fbd8e39",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单L另有新入账的8套，请追加。",
+    "quotedSource": "M8e5e0ec4fe66e617f77d"
+   },
+   {
+    "id": "M7beabac492b663205dba",
+    "speaker": "同事霜原190号",
+    "text": "濠江标牌轮换【云岸12组】交接凭单M另有新入账的4套，请追加。"
+   },
+   {
+    "id": "Mf5cd0180e6b0e8a1fd04",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单N另有新入账的7套，请追加。",
+    "quotedSource": "M7beabac492b663205dba"
+   },
+   {
+    "id": "M7285ab119300b394e87e",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单O另有新入账的8套，请追加。",
+    "quotedSource": "Mf5cd0180e6b0e8a1fd04"
+   },
+   {
+    "id": "Mdeae8ade197c8493f648",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单P另有新入账的2套，请追加。",
+    "quotedSource": "M7285ab119300b394e87e"
+   },
+   {
+    "id": "M4b4bfeb457314ec72412",
+    "speaker": "同事霜原190号",
+    "text": "濠江标牌轮换【云岸12组】交接凭单Q另有新入账的2套，请追加。"
+   },
+   {
+    "id": "M3555dc15851634de8aa8",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单R另有新入账的8套，请追加。会务组先签明细，我拿到后才登记。",
+    "quotedSource": "M4b4bfeb457314ec72412"
+   },
+   {
+    "id": "Md49223ad89b66b837252",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单S另有新入账的7套，请追加。",
+    "quotedSource": "M3555dc15851634de8aa8"
+   },
+   {
+    "id": "Mcf190942fe7d52f115f4",
+    "speaker": "同事霜原190号",
+    "text": "交接凭单T另有新入账的8套，请追加。",
+    "quotedSource": "Md49223ad89b66b837252"
+   }
+  ]
+ },
+ {
+  "name": "双芦17组",
+  "question": "关于濠江标牌轮换，按现在分工汇总各组实际数量，单位为套。分栏：等内部岗位先办、经办人还未确定、员工自行办理、需要老板决定，空栏也报零。单说双芦17组，谁先办理？",
+  "topic": "濠江标牌轮换",
+  "labels": [
+   "等内部岗位先办",
+   "经办人还未确定",
+   "员工自行办理",
+   "需要老板决定"
+  ],
+  "amount": 119,
+  "request": "824b636fe0940247729a342ba5a24b8d1f0008bf3d90e50696f4eab2fd239ccc",
+  "messages": [
+   {
+    "ref": "M5d0eab57fba642101c76.1",
+    "speaker": "同事晴江260号",
+    "text": "我会做后续登记"
+   },
+   {
+    "ref": "M3d96a110b3f643708008.1",
+    "speaker": "同事晴江260号",
+    "text": "清点组先签明细"
+   },
+   {
+    "ref": "M3d96a110b3f643708008.2",
+    "speaker": "同事晴江260号",
+    "text": "我拿到后才登记"
+   }
+  ],
+  "original": {
+   "name": "双芦17组",
+   "tasks": [
+    {
+     "anchor": "M5d0eab57fba642101c76.1",
+     "state": "self",
+     "basis": "M5d0eab57fba642101c76.1",
+     "withdrawal": null
+    }
+   ]
+  },
+  "records": [
+   {
+    "id": "M127e8330b84b1dda9587",
+    "speaker": "同事晴江260号",
+    "text": "濠江标牌轮换【双芦17组】首次登记实数是58套。"
+   },
+   {
+    "id": "M5d0eab57fba642101c76",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单B另有新入账的6套，请追加。我会做后续登记。",
+    "quotedSource": "M127e8330b84b1dda9587"
+   },
+   {
+    "id": "M9923b374c3b1b97e96b8",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单C另有新入账的5套，请追加。",
+    "quotedSource": "M5d0eab57fba642101c76"
+   },
+   {
+    "id": "M314b231dc35125910bb1",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单D另有新入账的1套，请追加。",
+    "quotedSource": "M9923b374c3b1b97e96b8"
+   },
+   {
+    "id": "Mf055aa224253c8797497",
+    "speaker": "同事晴江260号",
+    "text": "濠江标牌轮换【双芦17组】交接凭单E另有新入账的5套，请追加。"
+   },
+   {
+    "id": "M8f253c5aa3898dd81677",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单F另有新入账的1套，请追加。",
+    "quotedSource": "Mf055aa224253c8797497"
+   },
+   {
+    "id": "M2a7a79735563d4401264",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单G另有新入账的5套，请追加。",
+    "quotedSource": "M8f253c5aa3898dd81677"
+   },
+   {
+    "id": "M2ff02c9ce5c7b0d2183f",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单H另有新入账的5套，请追加。",
+    "quotedSource": "M2a7a79735563d4401264"
+   },
+   {
+    "id": "Ma5c1eed413ee1f080fa5",
+    "speaker": "同事晴江260号",
+    "text": "濠江标牌轮换【双芦17组】交接凭单I另有新入账的4套，请追加。"
+   },
+   {
+    "id": "Mca30419f26c86ad3e142",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单J另有新入账的1套，请追加。",
+    "quotedSource": "Ma5c1eed413ee1f080fa5"
+   },
+   {
+    "id": "Mdfbc5a6dd6f8806d5d0f",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单K另有新入账的1套，请追加。",
+    "quotedSource": "Mca30419f26c86ad3e142"
+   },
+   {
+    "id": "M6fb7723388b7582387a7",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单L另有新入账的3套，请追加。",
+    "quotedSource": "Mdfbc5a6dd6f8806d5d0f"
+   },
+   {
+    "id": "M2edf029a66e0d0dd86f2",
+    "speaker": "同事晴江260号",
+    "text": "濠江标牌轮换【双芦17组】交接凭单M另有新入账的2套，请追加。"
+   },
+   {
+    "id": "M2308551df98f9c7abf85",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单N另有新入账的1套，请追加。",
+    "quotedSource": "M2edf029a66e0d0dd86f2"
+   },
+   {
+    "id": "M11f809c504419e1d18cc",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单O另有新入账的4套，请追加。",
+    "quotedSource": "M2308551df98f9c7abf85"
+   },
+   {
+    "id": "Meac5f66459b439c0cffe",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单P另有新入账的3套，请追加。",
+    "quotedSource": "M11f809c504419e1d18cc"
+   },
+   {
+    "id": "M10854997c748e57789f7",
+    "speaker": "同事晴江260号",
+    "text": "濠江标牌轮换【双芦17组】交接凭单Q另有新入账的3套，请追加。"
+   },
+   {
+    "id": "M3d96a110b3f643708008",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单R另有新入账的2套，请追加。清点组先签明细，我拿到后才登记。",
+    "quotedSource": "M10854997c748e57789f7"
+   },
+   {
+    "id": "Md7084e19ebbf63063a05",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单S另有新入账的6套，请追加。",
+    "quotedSource": "M3d96a110b3f643708008"
+   },
+   {
+    "id": "M524dfe634097ac0f7035",
+    "speaker": "同事晴江260号",
+    "text": "交接凭单T另有新入账的3套，请追加。",
+    "quotedSource": "Md7084e19ebbf63063a05"
+   }
+  ]
+ },
+ {
+  "name": "云岸17组",
+  "question": "关于濠江标牌轮换，按现在分工汇总各组实际数量，单位为套。分栏：等内部岗位先办、经办人还未确定、员工自行办理、需要老板决定，空栏也报零。单说云岸17组，谁先办理？",
+  "topic": "濠江标牌轮换",
+  "labels": [
+   "等内部岗位先办",
+   "经办人还未确定",
+   "员工自行办理",
+   "需要老板决定"
+  ],
+  "amount": 176,
+  "request": "824b636fe0940247729a342ba5a24b8d1f0008bf3d90e50696f4eab2fd239ccc",
+  "messages": [
+   {
+    "ref": "Mba215c892e952398c44a.1",
+    "speaker": "同事霜原270号",
+    "text": "我会做后续登记"
+   },
+   {
+    "ref": "M2f94b968abf757eedd44.1",
+    "speaker": "同事霜原270号",
+    "text": "会务组先签明细"
+   },
+   {
+    "ref": "M2f94b968abf757eedd44.2",
+    "speaker": "同事霜原270号",
+    "text": "我拿到后才登记"
+   }
+  ],
+  "original": {
+   "name": "云岸17组",
+   "tasks": [
+    {
+     "anchor": "Mba215c892e952398c44a.1",
+     "state": "self",
+     "basis": "Mba215c892e952398c44a.1",
+     "withdrawal": null
+    }
+   ]
+  },
+  "records": [
+   {
+    "id": "M795b29e77781f17dd47a",
+    "speaker": "同事霜原270号",
+    "text": "濠江标牌轮换【云岸17组】首次登记实数是63套。"
+   },
+   {
+    "id": "Mba215c892e952398c44a",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单B另有新入账的8套，请追加。我会做后续登记。",
+    "quotedSource": "M795b29e77781f17dd47a"
+   },
+   {
+    "id": "M27b5fe88d6ae6c271bd2",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单C另有新入账的7套，请追加。",
+    "quotedSource": "Mba215c892e952398c44a"
+   },
+   {
+    "id": "M180064ceef2994935f0a",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单D另有新入账的5套，请追加。",
+    "quotedSource": "M27b5fe88d6ae6c271bd2"
+   },
+   {
+    "id": "M5322735c5de3fd10ecd1",
+    "speaker": "同事霜原270号",
+    "text": "濠江标牌轮换【云岸17组】交接凭单E另有新入账的2套，请追加。"
+   },
+   {
+    "id": "M6ebc5b94a91873ce2aa3",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单F另有新入账的5套，请追加。",
+    "quotedSource": "M5322735c5de3fd10ecd1"
+   },
+   {
+    "id": "Meb9cfa9ad646f486c700",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单G另有新入账的8套，请追加。",
+    "quotedSource": "M6ebc5b94a91873ce2aa3"
+   },
+   {
+    "id": "Md2b157e94be36b5e14a7",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单H另有新入账的5套，请追加。",
+    "quotedSource": "Meb9cfa9ad646f486c700"
+   },
+   {
+    "id": "M42d4c2fc607ad996eda2",
+    "speaker": "同事霜原270号",
+    "text": "濠江标牌轮换【云岸17组】交接凭单I另有新入账的3套，请追加。"
+   },
+   {
+    "id": "M3b2d288cc04789b5f1cd",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单J另有新入账的8套，请追加。",
+    "quotedSource": "M42d4c2fc607ad996eda2"
+   },
+   {
+    "id": "Md16cc0c4dca2e627ba6a",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单K另有新入账的6套，请追加。",
+    "quotedSource": "M3b2d288cc04789b5f1cd"
+   },
+   {
+    "id": "Mfc08dd3463f66ec8b42d",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单L另有新入账的5套，请追加。",
+    "quotedSource": "Md16cc0c4dca2e627ba6a"
+   },
+   {
+    "id": "Md7de06047036a4dea03c",
+    "speaker": "同事霜原270号",
+    "text": "濠江标牌轮换【云岸17组】交接凭单M另有新入账的6套，请追加。"
+   },
+   {
+    "id": "Md196c35111d866335e24",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单N另有新入账的6套，请追加。",
+    "quotedSource": "Md7de06047036a4dea03c"
+   },
+   {
+    "id": "M8b6d5d3cc5abfb6b8203",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单O另有新入账的8套，请追加。",
+    "quotedSource": "Md196c35111d866335e24"
+   },
+   {
+    "id": "M6807425209b8388544db",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单P另有新入账的6套，请追加。",
+    "quotedSource": "M8b6d5d3cc5abfb6b8203"
+   },
+   {
+    "id": "M9ef11573cff31aba24c2",
+    "speaker": "同事霜原270号",
+    "text": "濠江标牌轮换【云岸17组】交接凭单Q另有新入账的7套，请追加。"
+   },
+   {
+    "id": "M2f94b968abf757eedd44",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单R另有新入账的8套，请追加。会务组先签明细，我拿到后才登记。",
+    "quotedSource": "M9ef11573cff31aba24c2"
+   },
+   {
+    "id": "M522b1e2568ff6db38f72",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单S另有新入账的2套，请追加。",
+    "quotedSource": "M2f94b968abf757eedd44"
+   },
+   {
+    "id": "M7abcd16b18d28d111eef",
+    "speaker": "同事霜原270号",
+    "text": "交接凭单T另有新入账的8套，请追加。",
+    "quotedSource": "M522b1e2568ff6db38f72"
+   }
+  ]
+ },
+ {
+  "name": "竹汀24组",
+  "question": "关于濠江标牌轮换，按现在分工汇总各组实际数量，单位为套。分栏：等内部岗位先办、经办人还未确定、员工自行办理、需要老板决定，空栏也报零。单说竹汀24组，谁先办理？",
+  "topic": "濠江标牌轮换",
+  "labels": [
+   "等内部岗位先办",
+   "经办人还未确定",
+   "员工自行办理",
+   "需要老板决定"
+  ],
+  "amount": 139,
+  "request": "2e407e905287e30b9ac4c56577e528f8aabd0d69a3d4674815fd1b17300cc512",
+  "messages": [
+   {
+    "ref": "M747c2b4ef94d1357e770.1",
+    "speaker": "同事嘉柳380号",
+    "text": "我会做后续登记"
+   },
+   {
+    "ref": "M131e7c59359cb9d849c3.1",
+    "speaker": "同事嘉柳380号",
+    "text": "清点组先签明细"
+   },
+   {
+    "ref": "M131e7c59359cb9d849c3.2",
+    "speaker": "同事嘉柳380号",
+    "text": "我拿到后才登记"
+   }
+  ],
+  "original": {
+   "name": "竹汀24组",
+   "tasks": [
+    {
+     "anchor": "M747c2b4ef94d1357e770.1",
+     "state": "self",
+     "basis": "M747c2b4ef94d1357e770.1",
+     "withdrawal": null
+    }
+   ]
+  },
+  "records": [
+   {
+    "id": "Mfe39b967237bc7a27dc8",
+    "speaker": "同事嘉柳380号",
+    "text": "濠江标牌轮换【竹汀24组】首次登记实数是64套。"
+   },
+   {
+    "id": "M747c2b4ef94d1357e770",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单B另有新入账的2套，请追加。我会做后续登记。",
+    "quotedSource": "Mfe39b967237bc7a27dc8"
+   },
+   {
+    "id": "M7e754ef4551eb6bc08a7",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单C另有新入账的2套，请追加。",
+    "quotedSource": "M747c2b4ef94d1357e770"
+   },
+   {
+    "id": "Mf1f45301bd940c615cdb",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单D另有新入账的4套，请追加。",
+    "quotedSource": "M7e754ef4551eb6bc08a7"
+   },
+   {
+    "id": "M6a7386b0d3894522ec41",
+    "speaker": "同事嘉柳380号",
+    "text": "濠江标牌轮换【竹汀24组】交接凭单E另有新入账的4套，请追加。"
+   },
+   {
+    "id": "M2ae4aa3ffbc5377eacbc",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单F另有新入账的4套，请追加。",
+    "quotedSource": "M6a7386b0d3894522ec41"
+   },
+   {
+    "id": "Mfdcd2f81fb0479e5722c",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单G另有新入账的5套，请追加。",
+    "quotedSource": "M2ae4aa3ffbc5377eacbc"
+   },
+   {
+    "id": "Ma5b4dc25e2dd764773e4",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单H另有新入账的7套，请追加。",
+    "quotedSource": "Mfdcd2f81fb0479e5722c"
+   },
+   {
+    "id": "M84a80d720c1f065986f3",
+    "speaker": "同事嘉柳380号",
+    "text": "濠江标牌轮换【竹汀24组】交接凭单I另有新入账的3套，请追加。"
+   },
+   {
+    "id": "M810d8b66593a3f975041",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单J另有新入账的3套，请追加。",
+    "quotedSource": "M84a80d720c1f065986f3"
+   },
+   {
+    "id": "Mc3492e16561cbcdd65a8",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单K另有新入账的2套，请追加。",
+    "quotedSource": "M810d8b66593a3f975041"
+   },
+   {
+    "id": "M2f097afe0dba02bf9fc5",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单L另有新入账的1套，请追加。",
+    "quotedSource": "Mc3492e16561cbcdd65a8"
+   },
+   {
+    "id": "M3301f07cb6574dfdc084",
+    "speaker": "同事嘉柳380号",
+    "text": "濠江标牌轮换【竹汀24组】交接凭单M另有新入账的7套，请追加。"
+   },
+   {
+    "id": "M50382dc564525ebeefd9",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单N另有新入账的3套，请追加。",
+    "quotedSource": "M3301f07cb6574dfdc084"
+   },
+   {
+    "id": "M3f40e04d9be9da85f09a",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单O另有新入账的3套，请追加。",
+    "quotedSource": "M50382dc564525ebeefd9"
+   },
+   {
+    "id": "M5c3a1f00db494d176c8e",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单P另有新入账的6套，请追加。",
+    "quotedSource": "M3f40e04d9be9da85f09a"
+   },
+   {
+    "id": "M7dade4e0d9f6dab3e138",
+    "speaker": "同事嘉柳380号",
+    "text": "濠江标牌轮换【竹汀24组】交接凭单Q另有新入账的6套，请追加。"
+   },
+   {
+    "id": "M131e7c59359cb9d849c3",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单R另有新入账的2套，请追加。清点组先签明细，我拿到后才登记。",
+    "quotedSource": "M7dade4e0d9f6dab3e138"
+   },
+   {
+    "id": "M1e1379177a56c9fcb217",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单S另有新入账的8套，请追加。",
+    "quotedSource": "M131e7c59359cb9d849c3"
+   },
+   {
+    "id": "M6253945938d38178b257",
+    "speaker": "同事嘉柳380号",
+    "text": "交接凭单T另有新入账的3套，请追加。",
+    "quotedSource": "M1e1379177a56c9fcb217"
+   }
+  ]
+ }
+]

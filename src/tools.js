@@ -7,8 +7,6 @@ import { lookupPart } from './parts.js';
 import { listDocs, markSummarized, latestDoc } from './doc-inbox.js';
 import { addGlobalFact, isOwner, loadGlobal } from './global.js';
 import { addRelay, canRelay, findContact, markDelivered, peekPending } from './relay.js';
-import { cleanRelayContent, parseWhen } from './wecom-relay.js';
-import { addReminder, listReminders, cancelLatest } from './reminders.js';
 import { formatMediaList, searchMedia } from './media-log.js';
 import { searchBili, pickVideo, downloadBili, videoFileName } from './bilibili.js';
 import { findPython } from './tts.js';
@@ -199,7 +197,7 @@ const SPECS = {
         type: 'object',
         properties: {
           topic: { type: 'string', description: '主题，尽量具体，比如“朱元璋生平：从乞丐到开国皇帝”' },
-          pages: { type: 'number', description: '正文页数，默认 12，范围 5~20' },
+          pages: { type: 'number', description: '总页数（含封面和结束页），默认 8，范围 3~24' },
           theme: { type: 'string', enum: ['history', 'business', 'fresh'], description: '配色主题，历史/商务/清新' },
         },
         required: ['topic'],
@@ -257,13 +255,13 @@ const SPECS = {
     function: {
       name: 'make_excel',
       description:
-        '生成 Excel 表格（.xlsx）。对方要「做个表格」「Excel」「清单」「统计表」「报价单」时用，会自动填合理的数据。',
+        '生成 Excel 表格（.xlsx）。忠实保留用户给定的数据与计算要求，不擅自补商品、费用、税费或示例数据；只有明确要求示例时才编造示例。',
       parameters: {
         type: 'object',
         properties: {
           topic: { type: 'string', description: '表格主题，尽量具体，比如“奶茶店一周销售流水”' },
-          rows: { type: 'number', description: '行数，默认 10，范围 3~50' },
-          columns: { type: 'number', description: '列数，默认 5，范围 2~10' },
+          rows: { type: 'number', description: '参考行数，默认 10，范围 1~200；已有数据不凑行数' },
+          columns: { type: 'number', description: '参考列数，默认 5，范围 1~20' },
         },
         required: ['topic'],
       },
@@ -400,48 +398,12 @@ const SPECS = {
       },
     },
   },
-  schedule_reminder: {
-    type: 'function',
-    function: {
-      name: 'schedule_reminder',
-      description:
-        '用户让你在某个时间提醒他/她时调用。例：“明天下午三点提醒我开会”“10分钟后提醒我喝水”。when 填原话里的时间表达，不要自己换算成时间戳。',
-      parameters: {
-        type: 'object',
-        properties: {
-          text: { type: 'string', description: '到点要提醒的内容，保留原话，不超过 100 字' },
-          when: { type: 'string', description: '时间表达，如“明天下午三点”“10分钟后”“周五上午9点”' },
-        },
-        required: ['text', 'when'],
-      },
-    },
-  },
-  list_reminders: {
-    type: 'function',
-    function: {
-      name: 'list_reminders',
-      description: '查看当前还有哪些提醒没到点。用户问“我有哪些提醒”时用。',
-      parameters: { type: 'object', properties: {} },
-    },
-  },
-  cancel_reminder: {
-    type: 'function',
-    function: {
-      name: 'cancel_reminder',
-      description: '用户要取消提醒时用。知道提醒内容就把 keyword 填上；不知道就留空取消最近一条。',
-      parameters: {
-        type: 'object',
-        properties: {
-          keyword: { type: 'string', description: '提醒内容里的关键词，如“收衣服”“开会”' },
-        },
-      },
-    },
-  },
   find_media: {
     type: 'function',
     function: {
       name: 'find_media',
-      description:        '在长期文件记忆里查历史收发的文件、图片、音频（含文件名和内容摘要）。对方问“我之前发你的那个表格”“上周那份报价单”“你发给我的那首歌”时用。',
+      description:
+        '在长期文件记忆里查历史收发的文件、图片、音频（含文件名和内容摘要）。对方问“我之前发你的那个表格”“上周那份报价单”“你发给我的那首歌”时用。',
       parameters: {
         type: 'object',
         properties: {
@@ -721,7 +683,11 @@ const QUALITY_SUFFIX =
  * 组装可用工具。
  * ctx: { chatKey, images: [], voices: [], memory }
  */
-export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, getWecom, wecomDirectory, wecomUsers, relayNotify, friendNotify, jobTracker, logger }) {
+export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, minecraft, onebot, relayNotify, friendNotify, jobTracker, logger, allowedTools }) {
+  if (allowedTools !== undefined && !Array.isArray(allowedTools)) {
+    throw new TypeError('allowedTools must be an array when provided');
+  }
+  const allowed = allowedTools === undefined ? null : new Set(allowedTools);
   const stickers = scanStickers();
   const stickerCats = Object.keys(stickers);
   const specs = [SPECS.draw_image, SPECS.get_time, SPECS.remember, SPECS.sing, SPECS.search_history, SPECS.search_web];
@@ -739,9 +705,6 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     SPECS.relay_message,
     SPECS.relay_list,
     SPECS.relay_to_friend,
-    SPECS.schedule_reminder,
-    SPECS.list_reminders,
-    SPECS.cancel_reminder,
     SPECS.find_media,
     SPECS.fetch_video,
     SPECS.mc_connect,
@@ -781,10 +744,14 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     });
   }
 
+  const visibleSpecs = allowed ? specs.filter((spec) => allowed.has(spec.function.name)) : specs;
+  const runnableNames = new Set(visibleSpecs.map((spec) => spec.function.name));
   const cooldowns = new Map();
   const recentStickers = new Map();
 
   async function run(name, args, ctx) {
+    // Filtering schemas alone does not prevent a model from requesting another tool.
+    if (allowed && !runnableNames.has(name)) return `当前渠道不可用工具：${name}`;
     const t0 = Date.now();
     try {
       switch (name) {
@@ -801,29 +768,13 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
             const prompt = await toImagePrompt(llm, args.prompt, logger, cfg.llm?.helperModel);
             const finalPrompt = `${prompt}${QUALITY_SUFFIX}`;
             logger.info(`出图提示词：${finalPrompt.slice(0, 160)}`);
-
-            // 瞬时失败静默重试：不要把“没画成”先丢给用户
-            const generate = async (p) => {
-              let last;
-              for (let attempt = 0; attempt < 3; attempt++) {
-                try {
-                  return await imageGen.generate({ prompt: p, size: args.size });
-                } catch (err) {
-                  last = err;
-                  logger.warn(`出图失败（第 ${attempt + 1} 次）：${err.message}`);
-                  if (attempt < 2) await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
-                }
-              }
-              throw last;
-            };
-
-            let img = await generate(finalPrompt);
+            let img = await imageGen.generate({ prompt: finalPrompt, size: args.size });
             // 质检：有多余物体/乱码文字就补画一张
             const qa = await checkImageQuality(llm, img.file, logger, cfg.llm?.visionModel);
             if (qa?.bad) {
               logger.warn(`出图质检不合格：${qa.issue}`);
               const retryPrompt = `${prompt}。严格避免以下问题：${qa.issue || '多余物体、肢体错误、乱码文字'}${QUALITY_SUFFIX}`;
-              const second = await generate(retryPrompt).catch((err) => {
+              const second = await imageGen.generate({ prompt: retryPrompt, size: args.size }).catch((err) => {
                 logger.warn(`补画失败，用第一张：${err.message}`);
                 return null;
               });
@@ -853,16 +804,19 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
         }
         case 'make_ppt': {
           if (!office) return '文档功能没开。';
-          const pages = Math.min(Math.max(Number(args.pages) || 12, 5), 20);
-          const topic = String(args.topic || '').slice(0, 150).trim();
+          const totalPages = Math.min(Math.max(Math.floor(Number(args.pages) || 8), 3), 24);
+          const topic = String(args.topic || '').slice(0, 2000).trim();
           if (!topic) return '主题为空。';
           ctx.documents.push({
             kind: 'ppt',
             topic,
-            pages,
-            theme: String(args.theme || cfg.office?.theme || 'history'),
+            pages: totalPages - 2,
+            totalPages,
+            sourceText: [...(ctx.recentUserRequests || []).map(text => `此前用户消息：${text}`),
+              `本次用户原始要求：${ctx.requestText || topic}`].join('\n\n').slice(-60000),
+            theme: String(args.theme || 'business'),
           });
-          return `PPT 安排上了（约 ${pages} 页），一两分钟做好我直接发文件。回复里说一声“在做”就行。`;
+          return `PPT 任务已安排（共 ${totalPages} 页，含封面和结束页），按原始要求生成并检查后发送文件。`;
         }
         case 'make_docx': {
           if (!office) return '文档功能没开。';
@@ -874,12 +828,16 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
         }
         case 'make_excel': {
           if (!office) return '表格功能没开。';
-          const topic = String(args.topic || '').slice(0, 150).trim();
+          const topic = String(args.topic || '').slice(0, 2000).trim();
           if (!topic) return '主题为空。';
-          const rows = Math.min(Math.max(Number(args.rows) || 10, 3), 50);
-          const columns = Math.min(Math.max(Number(args.columns) || 5, 2), 10);
-          ctx.documents.push({ kind: 'excel', topic, rows, columns });
-          return `表格开始做了（约 ${rows} 行 × ${columns} 列），半分钟就好。`;
+          const rows = Math.min(Math.max(Number(args.rows) || 10, 1), 200);
+          const columns = Math.min(Math.max(Number(args.columns) || 5, 1), 20);
+          const sourceText = [
+            ...(ctx.recentUserRequests || []).map(text => `此前用户消息：${text}`),
+            `本次用户原始要求：${ctx.requestText || topic}`,
+          ].join('\n\n').slice(-60000);
+          ctx.documents.push({ kind: 'excel', topic, sourceText, rows, columns });
+          return '表格任务已安排，将按原始数据和要求生成后发送文件。';
         }
         case 'forward_file': {
           const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
@@ -899,33 +857,10 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           let doc = latestDoc({ chatKey: ctx.chatKey, keyword: String(args.file || '').trim() });
           if (!doc && args.file) doc = latestDoc({ keyword: String(args.file).trim() });
 
-          // 兜底：收件箱里没有，就直接在 data/files、data/documents 里按文件名找
-          if (!doc) {
-            const kw = String(args.file || '').trim().toLowerCase();
-            const dirs = [path.join(DATA_DIR, 'files'), path.join(DATA_DIR, 'documents')];
-            const exts = /\.(docx|pptx|xlsx|pdf|doc|ppt|xls)$/i;
-            const cands = [];
-            for (const dir of dirs) {
-              let names = [];
-              try {
-                names = fs.readdirSync(dir);
-              } catch {
-                continue;
-              }
-              for (const name of names) {
-                if (!exts.test(name)) continue;
-                if (kw && !name.toLowerCase().includes(kw)) continue;
-                const full = path.join(dir, name);
-                try {
-                  const st = fs.statSync(full);
-                  if (st.isFile()) cands.push({ path: full, name, mtime: st.mtimeMs });
-                } catch {
-                  /* skip */
-                }
-              }
-            }
-            cands.sort((a, b) => b.mtime - a.mtime);
-            if (cands[0]) doc = { path: cands[0].path, name: cands[0].name };
+          // Use only indexed QQ files; never scan shared output folders across channels.
+          if (!doc && args.file) {
+            doc = searchMedia(String(args.file), '', 5000).filter(item =>
+              /^(private|group):\d+$/.test(item.chatKey) && item.kind === 'doc' && item.path && fs.existsSync(item.path)).at(-1);
           }
 
           if (!doc) return '最近没收到可以转发的文件。先把文件发我，我再转。';
@@ -962,7 +897,8 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           if (!isOwner(m?.[1], cfg)) return '只有主人能让我汇总文档。';
           if (!office) return '文档功能没开。';
           const hours = Math.min(Math.max(Number(args.hours) || 48, 1), 720);
-          const docs = listDocs({ hours });
+          const allDocs = listDocs({ hours });
+          const docs = allDocs.slice(0, 20);
           if (!docs.length) return `最近 ${hours} 小时没有待汇总的文档。`;
 
           const formatDoc = async (d) => {
@@ -970,7 +906,7 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
             if (!text) return [`（这份文档没有抽出文字，文件名：${d.name}）`];
             try {
               const res = await llm.chat({
-                model: cfg.office?.model || 'deepseek-flash',
+                model: cfg.office?.model || cfg.llm?.model,
                 messages: [
                   {
                     role: 'system',
@@ -1009,7 +945,7 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           let intro = `共收到 ${docs.length} 份文档，来自 ${new Set(docs.map((d) => d.uin)).size} 位同事。`;
           try {
             const res = await llm.chat({
-              model: cfg.office?.model || 'deepseek-flash',
+              model: cfg.office?.model || cfg.llm?.model,
               messages: [
                 { role: 'system', content: '用 3~4 句中文概括这批文档的整体情况：谁交了什么、主要进展、需要老板关注的点。不要编造。' },
                 { role: 'user', content: digest.join('\n').slice(0, 4000) },
@@ -1030,9 +966,9 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
             theme: cfg.office?.theme || 'business',
           });
 
-          ctx.files.push({ path: built.file, name: built.name, size: fs.statSync(built.file).size });
-          markSummarized(docs.map((d) => d.id));
-          return `汇总好了：${docs.length} 份文档，已生成《${built.name}》并加入待发送。回复里一句话说明即可。`;
+          ctx.files.push({ path: built.file, name: built.name, size: fs.statSync(built.file).size,
+            onDelivered: () => markSummarized(docs.map(d => d.id)) });
+          return `汇总好了：本批${docs.length}份，共${allDocs.length}份待处理，已生成《${built.name}》并加入待发送。成功发送后才标记已汇总。`;
         }
         case 'send_document': {
           const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
@@ -1040,30 +976,10 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           const kw = String(args.keyword || '').trim().toLowerCase();
           if (!kw) return '要发哪个文件？给我一个文件名关键词。';
 
-          const dirs = [path.join(DATA_DIR, 'documents'), path.join(DATA_DIR, 'files')];
-          const exts = new Set(['.docx', '.pptx', '.xlsx', '.doc', '.ppt', '.xls', '.pdf']);
-          const found = [];
-          for (const dir of dirs) {
-            let names = [];
-            try {
-              names = fs.readdirSync(dir);
-            } catch {
-              continue;
-            }
-            for (const name of names) {
-              const ext = path.extname(name).toLowerCase();
-              if (!exts.has(ext)) continue;
-              if (!name.toLowerCase().includes(kw)) continue;
-              const full = path.join(dir, name);
-              try {
-                const st = fs.statSync(full);
-                if (!st.isFile()) continue;
-                found.push({ path: full, name, size: st.size, mtime: st.mtimeMs });
-              } catch {
-                /* 跳过读不到的文件 */
-              }
-            }
-          }
+          const found = searchMedia(kw, '', 5000).filter(item => /^(private|group):\d+$/.test(item.chatKey)
+            && item.kind === 'doc' && item.path && fs.existsSync(item.path)).map(item => ({...item,size:fs.statSync(item.path).size,mtime:item.at}));
+          const incoming = listDocs({hours:720,includeSummarized:true}).filter(item => item.name.toLowerCase().includes(kw) && fs.existsSync(item.path));
+          for (const doc of incoming) found.push({...doc,size:fs.statSync(doc.path).size,mtime:doc.at});
 
           if (!found.length) return `资料库里没找到文件名包含「${args.keyword}」的文档。`;
           found.sort((a, b) => b.mtime - a.mtime);
@@ -1089,21 +1005,6 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           return ok ? `记到公开记忆里了：${args.text}（以后所有人都能看到这条）` : '这条已经记过了。';
         }
         case 'relay_message': {
-          if (String(ctx.chatKey || '').startsWith('wecom:')) {
-            const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-            const wx = getWecom?.();
-            const text = cleanRelayContent(args.text).slice(0, 200);
-            if (!text) return '要转告什么？';
-            if (!wx?.enabled) return '企微通道没接好。';
-            if (!bossId) return '还没设置老板的企微 userid（WECOM_OWNER_USERID），设好才能传话。';
-            if (String(ctx.peerName) === bossId) return '你就是老板，不用转告自己。';
-            try {
-              await wx.sendTo(bossId, `【传话】${ctx.peerName || '同事'}：${text}`);
-              return '已经转告老板了。';
-            } catch (err) {
-              return `没发出去：${err.message}`;
-            }
-          }
           const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
           const uin = m?.[1];
           if (!uin) return '群聊里不能传话，私聊找我才行。';
@@ -1135,36 +1036,9 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           return `还有 ${items.length} 条没转告：\n${items.map((i) => `- ${i.name || i.from}：${i.text}`).join('\n')}`;
         }
         case 'relay_to_friend': {
-          if (String(ctx.chatKey || '').startsWith('wecom:')) {
-            const bossId = String(cfg.wecom?.ownerUserId || process.env.WECOM_OWNER_USERID || '').trim();
-            const text = cleanRelayContent(args.text).slice(0, 200);
-            if (!text) return '内容为空。';
-            if (!bossId) return '还没设置老板的企微 userid（WECOM_OWNER_USERID）。';
-            if (String(ctx.peerName) !== bossId) return '只有老板能让我给同事带话。';
-
-            const local = wecomUsers?.findUser(args.to);
-            if (local) {
-              await getWecom?.().sendTo(local.userid, `【传话】老板：${text}`);
-              return `已经发给 ${local.name} 了。`;
-            }
-
-            if (wecomDirectory?.enabled) {
-              try {
-                const target = await wecomDirectory.resolve(args.to);
-                if (target) {
-                  await getWecom?.().sendTo(target.userid, `【传话】老板：${text}`);
-                  return `已经发给 ${target.name} 了。`;
-                }
-              } catch {
-                /* 通讯录不可用就退回本地名字 */
-              }
-            }
-
-            return `还不认识「${args.to}」。让他在企微里对我说一句“我叫${args.to}”，我记住后就能转。`;
-          }
           const m = /^private:(\d+)$/.exec(ctx.chatKey || '');
           if (!isOwner(m?.[1], cfg)) return '只有主人能让我给别人带话。';
-          const text = cleanRelayContent(args.text).slice(0, 200);
+          const text = String(args.text || '').trim().slice(0, 200);
           if (!text) return '内容为空。';
           const c = findContact(args.to);
           if (!c) return `没找到「${args.to}」，直接给我 QQ 号，或者让对方先跟我说句话。`;
@@ -1172,44 +1046,6 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
           const ownerName = loadGlobal()?.owner?.name || '主人';
           await friendNotify(c.uin, `【传话】${ownerName} 让我跟你说：${text}`);
           return `已经直接发给 ${c.name}（${c.uin}）了。回复里说一句“发过去了”就行。`;
-        }
-        case 'schedule_reminder': {
-          const text = String(args.text || '').trim().replace(/^提醒我?\s*/, '').slice(0, 100);
-          const whenText = String(args.when || '').trim();
-          if (!text) return '要提醒你什么？';
-          const when = parseWhen(whenText || text, new Date());
-          if (!when) return '要什么时候提醒？比如“明天下午三点”或“10分钟后”。';
-          if (when.at < Date.now() + 20000) return '这个时间已经过了，换一个将来的时间吧。';
-          const item = addReminder({ chatKey: ctx.chatKey, text, dueAt: when.at });
-          const d = new Date(when.at);
-          const label = d.toLocaleString('zh-CN', {
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          });
-          logger?.info?.(`提醒已登记：${item.id} ${label} ${text.slice(0, 30)}`);
-          return `定好了：${label} 提醒你「${text}」。回复里一句带过就行。`;
-        }
-        case 'list_reminders': {
-          const list = listReminders(ctx.chatKey);
-          if (!list.length) return '现在没有待到的提醒。';
-          return (
-            '待到的提醒：\n' +
-            list
-              .slice(-10)
-              .map((r) => {
-                const d = new Date(r.dueAt);
-                return `· ${d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} ${r.text}`;
-              })
-              .join('\n')
-          );
-        }
-        case 'cancel_reminder': {
-          const r = cancelLatest(ctx.chatKey, String(args.keyword || '').trim());
-          if (!r) return '没有可取消的提醒。';
-          return `取消了：${r.text}`;
         }
         case 'find_media': {
           const items = searchMedia(args.keyword || '', ctx.chatKey, 10);
@@ -1515,64 +1351,19 @@ export function createTools({ cfg, llm, imageGen, tts, songGen, qzone, office, m
     }
   }
 
-  const nameOf = (s) => s.function?.name;
-  const pick = (...names) => specs.filter((s) => names.includes(nameOf(s)));
-  const baseSpecs = pick(
-    'draw_image',
-    'get_time',
-    'remember',
-    'send_voice',
-    'sing',
-    'sing_song',
-    'search_history',
-    'search_web',
-    'find_media',
-    'remember_global',
-    'schedule_reminder',
-    'list_reminders',
-    'cancel_reminder',
-  );
-  const docSpecs = pick('make_ppt', 'make_docx', 'make_excel');
-  const mcSpecs = specs.filter((s) => String(nameOf(s)).startsWith('mc_'));
-  const relaySpecs = pick('relay_message', 'relay_list', 'relay_to_friend');
-  const videoSpecs = pick('fetch_video');
-  const qzoneSpecs = pick('post_qzone');
-  const partSpecs = pick('lookup_part');
-  const stickerSpecs = pick('send_sticker');
-
-  /**
-   * 按当前这句话挑工具，避免每轮都把 20 多个 MC 工具和文档工具塞进请求。
-   * 工具定义越少，提示词越短，推理越快。
-   */
-  function specsFor({ text = '' } = {}) {
-    const t = String(text || '');
-    const out = [...baseSpecs, ...relaySpecs, ...qzoneSpecs];
-    if (/(ppt|幻灯片|文档|word|excel|表格|汇报|报告|作业|论文)/i.test(t)) out.push(...docSpecs);
-    const mcHint =
-      (minecraft && minecraft.online) ||
-      /(我的世界|minecraft|\bmc\b|游戏|服务器|挖矿|挖方块|合成|打怪|僵尸|苦力怕|骷髅|床|箱子|铁矿|石头|木头|跟着我)/i.test(t);
-    if (mcHint) out.push(...mcSpecs);
-    if (/(视频|b站|哔哩|短片)/i.test(t)) out.push(...videoSpecs);
-    if (/(配件|零件|车架|vin|型号|oem|故障码)/i.test(t)) out.push(...partSpecs);
-    if (stickerCats.length) out.push(...stickerSpecs);
-    const seen = new Set();
-    const picked = out.filter((s) => {
-      const n = nameOf(s);
-      if (!n || seen.has(n)) return false;
-      seen.add(n);
-      return true;
-    });
-    logger?.debug?.(`[tools] 本轮工具 ${picked.length} 个`);
-    return picked;
-  }
-
   return {
-    specs,
-    specsFor,
+    specs: visibleSpecs,
+    // Keep everyday and follow-up capabilities available. Only hide the large MC family
+    // when neither the current request nor recent context concerns the game.
+    specsFor(ctx = {}) {
+      const text = [ctx.text, ctx.requestText, ...(ctx.recentUserRequests || [])].filter(Boolean).join('\n');
+      const mcHint = minecraft?.online || /(我的世界|minecraft|\bmc\b|游戏|服务器|挖|合成|怪|箱子|木头|跟着|方块)/i.test(text);
+      return visibleSpecs.filter(s => mcHint || !s.function.name.startsWith('mc_'));
+    },
     run,
-    stickerCats,
-    imageEnabled: Boolean(cfg.image.enabled),
-    ttsEnabled: Boolean(cfg.tts?.enabled),
+    stickerCats: allowed && !runnableNames.has('send_sticker') ? [] : stickerCats,
+    imageEnabled: Boolean(cfg.image.enabled) && (!allowed || runnableNames.has('draw_image')),
+    ttsEnabled: Boolean(cfg.tts?.enabled) && (!allowed || runnableNames.has('send_voice')),
   };
 }
 

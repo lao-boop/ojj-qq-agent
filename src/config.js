@@ -32,6 +32,12 @@ loadEnvFile();
 /** 用环境变量覆盖配置里的密钥；config.json 可以只留空字符串。 */
 export function applyEnvOverrides(cfg) {
   const env = process.env;
+  if (env.CHAT_PLATFORM) cfg.platform = env.CHAT_PLATFORM.trim().toLowerCase();
+  if (env.WECOM_BOT_ID || env.WECOM_BOT_SECRET) cfg.wecom ??= {};
+  if (env.WECOM_BOT_ID) cfg.wecom.botId = env.WECOM_BOT_ID;
+  if (env.WECOM_BOT_SECRET) cfg.wecom.secret = env.WECOM_BOT_SECRET;
+  if (env.WECOM_CORP_ID) cfg.wecom.corpId = env.WECOM_CORP_ID;
+  if (env.WECOM_DIRECTORY_SECRET) cfg.wecom.directorySecret = env.WECOM_DIRECTORY_SECRET;
   if (env.DEEPSEEK_API_KEY) cfg.llm.apiKey = env.DEEPSEEK_API_KEY;
   if (env.DEEPSEEK_BASE_URL) cfg.llm.baseUrl = env.DEEPSEEK_BASE_URL;
   if (env.REPLICATE_API_TOKEN) {
@@ -47,8 +53,20 @@ export function applyEnvOverrides(cfg) {
 }
 
 export const DEFAULTS = {
+  platform: 'qq',
   bot: { name: '小鲸鱼' },
   onebot: { wsUrl: 'ws://127.0.0.1:3001', accessToken: '', httpUrl: '' },
+  wecom: {
+    botId: '',
+    secret: '',
+    mode: 'open',
+    userAllow: [],
+    groupAllow: [],
+    requestTimeoutMs: 240000,
+    maxConcurrentJobs: 2,
+    corpId: '', directorySecret: '', directoryEnabled: false, contacts: [],
+    secretary: { enabled: false, ownerUserId: '', intervalMinutes: 60 },
+  },
   llm: {
     baseUrl: 'https://api.deepseek.com/v1',
     apiKey: '',
@@ -82,6 +100,7 @@ export const DEFAULTS = {
     adminQQ: [],
     ownerQQ: '',
     forwardToOwner: true,
+    forwardFiles: false,
     privateAllow: [],
     groupAllow: [],
     allowAllWhenEmpty: false,
@@ -98,7 +117,7 @@ export const DEFAULTS = {
     model: '',
     defaultSize: 'square',
     timeoutMs: 90000,
-    cooldownMs: 45000,
+    cooldownMs: 0,
     maxPromptChars: 400,
     removeWatermark: true,
   },
@@ -145,7 +164,7 @@ export const DEFAULTS = {
   log: { level: 'info', file: true },
   media: { ffmpegPath: '' },
   mc: { username: 'Xiaojingyu', host: '127.0.0.1', port: 25565, version: '26.1', ownerName: '' },
-  office: { pythonPath: '', theme: 'history', model: 'deepseek-flash', maxImages: 8, imagesPerDeck: 0, imageDelayMs: 12000 },
+  office: { pythonPath: '', theme: 'business', model: '', maxImages: 8, imagesPerDeck: 2, imageDelayMs: 0 },
   relay: { enabled: true, allow: [], dailyLimit: 5, maxLen: 200 },
   library: { enabled: true, dir: 'D:\\无损音乐', maxSeconds: 0 },
   asr: {
@@ -216,26 +235,25 @@ export function loadConfig() {
       throw new Error(`config.json 解析失败：${err.message}`);
     }
   }
-  const cfg = deepMerge(DEFAULTS, fileCfg);
-  // 防止控制台保存空值/0 后关键功能静默失效
-  if (!cfg.onebot?.wsUrl) cfg.onebot.wsUrl = 'ws://127.0.0.1:3001';
-  if (!cfg.console?.host) cfg.console.host = '127.0.0.1';
-  if (!cfg.llm?.baseUrl) cfg.llm.baseUrl = 'https://api.deepseek.com/v1';
-  if (!cfg.llm?.model) cfg.llm.model = 'deepseek-v4-pro';
-  if (!cfg.llm?.visionModel) cfg.llm.visionModel = 'deepseek-flash';
-  if (!cfg.llm?.helperModel) cfg.llm.helperModel = 'deepseek-flash';
-  if (!(cfg.llm?.temperature > 0)) cfg.llm.temperature = 1.15;
-  if (!(cfg.llm?.maxTokens > 0)) cfg.llm.maxTokens = 900;
-  if (!(cfg.chat?.maxBubbles > 0)) cfg.chat.maxBubbles = 3;
-  if (!cfg.chat?.group?.wakeWords?.length) cfg.chat.group.wakeWords = ['小鲸鱼', '鲸鱼', '小鱼'];
-  if (!cfg.tts?.voice) cfg.tts.voice = 'zh-CN-XiaoyiNeural';
-  if (!cfg.image?.provider) cfg.image.provider = 'replicate';
-  if (!cfg.access?.privateAllow?.length && cfg.access?.allowAllWhenEmpty === false) {
-    // 白名单为空又关闭了全放行，会导致谁都不回：自动放行，避免“活着但不说话”
-    cfg.access.allowAllWhenEmpty = true;
-  }
-  applyEnvOverrides(cfg);
+  const cfg = deepMerge(structuredClone(DEFAULTS), fileCfg);
+  normalizeConfig(cfg);
+  // 环境变量中的凭据只留在内存；首次启动也不能把它们写进配置文件。
   if (!fs.existsSync(CONFIG_PATH)) saveConfig(cfg);
+  applyEnvOverrides(cfg);
+  return cfg;
+}
+
+/** Fill unusable scalar values; explicit access restrictions and valid zero values stay intact. */
+export function normalizeConfig(cfg) {
+  for (const [section, keys] of Object.entries({onebot:['wsUrl'], console:['host'], llm:['baseUrl','model','visionModel','helperModel'], tts:['voice'], image:['provider']})) {
+    cfg[section] ??= structuredClone(DEFAULTS[section]);
+    for (const key of keys) if (typeof cfg[section][key] !== 'string' || !cfg[section][key].trim()) cfg[section][key] = DEFAULTS[section][key];
+  }
+  cfg.chat ??= structuredClone(DEFAULTS.chat);
+  for (const [section,key] of [['llm','maxTokens'],['chat','maxBubbles']]) {
+    if (!Number.isFinite(cfg[section][key]) || cfg[section][key] <= 0) cfg[section][key] = DEFAULTS[section][key];
+  }
+  if (!Number.isFinite(cfg.llm.temperature) || cfg.llm.temperature < 0) cfg.llm.temperature = DEFAULTS.llm.temperature;
   return cfg;
 }
 

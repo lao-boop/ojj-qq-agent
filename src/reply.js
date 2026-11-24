@@ -72,9 +72,11 @@ export class ReplySender {
     for (const f of files) {
       try {
         await this.sendFile(chat, f.path, f.name, '');
+        await f.onDelivered?.();
         await sleep(rand([500, 1100]));
       } catch (err) {
         this.logger.warn(`发送文件失败：${err.message}`);
+        throw err;
       }
     }
   }

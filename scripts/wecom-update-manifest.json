@@ -1,0 +1,149 @@
+{
+  "version": 3,
+  "files": [
+    {
+      "path": "src/brain.js",
+      "sha256": "fffa0ebf6fa1c898eb9b3fc40dbbeb8c350bf130897fce07611499bf20ddb055"
+    },
+    {
+      "path": "src/config.js",
+      "sha256": "281dde5c01363dc6e3f0f025f6a5733ab126b9d72d9623f386bad953aaabd4a5"
+    },
+    {
+      "path": "src/memory-index.js",
+      "sha256": "7f1d8b337d7c93a271302fbda1f901e0237f1bfb4737280db99a42a17af3eba9"
+    },
+    {
+      "path": "src/office.js",
+      "sha256": "aafed8c025814b5a84baafe0f1801c743d5c28cf57fb87a2742cd3ce391d92e4"
+    },
+    {
+      "path": "src/tools.js",
+      "sha256": "ce2f0e62a209c82ccaf720206beb05347198b37ab60d1f0fdfee613e2d6482a8"
+    },
+    {
+      "path": "src/wecom-main.js",
+      "sha256": "a6bc453439f3e6da3b2f37638df2f6e5c4a24f682e2710820e3ffd5775904072"
+    },
+    {
+      "path": "src/wecom-runtime.js",
+      "sha256": "87d3fe104400c3ee6039c5695754e45f86fe861f44ff879854a5f9e31a7d5d2e"
+    },
+    {
+      "path": "src/wecom-secretary.js",
+      "sha256": "4652e088c19c1e7275943c6db7bba19b7048a30dd90b14e1e8ce3b508115f55d"
+    },
+    {
+      "path": "scripts/build_office.py",
+      "sha256": "00d2b503d569b2a7f848d1ba31ab519b93d24634f7cf42639beaa6a8030a70c1"
+    },
+    {
+      "path": "public/index.html",
+      "sha256": "31628413a7ff483c615c9a9c0232a8cdde9273666a17a8f1fb68338f81cbc330"
+    },
+    {
+      "path": "docs/WECOM.md",
+      "sha256": "63136c7b7109099b26da0e545fadc26473b8bc9b2e0b183f35b1b6ee601a6876"
+    },
+    {
+      "path": "src/office-plan.js",
+      "sha256": "a25bfc7390a6c7a1d052b0086c2475a0aa650cc35e84dd2c769c943485a6e32d"
+    },
+    {
+      "path": "src/index.js",
+      "sha256": "69364d2bc35308b61b556cc6dd53e848392c34f7731bcac5ff91903942da5133"
+    },
+    {
+      "path": "src/wecom-directory.js",
+      "sha256": "68a12ddf1ea63d6e74a92700efa4d246a28f70ff4d24dd7ea521ce12366af17f"
+    },
+    {
+      "path": "src/server.js",
+      "sha256": "8202e95abfb6cafd69b7c3b0a2e7a035207abf185ea1925cb1d7e78f137218e7"
+    },
+    {
+      "path": "src/wecom-briefing.js",
+      "sha256": "19fd7e1db83e80296448974db10f0e9bf866f952e57c483b517199a9aa8a8df3"
+    },
+    {
+      "path": "src/llm.js",
+      "sha256": "30f7c10d4ce6d2e43d018f25c25bc85fb73cda360819a71a2b83ec1007b18650"
+    },
+    {
+      "path": "src/doc-inbox.js",
+      "sha256": "533f1460ef9062a16f4106900d67d2b9aa622e748ddeab82ecdf38f054786c2c"
+    },
+    {
+      "path": "src/wecom-documents.js",
+      "sha256": "e2d1d140ab1058f797014f2294f0b3872cd462336d159e06b77b40d02a4416de"
+    },
+    {
+      "path": "src/files.js",
+      "sha256": "fae00e361f7d3cdbdb096d48d1b2cede6812e93271e728bdc3e62a8950e48a65"
+    },
+    {
+      "path": "src/global.js",
+      "sha256": "5c12883d6bce9ac8221a15454a77196d463bf6168688b92cab1be1dba31d4cc6"
+    },
+    {
+      "path": "src/reply.js",
+      "sha256": "a32b536e30976501443d7d39ab98994d7bbf308f64631a760c17928c504dadbc"
+    },
+    {
+      "path": "src/wecom.js",
+      "sha256": "2df2f4d8f761521b2c9a6fe0d5269bbd6ba2476b16fabde87f2d190c93a6a08d"
+    },
+    {
+      "path": "src/wecom-personality.js",
+      "sha256": "2d029dd74a081fdd02f7d80b8ca29f5b06bb2d19a130c071c278a8de5213b4c2"
+    },
+    {
+      "path": "src/wecom-scheduled-briefing.js",
+      "sha256": "53cf235a65048152012a1fda9f752eee1727c39e254e2e0d452299fca7fb11f6"
+    },
+    {
+      "path": "src/wecom-context.js",
+      "sha256": "30ea827ebd0f49db167f55a86e845aa7062314993fc62e0f91a5a8913ad8fded"
+    },
+    {
+      "path": "src/wecom-parts.js",
+      "sha256": "51cfe43ec257d99fdf1cae8ebbc5351dab9d35a87cb6195271d25bbaae67e3f3"
+    },
+    {
+      "path": "src/wecom-internal-reading.js",
+      "sha256": "e4c7b45aecb6661b17db6b1418dca921628156b063ddefa8fc0649ca418d8749"
+    },
+    {
+      "path": "src/wecom-rollup.js",
+      "sha256": "3b098da116f6c3bde807ffadb88afd482c2af353eef124388b49cdcda506735f"
+    },
+    {
+      "path": "src/wecom-actions.js",
+      "sha256": "20af88484e3a773bcc291b60738016036c1945ed52391e4e78af566329784082"
+    },
+    {
+      "path": "src/wecom-receipts.js",
+      "sha256": "90a895c4fd2ec05900bd914303cdb961963d0f956666635e75a49251bb45233e"
+    },
+    {
+      "path": "src/memory.js",
+      "sha256": "e1140e7f7bb17054eea417d4afae7b274595bad570de951d6298465b6f7ad7ce"
+    },
+    {
+      "path": "src/wecom-workflow.js",
+      "sha256": "9f11d43c81fe06b341243c1f4d51a412afbd29814ce0fc1e0b50af21c4492146"
+    },
+    {
+      "path": "src/wecom-shortfall.js",
+      "sha256": "55016743dc52f82ee0df03ef8375281cc6a9f319ccf286d7af2d6ee7f48d81af"
+    },
+    {
+      "path": "src/wecom-batches.js",
+      "sha256": "fb476e3640982709dd416b132f11e8ed770bcfde86516125279689a474ccc3ca"
+    },
+    {
+      "path": "src/wecom-report-agent.js",
+      "sha256": "1d9574fbbd53d0f0f53dd15318a5da22af498139ecf6d401a7fa4ef57bfe014f"
+    }
+  ]
+}

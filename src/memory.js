@@ -87,9 +87,11 @@ export class Memory {
     fs.writeFileSync(fileFor(session.key), JSON.stringify(session, null, 2), 'utf8');
   }
 
-  append(key, role, content, title) {
+  append(key, role, content, title, {reportEvidence,reportSources,reportMatter} = {}) {
     const session = this.get(key, title);
-    session.turns.push({ role, content, ts: Date.now() });
+    session.turns.push({ role, content, ts: Date.now(), ...(typeof reportEvidence === 'boolean' && {reportEvidence}),
+      ...(reportEvidence && typeof reportMatter==='string' && reportMatter.length<=40 && {reportMatter}),
+      ...(reportEvidence && Array.isArray(reportSources) && reportSources.length && {reportSources}) });
     // storeAllTurns=true 时不再丢弃旧对话，全部留在会话文件里
     if (!this.cfg.storeAllTurns) {
       const maxTurns = Math.max(10, (this.cfg.historyTurns || 40) * 2);
@@ -116,6 +118,9 @@ export class Memory {
     const result = {
       summary: session.summary,
       notes: session.notes.map((n) => n.text),
+      previousReport: recent.at(-1)?.role === 'assistant' ? recent.at(-1).reportEvidence : false,
+      previousReportMatter: recent.at(-1)?.role === 'assistant' ? recent.at(-1).reportMatter : undefined,
+      previousReportSources: recent.at(-1)?.role === 'assistant' ? recent.at(-1).reportSources : undefined,
       turns: recent.map((t) => ({ role: t.role, content: t.content })),
       recalled: [],
     };

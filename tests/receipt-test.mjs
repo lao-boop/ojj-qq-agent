@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {reconcileReceipts} from '../src/wecom-receipts.js';
+const topic='临时工牌', q='各组合计多少？';
+const lines=['AB-110，甲组发放7张，已登记','AB-120，乙组发放5张，已登记','AB-110的复印联补到，同一笔，原数7张','AB-120原录入少记2张，实数应为7张','AB-110整笔撤销，实绩为零','另有明天预计3张，尚未实施'];
+const run=(texts,question=q)=>reconcileReceipts(topic,texts.map(text=>({text:topic+'。'+text,messageType:'text'})),question);
+assert.match(run(lines),/甲组 0张，乙组 7张；各组合计 7张/);
+for(const extra of ['没有单号的实际收货一张','AB-120原录入多记1张，实数应为2张','AB-110，甲组发放7张，已登记','XY999整笔撤销，实绩为零','XY998，甲组发放7副，已登记']) assert.equal(run([...lines,extra]),null);
+assert.equal(run(lines,'截至昨天合计多少？'),null);
+assert.match(run(lines,'副联是否另记？'),/AB-110.*只记一次.*0张/);
+assert.equal(run(['AB-110，甲组未发放5张，已登记']),null);
+assert.equal(run(['AB-110原录入少记2张，实数应为7张',...lines]),null);
+assert.match(run(lines,'甲组核完撤单以后，净数报多少？'), /甲组净数 0张/);
+assert.equal(run(lines,'签字以后乙组合计多少？'),null);
+assert.equal(run(lines,'只算昨日核完撤单以后的净数'),null);

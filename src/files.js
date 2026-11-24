@@ -43,7 +43,16 @@ export class FileReader {
     if (url) {
       const res = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
       if (!res.ok) throw new Error(`下载文件失败 HTTP ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
+      if (Number(res.headers.get('content-length')) > MAX_BYTES) {
+        await res.body?.cancel(); throw new Error('文件太大（上限 100MB）');
+      }
+      const chunks = []; let bytes = 0;
+      for await (const chunk of res.body) {
+        bytes += chunk.length;
+        if (bytes > MAX_BYTES) throw new Error('文件太大（上限 100MB）');
+        chunks.push(chunk);
+      }
+      const buf = Buffer.concat(chunks);
       if (buf.length > MAX_BYTES) throw new Error(`文件太大（${Math.round(buf.length / 1024 / 1024)}MB，上限 100MB）`);
       fs.writeFileSync(target, buf);
       this.logger?.info?.(`文件已下载：${name}（${Math.round(buf.length / 1024 / 1024)}MB）`);
