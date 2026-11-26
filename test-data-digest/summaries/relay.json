@@ -1,0 +1,70 @@
+{
+  "source": "Agent传话功能测试数据与说明",
+  "delivery": {
+    "boss_to_employee": {
+      "passed": 156,
+      "total": 160,
+      "rate": 0.975
+    },
+    "boss_to_group": {
+      "passed": 156,
+      "total": 160,
+      "rate": 0.975
+    },
+    "employee_to_group": {
+      "status": "not_separately_tested"
+    },
+    "employee_to_boss": {
+      "passed": 100,
+      "total": 100,
+      "rate": 1.0
+    }
+  },
+  "timing": {
+    "within_60s": {
+      "passed": 50,
+      "total": 50,
+      "rate": 1.0
+    },
+    "within_1s": {
+      "passed": 3,
+      "total": 50,
+      "rate": 0.06
+    }
+  },
+  "semantic_regression_100": {
+    "context": {
+      "passed": 80,
+      "total": 100
+    },
+    "completeness": {
+      "passed": 100,
+      "total": 100
+    },
+    "multi_object": {
+      "passed": 100,
+      "total": 100
+    },
+    "ambiguous_target": {
+      "passed": 98,
+      "total": 100
+    },
+    "draft_vs_send": {
+      "passed": 100,
+      "total": 100
+    }
+  },
+  "attachments": {
+    "basic": {
+      "passed": 100,
+      "total": 100
+    },
+    "same_name_three_versions": {
+      "passed": 33,
+      "total": 100
+    }
+  },
+  "notes": [
+    "Counts are from the published test summary; not a field guarantee."
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "source": "Agent多模态测试数据与说明 / 四项生成能力（最佳 100 例批次）",
+  "word": {
+    "passed": 100,
+    "total": 100,
+    "calls_ok": 100,
+    "calls": 100,
+    "mean_seconds": 11.65
+  },
+  "ppt": {
+    "passed": 100,
+    "total": 100,
+    "calls_ok": 100,
+    "calls": 100,
+    "mean_seconds": 8.26
+  },
+  "excel": {
+    "passed": 100,
+    "total": 100,
+    "calls_ok": 100,
+    "calls": 100,
+    "mean_seconds": 5.46
+  },
+  "image": {
+    "passed": 100,
+    "total": 100,
+    "calls_ok": 200,
+    "calls": 201,
+    "mean_seconds": 13.08
+  },
+  "overall": {
+    "output_passed": 400,
+    "output_total": 400,
+    "calls_ok": 500,
+    "calls": 501,
+    "mean_seconds": 9.6
+  },
+  "notes": [
+    "Samples are 100 cases per capability; model call success is separate from output pass."
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "source": "Agent多模态测试数据与说明 / 语音识别",
+  "comprehensive_500": {
+    "sample": 500,
+    "sentence_correct": 416,
+    "sentence_rate": 0.832,
+    "char_correct": 0.975,
+    "cer": 0.025,
+    "note": "current normalized result; raw semantic retest 401/500 = 80.2% sentence"
+  },
+  "business_200": {
+    "sample": 200,
+    "sentence_correct": 183,
+    "sentence_rate": 0.915,
+    "char_rate": 0.9945
+  },
+  "business_100_best": {
+    "sample": 100,
+    "sentence_correct": 93,
+    "sentence_rate": 0.93,
+    "char_rate": 0.9961
+  },
+  "specialized_names_100": {
+    "sample": 100,
+    "sentence_rate": 0.94,
+    "char_rate": 0.9959
+  }
+}

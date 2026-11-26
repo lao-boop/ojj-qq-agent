@@ -1,0 +1,27 @@
+{
+  "source": "Agent多模态测试数据与说明 / 文档识别",
+  "ppt_pages": {
+    "1000": {
+      "passed": 963,
+      "total": 1000,
+      "rate": 0.963
+    },
+    "2000": {
+      "passed": 1950,
+      "total": 2000,
+      "rate": 0.975
+    }
+  },
+  "word_excel": {
+    "status": "met_95_percent_target",
+    "note": "Word text extraction and Excel cell values reached the 95% target across sampled batches; exact merged score not stated in the final report."
+  },
+  "demo_case": {
+    "customer_total": 5760,
+    "supplier_total": 5280,
+    "difference": 480,
+    "word_pickup": "Thursday",
+    "ppt_pickup": "Friday",
+    "internal_cost": 4000
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "source": "Agent多模态测试数据与说明 / 汽修识图",
+  "with_knowledge_base": {
+    "passed": 989,
+    "total": 1000,
+    "rate": 0.989
+  },
+  "without_knowledge_base": {
+    "passed": 963,
+    "total": 1000,
+    "rate": 0.963
+  },
+  "notes": [
+    "Lab result on 1,000 images; field performance varies with angle, light and vehicle."
+  ]
+}

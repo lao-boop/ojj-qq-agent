@@ -1,0 +1,16 @@
+Respondent,Channel,Human-likeness,Conversational,Proactive,Empathy,Role stability,Total /10
+P-001,Private,2,2,2,2,2,10
+P-002,Private,2,2,2,2,2,10
+P-003,Private,2,2,2,2,2,10
+P-004,Private,1,2,1,2,1,7
+P-005,Private,2,2,1,1,2,8
+P-006,Private,1,0,2,0,2,5
+G-001,Group,2,2,2,2,2,10
+G-002,Group,2,2,2,1,2,9
+G-003,Group,2,2,2,2,2,10
+G-004,Group,2,2,2,2,2,10
+G-005,Group,2,2,1,2,1,8
+G-006,Group,1,1,2,2,1,7
+G-007,Group,2,2,2,1,2,9
+G-008,Group,2,2,2,1,2,9
+G-009,Group,2,2,2,2,2,10

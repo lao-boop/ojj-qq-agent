@@ -1,0 +1,36 @@
+{
+  "source": "Agent上下文容量测试数据与说明",
+  "messages": {
+    "5000": {
+      "reviewed_correct": 968,
+      "total": 1000,
+      "reviewed_rate": 0.968,
+      "exact_correct": 855,
+      "exact_rate": 0.855
+    },
+    "10000": {
+      "reviewed_correct": 954,
+      "total": 1000,
+      "reviewed_rate": 0.954,
+      "exact_correct": 846,
+      "exact_rate": 0.846
+    },
+    "20000": {
+      "reviewed_correct": 967,
+      "total": 1000,
+      "reviewed_rate": 0.967,
+      "exact_correct": 856,
+      "exact_rate": 0.856
+    }
+  },
+  "overall": {
+    "reviewed_correct": 2889,
+    "total": 3000,
+    "reviewed_rate": 0.963,
+    "exact_correct": 2557,
+    "exact_rate": 0.852
+  },
+  "notes": [
+    "1,000 questions per length; reviewed = human/strong-model review."
+  ]
+}
