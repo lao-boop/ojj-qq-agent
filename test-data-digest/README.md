@@ -130,5 +130,5 @@ python scripts/verify_data.py --manifest manifest.json --data data/raw
 
 - 这是**测试归档摘要**，不是线上 SLA，也不代表真实业务场景的稳定准确率。
 - 完整原始数据包含录音、图片、聊天记录和业务单据，默认不公开上传。
-- 如果 HF 仓库是 private，下载必须提供 `HF_TOKEN`；不要把 token 写进仓库。
+- 如果 HF 仓库是 private，下载会使用 `hf auth login` 保存的 token；也可以设置 `HF_TOKEN`。不要把 token 写进仓库。
 - 公开前必须脱敏：客户姓名、手机号、车牌、VIN、聊天记录。

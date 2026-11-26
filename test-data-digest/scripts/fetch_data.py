@@ -43,6 +43,19 @@ def safe_dest(dest: Path, rel: str) -> Path:
     return target
 
 
+def saved_token(name: str) -> str | None:
+    env = os.environ.get(TOKEN_ENV[name])
+    if env:
+        return env
+    if name == "huggingface":
+        try:
+            from huggingface_hub import get_token
+            return get_token()
+        except Exception:
+            return None
+    return None
+
+
 def load_manifest(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
@@ -152,7 +165,7 @@ def main() -> int:
     source = resolve_source(manifest, args.source, args.revision)
     dest = Path(args.dest)
     files = manifest["files"]
-    token = os.environ.get(TOKEN_ENV[args.source]) or None
+    token = saved_token(args.source)
 
     print(f"source : {source['name']} / {source['repo']} @ {source['revision']}")
     print(f"dest   : {dest.resolve()}")
