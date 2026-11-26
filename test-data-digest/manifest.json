@@ -7,8 +7,10 @@
     "huggingface": {
       "repo": "Lao0118/agent-test-data",
       "repo_type": "dataset",
-      "revision": "TO_FILL",
-      "url": "https://huggingface.co/datasets/Lao0118/agent-test-data"
+      "revision": "ea640bdf86ae441cdd09192a045d08b7fd62d1f3",
+      "url": "https://huggingface.co/datasets/Lao0118/agent-test-data",
+      "resolved_revision": "ea640bdf86ae441cdd09192a045d08b7fd62d1f3",
+      "commit_url": "https://huggingface.co/datasets/Lao0118/agent-test-data/commit/ea640bdf86ae441cdd09192a045d08b7fd62d1f3"
     }
   },
   "stats": {

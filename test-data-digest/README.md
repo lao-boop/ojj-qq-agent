@@ -59,6 +59,12 @@ hf upload Lao0118/agent-test-data "C:\Users\潘旭忠\Desktop\Agent测试总库"
 
 不要只写 `main`。tag 可能移动，commit sha 不会。
 
+当前钉死的 revision：
+
+```text
+ea640bdf86ae441cdd09192a045d08b7fd62d1f3
+```
+
 ### 2. 下载并校验
 
 ```bash
