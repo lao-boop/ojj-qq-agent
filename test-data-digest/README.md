@@ -34,13 +34,13 @@ test-data-digest/
 
 ```bash
 hf auth login
-hf repo create <your-name>/agent-test-data --repo-type dataset --private
+hf repos create Lao0118/agent-test-data --type dataset --private
 ```
 
 上传完整目录：
 
 ```bash
-hf upload-large-folder <your-name>/agent-test-data "C:\Users\潘旭忠\Desktop\Agent测试总库" --repo-type dataset
+hf upload Lao0118/agent-test-data "C:\Users\潘旭忠\Desktop\Agent测试总库" . --type dataset --private
 ```
 
 拿到该次上传的 **commit sha**，写进 `manifest.json`：
@@ -91,7 +91,7 @@ python scripts/verify_data.py --manifest manifest.json --data data/raw
   "version": "2026.11.26",
   "sources": {
     "huggingface": {
-      "repo": "lao-boop/agent-test-data",
+      "repo": "Lao0118/agent-test-data",
       "repo_type": "dataset",
       "revision": "<commit-sha>"
     }
