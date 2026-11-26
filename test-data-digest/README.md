@@ -2,13 +2,111 @@
 
 完整测试数据目录共 **47,712 个文件 / 15.9 GB**，不适合直接放入 GitHub。
 
-本目录只放：
+这里采用“**指针 + 清单 + 脚本**”的结构：
 
-- `MANIFEST.csv`：全部文件的相对路径、大小、格式、分类（不含文件内容）
-- `manifest-summary.json`：文件数、总大小、各分类统计
-- `summaries/`：各测试方向的**聚合结果**，不含原始录音、图片、聊天记录和客户数据
+```text
+GitHub                → manifest.json / 脚本 / 摘要
+Hugging Face Dataset  → 原始字节（建议 private）
+ModelScope（可选）     → 同一份数据的镜像
+```
 
-完整原始数据请放在网盘/对象存储；本仓库只保留可公开、可审阅的摘要和索引。
+GitHub 不存原始字节，只存可审计的指针和校验信息。
+
+## 目录
+
+```text
+test-data-digest/
+├── manifest.json            # 指针 + 每个文件的路径/大小/sha256
+├── MANIFEST.csv             # 所有人可读的 CSV 索引
+├── manifest-summary.json    # 文件数/大小/分类统计
+├── scripts/
+│   ├── fetch_data.py        # 按 revision 下载并校验
+│   ├── verify_data.py       # 校验本地数据
+│   └── build_manifest.py    # 从本地目录重建 manifest
+└── summaries/               # 各测试方向的聚合结果
+```
+
+## 快速开始
+
+### 1. 设置 HF 仓库和 revision
+
+先创建 HF dataset（建议 private）：
+
+```bash
+hf auth login
+hf repo create <your-name>/agent-test-data --repo-type dataset --private
+```
+
+上传完整目录：
+
+```bash
+hf upload-large-folder <your-name>/agent-test-data "C:\Users\潘旭忠\Desktop\Agent测试总库" --repo-type dataset
+```
+
+拿到该次上传的 **commit sha**，写进 `manifest.json`：
+
+```json
+{
+  "sources": {
+    "huggingface": {
+      "repo": "<your-name>/agent-test-data",
+      "repo_type": "dataset",
+      "revision": "<commit-sha>"
+    }
+  }
+}
+```
+
+不要只写 `main`。tag 可能移动，commit sha 不会。
+
+### 2. 下载并校验
+
+```bash
+export HF_TOKEN=...          # Windows: $env:HF_TOKEN="..."
+python scripts/fetch_data.py --manifest manifest.json --dest data/raw
+python scripts/verify_data.py --manifest manifest.json --data data/raw
+```
+
+脚本会：
+
+```text
+已存在且 sha256 正确 → 跳过
+sha256 不对 → 重下
+下载中断 → .part 续传
+每个文件下完 → 校验大小和 sha256
+```
+
+### 3. 只校验，不下载
+
+```bash
+python scripts/verify_data.py --manifest manifest.json --data data/raw
+```
+
+## manifest 结构
+
+```json
+{
+  "schema_version": 1,
+  "dataset": "agent-test-data",
+  "version": "2026.11.26",
+  "sources": {
+    "huggingface": {
+      "repo": "lao-boop/agent-test-data",
+      "repo_type": "dataset",
+      "revision": "<commit-sha>"
+    }
+  },
+  "stats": { "files": 47712, "bytes": 17072523590 },
+  "files": [
+    {
+      "path": "Agent拟人化功能测试数据与说明/...",
+      "bytes": 12345,
+      "sha256": "...",
+      "category": "拟人化"
+    }
+  ]
+}
+```
 
 ## 摘要
 
@@ -26,4 +124,5 @@
 
 - 这是**测试归档摘要**，不是线上 SLA，也不代表真实业务场景的稳定准确率。
 - 完整原始数据包含录音、图片、聊天记录和业务单据，默认不公开上传。
-- `MANIFEST.csv` 可用来核对完整包是否缺文件；它不包含文件正文。
+- 如果 HF 仓库是 private，下载必须提供 `HF_TOKEN`；不要把 token 写进仓库。
+- 公开前必须脱敏：客户姓名、手机号、车牌、VIN、聊天记录。
